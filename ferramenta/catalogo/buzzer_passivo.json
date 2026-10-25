@@ -485,7 +485,28 @@
    "minimo": 1,
    "estoque": 9485,
    "visto": "2026-10-24",
-   "situacao": "ok"
+   "situacao": "ok",
+   "conferido": {
+    "fonte": "catálogo Murata P37E 'Piezoelectric Sound Components' (Feb.5,2018), https://datasheet.lcsc.com/datasheet/pdf/9648c7b5e4cb65caaf63ae704bcb7115.pdf?productCode=C128650: p. 11 do PDF (9 impressa), tabela do PKM13EPYH4002-B0: 78 dB típico [±1,5 Vo-p, 4,0 kHz, onda quadrada, 10 cm]; tensão de operação ±15,0 Vo-p máx., sem tensão contínua (DC); capacitância 5,5 nF ±30% [1 kHz]; −40 a +85 °C. p. 17 do PDF (15 impressa), 'Notice (Driving)': ligado direto num CI, pôr 1 a 2 kΩ em série (protege o CI e o som fica estável); não deixar DC no piezo (a prata migra em umidade alta). Sem polaridade: na mesma tabela só o PKM17EPP-2002-B0 diz '[with polarity]'; o '+' do símbolo do EasyEDA é só desenho",
+    "nomes": {
+     "1": "lado 1",
+     "2": "lado 2"
+    },
+    "eletrica": {
+     "modelo": "piezo",
+     "c": 5.5e-09,
+     "c_tol": 0.3,
+     "v_max_op": 15.0,
+     "r_serie": [
+      1000,
+      2000
+     ],
+     "f_teste": 4000,
+     "spl_db": 78,
+     "nota": "ligado direto no pino do chip, a Murata pede 1 a 2 kΩ em série (p. 15 impressa); nada de tensão contínua parada no piezo: calado, o pino fica em 0"
+    },
+    "_eletrica": "c e c_tol: 5,5 nF ±30% medidos a 1 kHz. v_max_op: ±15 V de pico, só tensão alternada. r_serie: a faixa de 1 a 2 kΩ da 'Notice (Driving)'. f_teste e spl_db: o som da tabela (78 dB a 10 cm com onda quadrada de 4 kHz e ±1,5 V). Em DC o piezo é aberto (um capacitor)."
+   }
   },
   "C128017": {
    "nome": "Buzzer passivo 14.1mm, 4kHz",

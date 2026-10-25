@@ -1,17 +1,24 @@
-"""circuito.py: liga o circuito no papel. Corrente contínua, só com pilha, resistor, LED e chave.
+"""circuito.py: liga o circuito no papel. Corrente contínua, com pilha, resistor, LED, chave, LDR, piezo e capacitor.
 
-O mesmo modelo existe em JS na bancada (funcao simular), pro painel responder na hora. Mudou aqui, muda lá.
+O mesmo modelo existe em JS na bancada (simular, comPinos, ohmsDoLdr e divisorDoLdr), pro painel responder
+na hora. Mudou aqui, muda lá (testes/test_paridade_js.py confere).
 - resistor: I = V / R
 - LED aceso: V = joelho + r_s · I (joelho = vf − r_s · i_teste, do datasheet); abaixo do joelho não passa nada.
   O + e o − vêm da peça (mais/menos); sem isso, 1 é o + e 2 o −
 - chave: apertada vira fio; solta, fica aberta
 - pilha: fonte de tensão com a resistência interna em série (r_interna, do gráfico do datasheet); sem ela,
   uma resistência bem pequena (R_PILHA), só pra conta fechar com duas pilhas em paralelo
+- LDR: resistor que muda com a luz (ohms_do_ldr); sem ajuste, fica com a luz de LUX_PADRAO
+- piezo: aberto (em corrente contínua ele é um capacitor); ajustado como fio, é a borda do apito
+- capacitor: aberto (corrente contínua não passa)
 - pino sem net = circuito aberto
+- peça mcu (o ESP32) e modelo desconhecido: o resolver não liga. Quem liga os pinos é o com_pinos, que põe
+  "pilhas de mentira" no lugar do chip (a mesma ideia do gêmeo do laboratório)
 
 A conta é análise nodal: uma incógnita por net (tensão). Fonte com resistência em série entra como
 condutância + corrente injetada (Norton), então a matriz nunca fica sem solução.
 """
+import re
 
 GMIN = 1e-9      # condutância mínima de cada net pro terra, só pra net solta não travar a conta
 R_CHAVE = 1e-3   # chave apertada = resistor bem pequeno
@@ -31,6 +38,90 @@ def r_pilha(e):
     return e.get("r_interna") or R_PILHA
 
 
+def _positivo(x):
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and x > 0
+
+
+def _da_eletrica(e, campo, quem):
+    """número da eletrica que a conta precisa; pendente (sem número) recusa, em vez de inventar um"""
+    if not _positivo(e.get(campo)):
+        raise ValueError(f"{quem}: o {campo} da eletrica está pendente, sem ele não dá pra ligar no papel")
+    return e[campo]
+
+
+# LDR: R(lux) = r10 · (lux / 10)^(−gama). O datasheet dá a faixa do r10 (resistência a 10 lux) e o gama ± gama_tol;
+# no escuro (e nunca acima disso) vale o r_escuro
+LUX_PADRAO = 10   # sem ajuste, o LDR fica em 10 lux, o ponto da tabela do datasheet (r10)
+
+
+def ohms_do_ldr(e, lux, canto="meio"):
+    """resistência do LDR nessa luz. canto: 'meio' (média geométrica da faixa do r10, gama do datasheet),
+    'min' ou 'max' (o r10 e o gama ± gama_tol que dão a menor ou a maior resistência). lux 0 ou None = escuro"""
+    escuro = _da_eletrica(e, "r_escuro", "LDR")
+    if not lux or lux <= 0:
+        return escuro
+    g, tol = _da_eletrica(e, "gama", "LDR"), e.get("gama_tol") or 0
+    r10_min, r10_max = _da_eletrica(e, "r10_min", "LDR"), _da_eletrica(e, "r10_max", "LDR")
+    if canto == "meio":
+        r = (r10_min * r10_max) ** 0.5 * (lux / 10) ** -g
+    elif canto == "min":
+        r = min(r10_min * (lux / 10) ** -(g - tol), r10_min * (lux / 10) ** -(g + tol))
+    elif canto == "max":
+        r = max(r10_max * (lux / 10) ** -(g - tol), r10_max * (lux / 10) ** -(g + tol))
+    else:
+        raise ValueError(f"canto {canto!r} não existe ('meio', 'min' ou 'max')")
+    return min(r, escuro)
+
+
+def divisor_do_ldr(e, r_fixo, vdd, lux, canto="meio"):
+    """volts no pino do divisor vdd → r_fixo → pino → LDR → GND (no escuro, a tensão sobe).
+    O pino do ADC não puxa corrente: é a conta do divisor, sem o resto do circuito"""
+    r = ohms_do_ldr(e, lux, canto)
+    return vdd * r / (r_fixo + r)
+
+
+def _fonte(ref, mais, menos, volts, ohms):
+    """pilha de mentira: volts com ohms em série (a mesma forma do _fonte do gêmeo, laboratorio/.../eletrica.py)"""
+    return {"ref": ref, "eletrica": {"modelo": "pilha", "mais": "1", "menos": "2", "v": volts, "r_interna": ohms},
+            "pinos": [{"n": "1", "net": mais}, {"n": "2", "net": menos}]}
+
+
+def com_pinos(modelo, estado, vdd=None):
+    """o modelo com o ESP32 trocado por pilhas de mentira, pro resolver:
+    ~terra (primeira: o GND do chip vira o terra da conta), ~3V3 (vdd com o r_3v3 da eletrica) e um ~GPIOn por pino.
+    estado: {"GPIO32": 1 | 0 | "pullup" | None}. 1 = vdd com r_pino em série; 0 = 0 V com r_pino;
+    "pullup" = vdd com r_pull (o pull-up de dentro); None ou fora do estado = solto. Só GPIOn entra no estado.
+    vdd: a tensão do 3V3 (None = a da eletrica). O VIN não entra: os 5 V dele seriam suposição.
+    Número pendente na eletrica (vdd, r_pino, r_pull) recusa com ValueError. Sem peça mcu, devolve o modelo como está."""
+    mcu = next((p for p in modelo["pecas"] if (p.get("eletrica") or {}).get("modelo") == "mcu"), None)
+    if mcu is None:
+        return modelo
+    e, ref = mcu["eletrica"], mcu["ref"]
+    vdd = _da_eletrica(e, "vdd", ref) if vdd is None else vdd
+    if not _positivo(vdd):
+        raise ValueError(f"{ref}: vdd {vdd!r} não serve (é a tensão do 3V3, em volts)")
+    net = {q["nome"]: q["net"] for q in mcu["pinos"] if q["net"] and q.get("nome")}
+    gnds = sorted(q["net"] for q in mcu["pinos"] if q["net"] and q.get("nome") == "GND")
+    gnd = gnds[0] if gnds else "GND"
+    virt = [_fonte("~terra", gnd, gnd, 0.0, 1e9)]
+    if "3V3" in net:
+        virt.append(_fonte("~3V3", net["3V3"], gnd, vdd, e.get("r_3v3")))   # sem r_3v3: a R_PILHA
+    for nome, nivel in estado.items():
+        if not re.fullmatch(r"GPIO[0-9]+", nome):
+            raise ValueError(f"{nome}: só pino GPIO entra no estado (o 3V3 e o GND entram sozinhos; o VIN não é modelado)")
+        if nivel == "pullup":
+            volts, ohms = vdd, _da_eletrica(e, "r_pull", ref)
+        elif nivel in (0, 1):
+            volts, ohms = vdd * nivel, _da_eletrica(e, "r_pino", ref)
+        elif nivel is None:
+            continue
+        else:
+            raise ValueError(f"{nome}: estado {nivel!r} não existe (1, 0, 'pullup' ou None)")
+        if nome in net:
+            virt.append(_fonte("~" + nome, net[nome], gnd, volts, ohms))
+    return {**modelo, "pecas": virt + modelo["pecas"]}
+
+
 def resolver_linear(A, b):
     """Gauss com pivô; A quadrada, b vetor"""
     n = len(b)
@@ -48,10 +139,11 @@ def resolver_linear(A, b):
 
 
 def resolver(modelo, ajustes=None):
-    """ajustes: {"pilha": {ref: volts}, "resistor": {ref: ohms}, "chave": {ref: True = apertada}}
+    """ajustes: {"pilha": {ref: volts}, "resistor": {ref: ohms}, "chave": {ref: True = apertada},
+                 "ldr": {ref: ohms}, "piezo": {ref: True = fio}}
     devolve {"nets": {net: V}, "pecas": {ref: {...}}, "entra": {"REF.N": corrente que entra pelo pino}}
-    ou None quando não tem pilha."""
-    aj = {"pilha": {}, "resistor": {}, "chave": {}, **(ajustes or {})}
+    ou None quando não tem pilha (com ESP32, chame com com_pinos(modelo, estado))."""
+    aj = {"pilha": {}, "resistor": {}, "chave": {}, "ldr": {}, "piezo": {}, **(ajustes or {})}
     pecas = [p for p in modelo["pecas"] if p.get("eletrica")]
     net_de = {(p["ref"], q["n"]): q["net"] for p in modelo["pecas"] for q in p["pinos"]}
     pilhas = [p for p in pecas if p["eletrica"]["modelo"] == "pilha"]
@@ -66,6 +158,16 @@ def resolver(modelo, ajustes=None):
 
     def tensao(v, a, b):
         return v[a] - v[b] if a is not None and b is not None else None
+
+    def ohms(p):   # resistor ou LDR
+        if p["eletrica"]["modelo"] == "resistor":
+            return aj["resistor"].get(p["ref"], p["valor"])
+        o = aj["ldr"].get(p["ref"])
+        if o is None:
+            return ohms_do_ldr(p["eletrica"], LUX_PADRAO)
+        if not _positivo(o):
+            raise ValueError(f"{p['ref']}: LDR com {o!r} Ω não existe (o ajuste vem do ohms_do_ldr)")
+        return o
 
     acesos = {p["ref"]: True for p in pecas if p["eletrica"]["modelo"] == "led"}
     v = {}
@@ -98,10 +200,12 @@ def resolver(modelo, ajustes=None):
 
         for p in pecas:
             e, ref = p["eletrica"], p["ref"]
-            if e["modelo"] == "resistor":
-                condutancia(net(ref, "1"), net(ref, "2"), 1 / aj["resistor"].get(ref, p["valor"]))
+            if e["modelo"] in ("resistor", "ldr"):
+                condutancia(net(ref, "1"), net(ref, "2"), 1 / ohms(p))
             elif e["modelo"] == "chave" and aj["chave"].get(ref, False):
                 condutancia(net(ref, e["lados"][0][0]), net(ref, e["lados"][1][0]), 1 / R_CHAVE)
+            elif e["modelo"] == "piezo" and aj["piezo"].get(ref, False):
+                condutancia(net(ref, "1"), net(ref, "2"), 1 / R_CHAVE)
             elif e["modelo"] == "pilha":
                 fonte(net(ref, e["mais"]), net(ref, e["menos"]), aj["pilha"].get(ref, e["v"]), r_pilha(e))
             elif e["modelo"] == "led" and acesos[ref]:
@@ -129,11 +233,11 @@ def resolver(modelo, ajustes=None):
     saida, entra = {}, {}
     for p in pecas:
         e, ref = p["eletrica"], p["ref"]
-        if e["modelo"] == "resistor":
-            ohms = aj["resistor"].get(ref, p["valor"])
+        if e["modelo"] in ("resistor", "ldr"):
+            r = ohms(p)
             vab = tensao(v, net(ref, "1"), net(ref, "2"))
-            i = vab / ohms if vab is not None else 0.0
-            saida[ref] = {"i": i, "p": i * i * ohms, "ohms": ohms}
+            i = vab / r if vab is not None else 0.0
+            saida[ref] = {"i": i, "p": i * i * r, "ohms": r}
             entra[f"{ref}.1"], entra[f"{ref}.2"] = i, -i
         elif e["modelo"] == "led":
             mais, menos = polos(e)
@@ -157,4 +261,13 @@ def resolver(modelo, ajustes=None):
                 entra[f"{ref}.{n}"] = i
             for n in e["lados"][1]:
                 entra[f"{ref}.{n}"] = -i
+        elif e["modelo"] == "piezo":
+            fio = bool(aj["piezo"].get(ref, False))
+            vab = tensao(v, net(ref, "1"), net(ref, "2"))
+            i = vab / R_CHAVE if fio and vab is not None else 0.0
+            saida[ref] = {"i": i, "fio": fio}
+            entra[f"{ref}.1"], entra[f"{ref}.2"] = i, -i
+        elif e["modelo"] == "capacitor":
+            saida[ref] = {"i": 0.0}
+            entra[f"{ref}.1"], entra[f"{ref}.2"] = 0.0, 0.0
     return {"nets": v, "pecas": saida, "entra": entra}

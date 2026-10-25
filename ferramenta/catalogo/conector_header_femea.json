@@ -1886,7 +1886,19 @@
    "minimo": 1,
    "estoque": 7229,
    "visto": "2026-10-24",
-   "situacao": "ok"
+   "situacao": "ok",
+   "conferido": {
+    "fonte": "datasheet hanxia HX PM2.54-1x15P ZC (2022-04-29), p. 1 (única) de https://datasheet.lcsc.com/datasheet/pdf/9091321e760df662e48ff489ff8e1b24.pdf?productCode=C41417327: passo 2,54 ±0,1 mm; altura 8,5 ±0,15 mm; pino 0,64 × 0,4 mm, 3,20 ±0,2 mm embaixo; furo recomendado Ø1,02 mm ('RECOMMEND P.C.B LAYOUT'); corpo (B + 0,5) = 38,6 mm de comprido (B = 38,10 na tabela de 15 pinos) e 2,50 ±0,15 mm de largura; 3 A; solda: 240 °C por 30–60 s, ou 260 °C por 5 s. Desenho do EasyEDA (loja.desenho, cache de 2026-10-25): pinos 1 a 15, furo 1,0 mm, pad 1,6 mm. Vai em par, uma em cada fileira, como o berço do DevKit (o 'acompanha' do tipo devkit_esp32_30)",
+    "mecanica": {
+     "passo_mm": 2.54,
+     "altura_mm": 8.5,
+     "furo_recomendado_mm": 1.02,
+     "pino_embaixo_mm": 3.2,
+     "corrente_max_a": 3,
+     "solda_max_c": 260,
+     "solda_max_s": 5
+    }
+   }
   },
   "C22373901": {
    "nome": "Barra fêmea 1x15P, reta, 8,5 mm de altura",
@@ -1923,7 +1935,19 @@
    "minimo": 1,
    "estoque": 2782,
    "visto": "2026-10-24",
-   "situacao": "ok"
+   "situacao": "ok",
+   "conferido": {
+    "fonte": "datasheet Hong Cheng HC-PM254-8.5H-1x15PZ (rev. A), p. 1 (única) de https://datasheet.lcsc.com/datasheet/pdf/b8e001a168b84259d039373b06f6a624.pdf?productCode=C22373901: passo 2,54 ±0,1 mm; altura 8,5 ±0,15 mm; pino 0,64 × 0,4 mm, 3,0 ±0,2 mm embaixo; furo recomendado Ø1,02 mm ('RECOMMEND P.C.B LAYOUT'); corpo (B + 0,4) = 38,5 mm de comprido (B = 38,10 na tabela de 15 pinos) e 2,4 ±0,15 mm de largura; 3 A; solda: 200 °C por 30–60 s, ou 255 °C por 5 s. Desenho do EasyEDA (loja.desenho, cache de 2026-10-25): pinos 1 a 15, furo 1,1 mm, pad 1,7 mm. Alternativa à hanxia C41417327 como berço do DevKit",
+    "mecanica": {
+     "passo_mm": 2.54,
+     "altura_mm": 8.5,
+     "furo_recomendado_mm": 1.02,
+     "pino_embaixo_mm": 3.0,
+     "corrente_max_a": 3,
+     "solda_max_c": 255,
+     "solda_max_s": 5
+    }
+   }
   },
   "C30734": {
    "nome": "Barra fêmea 2x8P, reta, 8,5 mm de altura",

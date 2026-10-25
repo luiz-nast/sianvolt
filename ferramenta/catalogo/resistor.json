@@ -7608,7 +7608,17 @@
    "categoria_loja": "Through Hole Resistors",
    "loja": "LCSC",
    "moeda": "USD",
-   "montagem": "furo"
+   "montagem": "furo",
+   "conferido": {
+    "fonte": "ficha da LCSC https://www.lcsc.com/product-detail/through-hole-resistors_huaxing-mechanical-elec-mf1-4w-1k-1-t52_C713997.html (atributos lidos pelo loja.ficha em 2026-10-25, loja_agora.json da pesquisa): 1 kΩ, ±1%, 250mW, Metal Film Resistor; datasheet https://wmsc.lcsc.com/wmsc/upload/file/pdf/v2/lcsc/2304140030_Huaxing-Mechanical-Elec--MF1-4W-1KR-1-T52_C713997.pdf (não aberto)",
+    "eletrica": {
+     "modelo": "resistor",
+     "potencia_max": 0.25,
+     "pendentes": [
+      "o datasheet (PDF) não foi aberto: o valor, a tolerância e a potência são os da ficha da LCSC"
+     ]
+    }
+   }
   },
   "C2903245": {
    "nome": "Resistor 1 kΩ, 250 mW",
@@ -10231,7 +10241,17 @@
    "minimo": 1,
    "estoque": 18977,
    "visto": "2026-10-24",
-   "situacao": "ok"
+   "situacao": "ok",
+   "conferido": {
+    "fonte": "ficha da LCSC https://www.lcsc.com/product-detail/through-hole-resistors_cco-chian-chia-elec-mf1-4w-22k-1-t_C119354.html (atributos lidos pelo loja.ficha em 2026-10-25, loja_agora.json da pesquisa): 22 kΩ, ±1%, 250mW, Metal Film Resistor; datasheet https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_CCO-Chian-Chia-Elec-MF1-4W-22KR-1--T_C119354.pdf (não aberto)",
+    "eletrica": {
+     "modelo": "resistor",
+     "potencia_max": 0.25,
+     "pendentes": [
+      "o datasheet (PDF) não foi aberto: o valor, a tolerância e a potência são os da ficha da LCSC"
+     ]
+    }
+   }
   },
   "C2894673": {
    "nome": "Resistor 22 kΩ, 250 mW",

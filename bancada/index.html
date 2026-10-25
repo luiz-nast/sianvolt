@@ -431,6 +431,57 @@ const OHMS = [1, 10, 100, 1000].flatMap(d => E24.map(v => v * d));   // 10 Ω a 
 const joelho = e => e.vf - e.r_s * e.i_teste;   // onde o LED comeca a conduzir
 const polos = e => [e.mais ?? '1', e.menos ?? '2'];   // + e − do LED (peca da loja diz; senao 1 e 2)
 const rPilha = e => e.r_interna || R_PILHA;
+const positivo = x => typeof x === 'number' && x > 0;
+function daEletrica(e, campo, quem) {   // numero da eletrica que a conta precisa; pendente (sem numero) recusa, em vez de inventar um
+  if (!positivo(e[campo])) throw new Error(`${quem}: o ${campo} da eletrica está pendente, sem ele não dá pra ligar no papel`);
+  return e[campo];
+}
+
+// LDR: R(lux) = r10 · (lux / 10)^(−gama), limitado no r_escuro (mesma conta do circuito.py: ohms_do_ldr)
+const LUX_PADRAO = 10;   // sem ajuste, o LDR fica em 10 lux, o ponto da tabela do datasheet (r10)
+function ohmsDoLdr(e, lux, canto = 'meio') {
+  const escuro = daEletrica(e, 'r_escuro', 'LDR');
+  if (!lux || lux <= 0) return escuro;
+  const g = daEletrica(e, 'gama', 'LDR'), tol = e.gama_tol || 0;
+  const r10Min = daEletrica(e, 'r10_min', 'LDR'), r10Max = daEletrica(e, 'r10_max', 'LDR');
+  let r;
+  if (canto === 'meio') r = (r10Min * r10Max) ** 0.5 * (lux / 10) ** -g;
+  else if (canto === 'min') r = Math.min(r10Min * (lux / 10) ** -(g - tol), r10Min * (lux / 10) ** -(g + tol));
+  else if (canto === 'max') r = Math.max(r10Max * (lux / 10) ** -(g - tol), r10Max * (lux / 10) ** -(g + tol));
+  else throw new Error(`canto ${canto} não existe ('meio', 'min' ou 'max')`);
+  return Math.min(r, escuro);
+}
+// volts no pino do divisor vdd → r_fixo → pino → LDR → GND (no escuro, a tensao sobe)
+function divisorDoLdr(e, rFixo, vdd, lux, canto = 'meio') {
+  const r = ohmsDoLdr(e, lux, canto);
+  return vdd * r / (rFixo + r);
+}
+
+// o ESP32 vira pilhas de mentira (mesma conta do circuito.py: com_pinos): ~terra, ~3V3 e um ~GPIOn por pino
+// estado: { GPIO32: 1 | 0 | 'pullup' | null }, so GPIOn; vdd null = o da eletrica; o VIN nao entra; numero pendente recusa; sem mcu, devolve m
+const fonteDePino = (ref, mais, menos, v, r) => ({ ref, eletrica: { modelo: 'pilha', mais: '1', menos: '2', v, r_interna: r },
+  pinos: [{ n: '1', net: mais }, { n: '2', net: menos }] });
+function comPinos(m, estado, vdd = null) {
+  const mcu = m.pecas.find(p => p.eletrica?.modelo === 'mcu');
+  if (!mcu) return m;
+  const e = mcu.eletrica, ref = mcu.ref, net = {};
+  vdd = vdd ?? daEletrica(e, 'vdd', ref);
+  if (!positivo(vdd)) throw new Error(`${ref}: vdd ${vdd} não serve (é a tensão do 3V3, em volts)`);
+  for (const q of mcu.pinos) if (q.net && q.nome) net[q.nome] = q.net;
+  const gnd = mcu.pinos.filter(q => q.net && q.nome === 'GND').map(q => q.net).sort()[0] ?? 'GND';
+  const virt = [fonteDePino('~terra', gnd, gnd, 0, 1e9)];
+  if (Object.hasOwn(net, '3V3')) virt.push(fonteDePino('~3V3', net['3V3'], gnd, vdd, e.r_3v3));   // sem r_3v3: a R_PILHA
+  for (const [nome, nivel] of Object.entries(estado)) {
+    if (!/^GPIO[0-9]+$/.test(nome)) throw new Error(`${nome}: só pino GPIO entra no estado (o 3V3 e o GND entram sozinhos; o VIN não é modelado)`);
+    let volts, ohms;
+    if (nivel === 'pullup') [volts, ohms] = [vdd, daEletrica(e, 'r_pull', ref)];
+    else if ([0, 1, true, false].includes(nivel)) [volts, ohms] = [vdd * nivel, daEletrica(e, 'r_pino', ref)];
+    else if (nivel == null) continue;
+    else throw new Error(`${nome}: estado ${nivel} não existe (1, 0, 'pullup' ou null)`);
+    if (Object.hasOwn(net, nome)) virt.push(fonteDePino('~' + nome, net[nome], gnd, volts, ohms));
+  }
+  return { ...m, pecas: [...virt, ...m.pecas] };
+}
 
 // parte do brilho do anuncio que essa corrente da, pela curva do datasheet (mesma conta de blocos.py)
 function brilhoDaCorrente(e, i) {
@@ -454,13 +505,13 @@ function resolverLinear(A, b) {
     for (let i = 0; i < n; i++) {
       if (i === c || !M[i][c]) continue;
       const f = M[i][c] / M[c][c];
-      for (let j = c; j <= n; j++) M[i][j] -= f * M[c][j];
+      for (let j = 0; j <= n; j++) M[i][j] -= f * M[c][j];   // a linha inteira, como o Python: o mesmo número até o último bit
     }
   }
   return M.map((l, i) => l[n] / l[i]);
 }
 
-// por que nao da pra ligar esta placa no papel (null = da)
+// por que nao da pra ligar esta placa no papel (null = da). Com ESP32, passe comPinos(m, estado): o ~terra conta como pilha
 function motivoSemSimulacao(m) {
   const s = m.simulacao;
   if (!s) return 'placa antiga, gere de novo';
@@ -472,7 +523,8 @@ function motivoSemSimulacao(m) {
   return null;
 }
 
-function simular(m, aj) {
+function simular(m, aj) {   // com ESP32: simular(comPinos(m, estado), aj)
+  aj = { pilha: {}, resistor: {}, chave: {}, ldr: {}, piezo: {}, ...aj };
   const pecas = m.pecas.filter(p => p.eletrica);
   const netDe = {};
   for (const p of m.pecas) for (const q of p.pinos) netDe[`${p.ref}.${q.n}`] = q.net;
@@ -483,6 +535,13 @@ function simular(m, aj) {
   const nets = [...new Set(Object.values(netDe).filter(n => n && n !== terra))].sort();
   const idx = Object.fromEntries(nets.map((n, i) => [n, i]));
   const tensao = (v, a, b) => (a == null || b == null ? null : v[a] - v[b]);
+  const ohms = p => {   // resistor ou LDR
+    if (p.eletrica.modelo === 'resistor') return aj.resistor[p.ref] ?? p.valor;
+    const o = aj.ldr[p.ref];
+    if (o == null) return ohmsDoLdr(p.eletrica, LUX_PADRAO);
+    if (!positivo(o)) throw new Error(`${p.ref}: LDR com ${o} Ω não existe (o ajuste vem do ohmsDoLdr)`);
+    return o;
+  };
   const acesos = Object.fromEntries(pecas.filter(p => p.eletrica.modelo === 'led').map(p => [p.ref, true]));
   let v = {};
   for (let volta = 0; volta < 30; volta++) {
@@ -506,8 +565,9 @@ function simular(m, aj) {
     };
     for (const p of pecas) {
       const e = p.eletrica;
-      if (e.modelo === 'resistor') cond(net(p.ref, '1'), net(p.ref, '2'), 1 / (aj.resistor[p.ref] ?? p.valor));
+      if (e.modelo === 'resistor' || e.modelo === 'ldr') cond(net(p.ref, '1'), net(p.ref, '2'), 1 / ohms(p));
       else if (e.modelo === 'chave' && aj.chave[p.ref]) cond(net(p.ref, e.lados[0][0]), net(p.ref, e.lados[1][0]), 1 / R_CHAVE);
+      else if (e.modelo === 'piezo' && aj.piezo[p.ref]) cond(net(p.ref, '1'), net(p.ref, '2'), 1 / R_CHAVE);
       else if (e.modelo === 'pilha') fonte(net(p.ref, e.mais), net(p.ref, e.menos), aj.pilha[p.ref] ?? e.v, rPilha(e));
       else if (e.modelo === 'led' && acesos[p.ref]) fonte(net(p.ref, polos(e)[0]), net(p.ref, polos(e)[1]), joelho(e), e.r_s);
     }
@@ -528,9 +588,9 @@ function simular(m, aj) {
   const saida = {}, entra = {};   // entra: corrente que entra na peca por cada pino
   for (const p of pecas) {
     const e = p.eletrica, ref = p.ref;
-    if (e.modelo === 'resistor') {
-      const ohms = aj.resistor[ref] ?? p.valor, vab = tensao(v, net(ref, '1'), net(ref, '2')), i = vab === null ? 0 : vab / ohms;
-      saida[ref] = { i, p: i * i * ohms, ohms }; entra[`${ref}.1`] = i; entra[`${ref}.2`] = -i;
+    if (e.modelo === 'resistor' || e.modelo === 'ldr') {
+      const r = ohms(p), vab = tensao(v, net(ref, '1'), net(ref, '2')), i = vab === null ? 0 : vab / r;
+      saida[ref] = { i, p: i * i * r, ohms: r }; entra[`${ref}.1`] = i; entra[`${ref}.2`] = -i;
     } else if (e.modelo === 'led') {
       const [mais, menos] = polos(e), vab = tensao(v, net(ref, mais), net(ref, menos));
       const i = acesos[ref] && vab !== null ? Math.max((vab - joelho(e)) / e.r_s, 0) : 0;
@@ -546,6 +606,12 @@ function simular(m, aj) {
       saida[ref] = { i, apertada: ap };
       for (const n of e.lados[0]) entra[`${ref}.${n}`] = i;
       for (const n of e.lados[1]) entra[`${ref}.${n}`] = -i;
+    } else if (e.modelo === 'piezo') {   // aberto; ajustado como fio, e a borda do apito
+      const fio = !!aj.piezo[ref], vab = tensao(v, net(ref, '1'), net(ref, '2'));
+      const i = fio && vab !== null ? vab / R_CHAVE : 0;
+      saida[ref] = { i, fio }; entra[`${ref}.1`] = i; entra[`${ref}.2`] = -i;
+    } else if (e.modelo === 'capacitor') {   // aberto em corrente continua
+      saida[ref] = { i: 0 }; entra[`${ref}.1`] = 0; entra[`${ref}.2`] = 0;
     }
   }
   return { nets: v, pecas: saida, entra };

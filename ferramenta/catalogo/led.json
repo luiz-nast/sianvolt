@@ -390,6 +390,99 @@
    "moeda": "USD",
    "montagem": "furo"
   },
+  "C779443": {
+   "nome": "LED verde 5 mm",
+   "marca": "TUOZHAN",
+   "modelo": "TZ-L2-05YYBG1TDJ30-001",
+   "pacote": "Plugin,D=5mm",
+   "tamanho": "5 mm de diâmetro",
+   "montagem": "furo",
+   "categoria_loja": "LED Indication - Discrete",
+   "descricao": "-40℃~+80℃ 20cd 20mA 3.2V 30° 519nm~522nm 5mm round lamp head 90mW Discrete Diode Emerald Green Water Clear 插件,D=5mm LED Indication - Discrete ROHS",
+   "atributos": {
+    "Mounting Style": "-",
+    "Wavelength - Dominant": "519nm~522nm",
+    "Operating Temperature": "-40℃~+80℃",
+    "Color Temperature": "-",
+    "Test Current": "20mA",
+    "Viewing Angle": "30°",
+    "Lamp Holder Type": "5mm round lamp head",
+    "Luminous Intensity": "20cd",
+    "Power(Watts)": "90mW",
+    "Diode Configuration": "Discrete Diode",
+    "Illumination Color": "Emerald Green",
+    "Lens Color": "Water Clear",
+    "Voltage - Forward(Vf)": "3.2V",
+    "Peak Wavelength": "-"
+   },
+   "datasheet": "https://www.lcsc.com/datasheet/lcsc_datasheet_2009251739_TUOZHAN-TZ-L2-05YYBG1TDJ30-001_C779443.pdf",
+   "loja": "LCSC",
+   "link": "https://www.lcsc.com/product-detail/led-indication-discrete_tuozhan-tz-l2-05yybg1tdj30-001_C779443.html",
+   "preco": 0.0271,
+   "moeda": "USD",
+   "minimo": 1,
+   "estoque": 21672,
+   "visto": "2026-10-25",
+   "situacao": "ok",
+   "conferido": {
+    "fonte": "datasheet TUOZHAN TZ-L2-05YYBG1TDJ30-001 (2020-08-18), https://datasheet.lcsc.com/datasheet/pdf/65846e12289bfce1eb8c5f2f92f09836.pdf?productCode=C779443: p. 4, máximos: IF 30 mA contínuo, Pd 90 mW, VR 5 V, ESD 2500 V; p. 4, tabela a IF = 20 mA: VF 2,7 a 3,2 V, 14000 a 20000 mcd, 519 a 522 nm (verde esmeralda), lente transparente; p. 5: curvas. Pino 1 = K (−), pino 2 = A (+), pelo símbolo do EasyEDA (loja.desenho, cache de 2026-10-25)",
+    "nomes": {
+     "1": "−",
+     "2": "+"
+    },
+    "eletrica": {
+     "modelo": "led",
+     "mais": "2",
+     "menos": "1",
+     "vf": 2.92,
+     "vf_min": 2.7,
+     "vf_max": 3.2,
+     "i_teste": 0.02,
+     "i_max": 0.03,
+     "r_s": 15.8,
+     "brilho": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.001,
+       0.064
+      ],
+      [
+       0.002,
+       0.127
+      ],
+      [
+       0.005,
+       0.311
+      ],
+      [
+       0.01,
+       0.585
+      ],
+      [
+       0.015,
+       0.811
+      ],
+      [
+       0.02,
+       1.0
+      ],
+      [
+       0.025,
+       1.165
+      ],
+      [
+       0.03,
+       1.311
+      ]
+     ],
+     "cor": "verde"
+    },
+    "_eletrica": "vf (típica a 20 mA) e r_s lidos no vetor da curva 'Forward current vs Forward voltage' da p. 5 (pdftocairo -svg, eixos pela grade; r_s = reta V × I entre 10 e 29,7 mA, onde a curva acaba). brilho = curva 'Relative Luminous Intensity vs Forward Current' da p. 5 dividida pelo valor dela em 20 mA (1,041 cru), mais o [0, 0] porque a curva sai da origem. A curva de brilho × corrente é a MESMA (vetor idêntico) nos 5 LEDs TUOZHAN lidos (vermelho, amarelos, verdes): é a curva genérica do fabricante, não uma medida desta cor. A curva V × I deste verde é própria (vf 2,92 V a 20 mA, contra 1,97 V do vermelho e dos amarelos): só a de brilho é a genérica. InGaN: o datasheet avisa que é sensível a estática (ESD 2500 V na p. 4; os outros, > 7000 V)."
+   }
+  },
   "C282147": {
    "nome": "LED verde 5 mm",
    "marca": "Everlight Elec",
@@ -1011,7 +1104,7 @@
    "visto": "2026-10-24",
    "situacao": "ok",
    "conferido": {
-    "fonte": "datasheet TUOZHAN TZ-L2-05YYBR2RDJ30-004 (2020-08-11): IF máx 30 mA contínuo; VF 1,9 a 2,4 V a 20 mA; 200 a 350 mcd a 20 mA. Pino 2 = A (+), pino 1 = K (−, pad quadrado), pelo símbolo do EasyEDA",
+    "fonte": "datasheet TUOZHAN TZ-L2-05YYBR2RDJ30-004 (2020-08-11): IF máx 30 mA contínuo; VF 1,9 a 2,4 V a 20 mA; 200 a 350 mcd a 20 mA. Pino 2 = A (+), pino 1 = K (−, pad quadrado), pelo símbolo do EasyEDA. vf_min 1,9 V (a VF mínima a 20 mA) e a cor vermelha (623 a 628 nm): tabela da p. 4 de https://datasheet.lcsc.com/datasheet/pdf/038b8246d1c91a06321709d4facb8a88.pdf?productCode=C779439",
     "nomes": {
      "1": "−",
      "2": "+"
@@ -1021,6 +1114,7 @@
      "mais": "2",
      "menos": "1",
      "vf": 1.97,
+     "vf_min": 1.9,
      "vf_max": 2.4,
      "i_teste": 0.02,
      "i_max": 0.03,
@@ -1054,7 +1148,8 @@
        0.03,
        1.36
       ]
-     ]
+     ],
+     "cor": "vermelho"
     },
     "_eletrica": "vf 1,97 V (típica a 20 mA) e r_s ≈ 3,5 Ω lidos na curva Forward current vs Forward voltage, entre 10 e 30 mA. brilho = curva Relative Luminous Intensity vs Forward Current (1,0 = o brilho a 20 mA), lida no olho."
    },
@@ -1341,6 +1436,105 @@
    "moeda": "USD",
    "montagem": "furo"
   },
+  "C7433012": {
+   "nome": "LED 5 mm",
+   "marca": "TONYU",
+   "modelo": "DY-334UWC-26K",
+   "pacote": "D=5mm",
+   "tamanho": "5 mm de diâmetro",
+   "montagem": "furo",
+   "categoria_loja": "LED Indication - Discrete",
+   "descricao": "-25℃~+80℃ 2.8V~3.4V 20cd 20mA 20° 2600K~2800K 5mm round lamp head 85mW Discrete Diode Warm White Water Clear D=5mm LED Indication - Discrete ROHS",
+   "atributos": {
+    "Mounting Style": "-",
+    "Operating Temperature": "-25℃~+80℃",
+    "Wavelength - Dominant": "-",
+    "Color Temperature": "2600K~2800K",
+    "Test Current": "20mA",
+    "Viewing Angle": "20°",
+    "Lamp Holder Type": "5mm round lamp head",
+    "Luminous Intensity": "20cd",
+    "Power(Watts)": "85mW",
+    "Illumination Color": "Warm White",
+    "Diode Configuration": "Discrete Diode",
+    "Lens Color": "Water Clear",
+    "Voltage - Forward(Vf)": "2.8V~3.4V",
+    "Peak Wavelength": "-"
+   },
+   "datasheet": "https://wmsc.lcsc.com/wmsc/upload/file/pdf/v2/lcsc/2306261142_TONYU-DY-334UWC-26K_C7433012.pdf",
+   "loja": "LCSC",
+   "link": "https://www.lcsc.com/product-detail/led-indication-discrete_tonyu-dy-334uwc-26k_C7433012.html",
+   "preco": 0.0596,
+   "moeda": "USD",
+   "minimo": 1,
+   "estoque": 670,
+   "visto": "2026-10-25",
+   "situacao": "ok",
+   "montagem_manual": "furo",
+   "apelido": "LED branco 5 mm (quente ou frio? o datasheet se contradiz)",
+   "conferido": {
+    "fonte": "datasheet TONYU DY-334UWC-26K (versão A1.0, 2023), https://datasheet.lcsc.com/datasheet/pdf/cdb57d7539a222ce7d5de7c5e53ebd73.pdf?productCode=C7433012: p. 3, desenho: '① Anode ② Cathode', chip InGaN, cor Warm White, lente transparente; p. 4, tabela a IF = 20 mA: VF 2,8 a 3,4 V (±0,1 V), 20000 mcd típico (±10%), 2600 a 2800 K, 20°; p. 5: curvas; p. 6, máximos: IF 25 mA, IFM 80 mA (1 kHz, 1/10), VR 5 V, Pd 85 mW. Pino 1 = A (+), pino 2 = K (−), pelo desenho da p. 3 e pelo símbolo do EasyEDA (loja.desenho, cache de 2026-10-25). A numeração é ao contrário da dos TUOZHAN",
+    "nomes": {
+     "1": "+",
+     "2": "−"
+    },
+    "eletrica": {
+     "modelo": "led",
+     "mais": "1",
+     "menos": "2",
+     "vf": 3.03,
+     "vf_min": 2.8,
+     "vf_max": 3.4,
+     "i_teste": 0.02,
+     "i_max": 0.025,
+     "r_s": 17.5,
+     "brilho": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.001,
+       0.062
+      ],
+      [
+       0.002,
+       0.123
+      ],
+      [
+       0.003,
+       0.184
+      ],
+      [
+       0.005,
+       0.318
+      ],
+      [
+       0.01,
+       0.565
+      ],
+      [
+       0.015,
+       0.815
+      ],
+      [
+       0.02,
+       1.0
+      ],
+      [
+       0.024,
+       1.135
+      ]
+     ],
+     "cor": "branco quente",
+     "pendentes": [
+      "a cor: o desenho (p. 3) e a tabela (p. 4) dizem branco quente (2600 a 2800 K, luz amarelada, de abajur), mas os gráficos de cor da p. 5 são de um branco frio (azulado). Só acendendo um pra ver.",
+      "as curvas da p. 5 parecem copiadas de outro LED branco: o vf típico (3,03 V), o r_s (17,5 Ω) e a curva de brilho saíram delas e podem não ser deste LED. A faixa de 2,8 a 3,4 V (vf_min a vf_max) é da tabela da p. 4 e não depende delas."
+     ]
+    },
+    "_eletrica": "As curvas da p. 5 são uma foto (JPEG de 74 ppi): lidas por pixel (a cor da linha, eixos pela grade), com erro de ~±0,02 V e ~±0,3 mA. vf 3,03 V típica a 20 mA; r_s 17,5 Ω = reta entre 10 e 24,4 mA (a curva vai de 1,9 a 24,4 mA). brilho = curva relativa da p. 5 dividida pelo valor dela em 20 mA (0,994). Abaixo de 10 mA a curva entorta: com pouca corrente o LED de verdade puxa um pouco mais do que a conta reta mostra. DÚVIDA: o gráfico de cromaticidade da mesma p. 5 dá x ≈ 0,33, y ≈ 0,32 e o espectro tem o pico azul maior que o do fósforo: é branco frio (2700 K fica perto de x 0,46, y 0,41 no diagrama CIE 1931). A página de curvas parece copiada de outro LED branco, então o vf, o r_s e o brilho que saíram dela ficam sob a mesma suspeita; vf_min e vf_max são da tabela da p. 4, que não depende dela."
+   }
+  },
   "C99695": {
    "nome": "LED branco 5 mm",
    "marca": "Everlight Elec",
@@ -1581,6 +1775,99 @@
    "moeda": "USD",
    "montagem": "furo"
   },
+  "C779440": {
+   "nome": "LED amarelo 5 mm",
+   "marca": "TUOZHAN",
+   "modelo": "TZ-L2-05YYBY2TCJ30-001",
+   "pacote": "Plugin,D=5mm",
+   "tamanho": "5 mm de diâmetro",
+   "montagem": "furo",
+   "categoria_loja": "LED Indication - Discrete",
+   "descricao": "-40℃~+80℃ 1.8V~2.3V 2.5cd 20mA 30° 590nm~595nm 5mm round lamp head 60mW Discrete Diode Water Clear Yellow 插件,D=5mm LED Indication - Discrete ROHS",
+   "atributos": {
+    "Mounting Style": "-",
+    "Operating Temperature": "-40℃~+80℃",
+    "Wavelength - Dominant": "590nm~595nm",
+    "Color Temperature": "-",
+    "Test Current": "20mA",
+    "Viewing Angle": "30°",
+    "Lamp Holder Type": "5mm round lamp head",
+    "Luminous Intensity": "2.5cd",
+    "Power(Watts)": "60mW",
+    "Diode Configuration": "Discrete Diode",
+    "Illumination Color": "Yellow",
+    "Lens Color": "Water Clear",
+    "Voltage - Forward(Vf)": "1.8V~2.3V",
+    "Peak Wavelength": "-"
+   },
+   "datasheet": "https://www.lcsc.com/datasheet/lcsc_datasheet_2009251739_TUOZHAN-TZ-L2-05YYBY2TCJ30-001_C779440.pdf",
+   "loja": "LCSC",
+   "link": "https://www.lcsc.com/product-detail/led-indication-discrete_tuozhan-tz-l2-05yyby2tcj30-001_C779440.html",
+   "preco": 0.0346,
+   "moeda": "USD",
+   "minimo": 1,
+   "estoque": 17639,
+   "visto": "2026-10-25",
+   "situacao": "ok",
+   "conferido": {
+    "fonte": "datasheet TUOZHAN TZ-L2-05YYBY2TCJ30-001 (2020-08-25), https://datasheet.lcsc.com/datasheet/pdf/6965b44c9f102bc281fb6a3519e7fd15.pdf?productCode=C779440: p. 4, máximos: IF 30 mA contínuo, Pd 60 mW, VR 5 V; p. 4, tabela a IF = 20 mA: VF 1,8 a 2,3 V, 1500 a 2500 mcd, 590 a 595 nm (amarelo), lente transparente; p. 5: curvas. Pino 1 = K (−), pino 2 = A (+), pelo símbolo do EasyEDA (loja.desenho, cache de 2026-10-25)",
+    "nomes": {
+     "1": "−",
+     "2": "+"
+    },
+    "eletrica": {
+     "modelo": "led",
+     "mais": "2",
+     "menos": "1",
+     "vf": 1.97,
+     "vf_min": 1.8,
+     "vf_max": 2.3,
+     "i_teste": 0.02,
+     "i_max": 0.03,
+     "r_s": 3.3,
+     "brilho": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.001,
+       0.064
+      ],
+      [
+       0.002,
+       0.127
+      ],
+      [
+       0.005,
+       0.311
+      ],
+      [
+       0.01,
+       0.585
+      ],
+      [
+       0.015,
+       0.811
+      ],
+      [
+       0.02,
+       1.0
+      ],
+      [
+       0.025,
+       1.165
+      ],
+      [
+       0.03,
+       1.311
+      ]
+     ],
+     "cor": "amarelo"
+    },
+    "_eletrica": "vf (típica a 20 mA) e r_s lidos no vetor da curva 'Forward current vs Forward voltage' da p. 5 (pdftocairo -svg, eixos pela grade; r_s = reta V × I entre 10 e 29,7 mA, onde a curva acaba). brilho = curva 'Relative Luminous Intensity vs Forward Current' da p. 5 dividida pelo valor dela em 20 mA (1,041 cru), mais o [0, 0] porque a curva sai da origem. A curva de brilho × corrente é a MESMA (vetor idêntico) nos 5 LEDs TUOZHAN lidos (vermelho, amarelos, verdes): é a curva genérica do fabricante, não uma medida desta cor. E a página de curvas inteira (a V × I também) é idêntica à do vermelho C779439: o vf de 1,97 V e o r_s de 3,3 Ω saem da mesma curva do vermelho (no catálogo o vermelho tem r_s 3,5 Ω, de uma leitura antiga no olho), não de uma medida deste amarelo; o vf cai dentro da faixa da tabela da p. 4. Lente transparente: o ponto de luz é forte e estreito (não espalha como o difuso)."
+   }
+  },
   "C264301": {
    "nome": "LED amarelo 3 mm",
    "marca": "Everlight Elec",
@@ -1755,6 +2042,99 @@
    "loja": "LCSC",
    "moeda": "USD",
    "montagem": "furo"
+  },
+  "C779441": {
+   "nome": "LED amarelo 5 mm",
+   "marca": "TUOZHAN",
+   "modelo": "TZ-L2-05YYBY1YCJ30-001",
+   "pacote": "Plugin,D=5mm",
+   "tamanho": "5 mm de diâmetro",
+   "montagem": "furo",
+   "categoria_loja": "LED Indication - Discrete",
+   "descricao": "-40℃~+80℃ 2.4V 200mcd 20mA 30° 590nm~595nm 5mm round lamp head 60mW Discrete Diode Yellow Yellow Lens 插件,D=5mm LED Indication - Discrete ROHS",
+   "atributos": {
+    "Mounting Style": "-",
+    "Operating Temperature": "-40℃~+80℃",
+    "Wavelength - Dominant": "590nm~595nm",
+    "Color Temperature": "-",
+    "Test Current": "20mA",
+    "Viewing Angle": "30°",
+    "Lamp Holder Type": "5mm round lamp head",
+    "Luminous Intensity": "200mcd",
+    "Power(Watts)": "60mW",
+    "Diode Configuration": "Discrete Diode",
+    "Illumination Color": "Yellow",
+    "Lens Color": "Yellow Lens",
+    "Voltage - Forward(Vf)": "2.4V",
+    "Peak Wavelength": "-"
+   },
+   "datasheet": "https://wmsc.lcsc.com/wmsc/upload/file/pdf/v2/lcsc/2009251739_TUOZHAN-TZ-L2-05YYBY1YCJ30-001_C779441.pdf",
+   "loja": "LCSC",
+   "link": "https://www.lcsc.com/product-detail/led-indication-discrete_tuozhan-tz-l2-05yyby1ycj30-001_C779441.html",
+   "preco": 0.0277,
+   "moeda": "USD",
+   "minimo": 1,
+   "estoque": 480,
+   "visto": "2026-10-25",
+   "situacao": "ok",
+   "conferido": {
+    "fonte": "datasheet TUOZHAN TZ-L2-05YYBY1YCJ30-001 (2020-08-06), https://datasheet.lcsc.com/datasheet/pdf/6a4da254b8daad89e63ef1f99b2bcbb1.pdf?productCode=C779441: p. 4, máximos: IF 30 mA contínuo, Pd 60 mW, VR 5 V; p. 4, tabela a IF = 20 mA: VF 1,9 a 2,4 V, 100 a 200 mcd, 590 a 595 nm (amarelo), lente amarela; p. 5: curvas. Pino 1 = K (−), pino 2 = A (+), pelo símbolo do EasyEDA (pino 1 '-', pino 2 '+'; loja.desenho, cache de 2026-10-25)",
+    "nomes": {
+     "1": "−",
+     "2": "+"
+    },
+    "eletrica": {
+     "modelo": "led",
+     "mais": "2",
+     "menos": "1",
+     "vf": 1.97,
+     "vf_min": 1.9,
+     "vf_max": 2.4,
+     "i_teste": 0.02,
+     "i_max": 0.03,
+     "r_s": 3.3,
+     "brilho": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.001,
+       0.064
+      ],
+      [
+       0.002,
+       0.127
+      ],
+      [
+       0.005,
+       0.311
+      ],
+      [
+       0.01,
+       0.585
+      ],
+      [
+       0.015,
+       0.811
+      ],
+      [
+       0.02,
+       1.0
+      ],
+      [
+       0.025,
+       1.165
+      ],
+      [
+       0.03,
+       1.311
+      ]
+     ],
+     "cor": "amarelo"
+    },
+    "_eletrica": "vf (típica a 20 mA) e r_s lidos no vetor da curva 'Forward current vs Forward voltage' da p. 5 (pdftocairo -svg, eixos pela grade; r_s = reta V × I entre 10 e 29,7 mA, onde a curva acaba). brilho = curva 'Relative Luminous Intensity vs Forward Current' da p. 5 dividida pelo valor dela em 20 mA (1,041 cru), mais o [0, 0] porque a curva sai da origem. A curva de brilho × corrente é a MESMA (vetor idêntico) nos 5 LEDs TUOZHAN lidos (vermelho, amarelos, verdes): é a curva genérica do fabricante, não uma medida desta cor. E a página de curvas inteira (a V × I também) é idêntica à do vermelho C779439: o vf de 1,97 V e o r_s de 3,3 Ω saem da mesma curva do vermelho (no catálogo o vermelho tem r_s 3,5 Ω, de uma leitura antiga no olho), não de uma medida deste amarelo; o vf cai dentro da faixa da tabela da p. 4."
+   }
   },
   "C128785": {
    "nome": "LED verde-amarelado 3 mm",

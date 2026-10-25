@@ -389,7 +389,31 @@
    "minimo": 1,
    "estoque": 29138,
    "visto": "2026-10-24",
-   "situacao": "ok"
+   "situacao": "ok",
+   "conferido": {
+    "fonte": "datasheet JCHL GL55 (2 páginas), https://datasheet.lcsc.com/datasheet/pdf/0ac3d43edf3703d98e2e4a16b4a936c8.pdf?productCode=C10081: p. 1, tabela, linha GL5528: 150 V, 90 mW, −30 a 70 °C, 540 nm, 8–20 kΩ a 10 lux, 1 MΩ no escuro, γ 0,65, 30 ms; p. 2, 'Measuring Conditions': R10 medido a 10 lux de luz A (2854 K) depois de 2 h a 400–600 lux; escuro = 10 s depois de apagar os 10 lux; γ = lg(R10/R100) entre 10 e 100 lux, 'The error of γ is ± 0.1'; Vmax = a tensão no escuro que aguenta sem parar; Pmax a 25 °C. Sem polaridade (é um resistor). O ponto de 1 lux não é do JCHL: veio do gráfico da Senba C125626 (ponto_1lux)",
+    "nomes": {
+     "1": "lado 1",
+     "2": "lado 2"
+    },
+    "eletrica": {
+     "modelo": "ldr",
+     "r10_min": 8000.0,
+     "r10_max": 20000.0,
+     "gama": 0.65,
+     "gama_tol": 0.1,
+     "r_escuro": 1000000.0,
+     "p_max": 0.09,
+     "v_max": 150.0,
+     "ponto_1lux": {
+      "lux": 1,
+      "r_min": 32000.0,
+      "r_max": 121000.0,
+      "fonte": "Senba C125626: gráfico da Fig. 3 (o do GL5528, pela tabela da p. 3), p. 5 de https://datasheet.lcsc.com/datasheet/pdf/a285a603ad489ef9f5d41e8abae5e9cb.pdf?productCode=C125626, lido por pixel. Não é o gráfico do JCHL (os rótulos dele parecem trocados)"
+     }
+    },
+    "_eletrica": "O modelo é R(lux) = r10 · (lux/10)^(−gama), com r10 entre r10_min e r10_max e gama ± gama_tol: o datasheet não dá um r10 típico, só a faixa. Vale de 1 a 100 lux, onde há gráfico; abaixo de 1 lux é extrapolação; no breu, r_escuro. Os gráficos R × lux da p. 2 do JCHL têm rótulo duvidoso (o desenho perto de 'GL5537' dá 10–20 kΩ em 10 lux, que é o GL5528), por isso a forma da curva foi conferida no gráfico da Senba (C125626, Fig. 3, p. 5): 8,3–20,3 kΩ em 10 lux, 32–121 kΩ em 1 lux e 2,1–3,8 kΩ em 100 lux. A resistência muda com a temperatura (gráfico da Senba, p. 4)."
+   }
   },
   "C5133": {
    "nome": "Fototransistor, pico em 940 nm (infravermelho)",

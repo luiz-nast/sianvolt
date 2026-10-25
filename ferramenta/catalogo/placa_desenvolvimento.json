@@ -353,7 +353,11 @@
    "estoque": 371,
    "visto": "2026-10-24",
    "situacao": "ok",
-   "foto": "https://d229kd5ey79jzj.cloudfront.net/1013/images/1013_1_H.png"
+   "foto": "https://d229kd5ey79jzj.cloudfront.net/1013/images/1013_1_H.png",
+   "tipo": "devkit_esp32_30",
+   "conferido": {
+    "fonte": "página da RoboCore https://www.robocore.net/wifi/esp32-wifi-bluetooth (lida em 2026-10-25) e a foto de cima dela https://d229kd5ey79jzj.cloudfront.net/1013/images/1013_2_X.png: serigrafia do DOIT ESP32 DevKit V1 de 30 pinos, pino por pino; módulo ESP-WROOM-32 (FCC ID 2AC7Z, o código da Espressif), conversor USB CP2102 e regulador AMS1117 3.3, lidos na foto; micro-USB. Fileiras a 25,3 mm medidas na foto (358,1 px ÷ 35,96 px por passo de 2,54 mm = 9,96 passos): é a de 25,40 mm (1 polegada), não a estreita de 22,86 mm. 25,40 mm entre fileiras também no desenho 1:1 do Mischianti https://mischianti.org/wp-content/uploads/2021/10/DOIT-ESP32-DevKit-v1.svg e no footprint KiCad https://github.com/syauqibilfaqih/ESP32-DevKit-V1-DOIT. A ordem dos pinos é a do esquema do DOIT https://embedded-systems-design.github.io/overview-of-the-esp32-devkit-doit-v1/SchematicsforESP32.pdf (p. 1, conectores J1 e J2). Na biblioteca, é o tipo devkit_esp32_30. Pendente: medir com régua, na placa de verdade, 25,4 mm do centro do EN ao centro do D23"
+   }
   },
   "robocore:raspberry-pi-pico-2-w": {
    "nome": "Raspberry Pi Pico 2 W",
