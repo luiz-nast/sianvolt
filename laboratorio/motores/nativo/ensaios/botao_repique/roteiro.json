@@ -1,0 +1,14 @@
+{
+  "sobre": "o botao_led do protótipo (arduino_nativo/sketches), sem mudar nada, com o cenarios/botao_repique.txt: o filtro de 50 ms conta 2 apertos, não 3",
+  "tempo": 2.5,
+  "precisa": ["pino_entrada", "serial"],
+  "entradas": [
+    {"t": 1.0, "pino": "BOTAO", "valor": 0}, {"t": 1.3, "pino": "BOTAO", "valor": 1},
+    {"t": 1.5, "pino": "BOTAO", "valor": 0}, {"t": 1.502, "pino": "BOTAO", "valor": 1},
+    {"t": 1.504, "pino": "BOTAO", "valor": 0}, {"t": 1.8, "pino": "BOTAO", "valor": 1}
+  ],
+  "confere": [
+    {"serial": "apertos: 1", "ate": 1.001},
+    {"serial": "apertos: 2", "ate": 1.6}
+  ]
+}

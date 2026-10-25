@@ -1,0 +1,15 @@
+{
+  "tempo": 2.5,
+  "precisa": ["pino_saida", "pino_entrada", "serial"],
+  "entradas": [
+    {"t": 1.0, "pino": "BOTAO", "valor": 0},
+    {"t": 1.5, "pino": "BOTAO", "valor": 1}
+  ],
+  "confere": [
+    {"t": 0.5, "pino": "LED", "valor": 0},
+    {"t": 1.25, "pino": "LED", "valor": 1},
+    {"t": 2.0, "pino": "LED", "valor": 0},
+    {"serial": "apertou", "ate": 1.25},
+    {"serial": "soltou", "ate": 2.0}
+  ]
+}

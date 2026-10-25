@@ -1,0 +1,17 @@
+diff --git a/ports/esp32/network_lan.c b/ports/esp32/network_lan.c
+index 336802c..7349d8c 100644
+--- a/ports/esp32/network_lan.c
++++ b/ports/esp32/network_lan.c
+@@ -361,7 +361,11 @@ static mp_obj_t get_lan(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_ar
+     }
+ 
+     #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32P4
+-    if (!IS_SPI_PHY(args[ARG_phy_type].u_int)) {
++    if (!IS_SPI_PHY(args[ARG_phy_type].u_int)
++        #if CONFIG_ETH_USE_OPENETH
++        && args[ARG_phy_type].u_int != PHY_OPENETH  // sianvolt: nao troca o MAC do QEMU pelo EMAC interno
++        #endif
++        ) {
+         if (self->mdc_pin == -1 || self->mdio_pin == -1) {
+             mp_raise_ValueError(MP_ERROR_TEXT("mdc and mdio must be specified"));
+         }

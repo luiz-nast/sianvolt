@@ -1,0 +1,19 @@
+{
+  "tempo": 5,
+  "precisa": ["pino_saida"],
+  "entradas": [],
+  "confere": [
+    {"t": 1.0, "pino": "VERDE", "valor": 1},
+    {"t": 1.0, "pino": "AMARELO", "valor": 0},
+    {"t": 1.0, "pino": "VERMELHO", "valor": 0},
+    {"t": 2.25, "pino": "VERDE", "valor": 0},
+    {"t": 2.25, "pino": "AMARELO", "valor": 1},
+    {"t": 2.25, "pino": "VERMELHO", "valor": 0},
+    {"t": 3.5, "pino": "VERDE", "valor": 0},
+    {"t": 3.5, "pino": "AMARELO", "valor": 0},
+    {"t": 3.5, "pino": "VERMELHO", "valor": 1},
+    {"t": 4.75, "pino": "VERDE", "valor": 1},
+    {"t": 4.75, "pino": "AMARELO", "valor": 0},
+    {"t": 4.75, "pino": "VERMELHO", "valor": 0}
+  ]
+}

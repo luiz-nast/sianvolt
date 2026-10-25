@@ -1,0 +1,9 @@
+{
+  "tempo": 2,
+  "precisa": ["serial"],
+  "entradas": [],
+  "confere": [
+    {"serial": "olá", "ate": 1.0},
+    {"serial": "3: olá do ", "ate": 1.25}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "sobre": "o painel do protótipo na esp32 (POT = GPIO34, LED = GPIO2, buzzer = GPIO25), com as entradas do testa.sh",
+  "tempo": 2.6,
+  "precisa": ["adc", "pwm", "serial"],
+  "entradas": [
+    {"t": 0, "pino": "POT", "volts": 0}, {"t": 1.0, "pino": "POT", "volts": 1.65}, {"t": 2.0, "pino": "POT", "volts": 3.2}
+  ],
+  "confere": [
+    {"serial": "pot=2048 (1650 mV) brilho=127"},
+    {"t": 1.5, "pwm": "GPIO2", "duty": [0.49, 0.5]},
+    {"t": 2.3, "pwm": "GPIO25", "duty": [0.5, 0.5]}
+  ]
+}

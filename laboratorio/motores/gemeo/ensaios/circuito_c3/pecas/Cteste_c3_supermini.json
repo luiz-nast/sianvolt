@@ -1,0 +1,68 @@
+{
+ "nome": "ESP32-C3 SuperMini (peça de teste do gêmeo)",
+ "explica": "Peça de mentira, só pro ensaio do motor gemeo: 5 pinos da SuperMini com nome GPIOn. Não é da loja.",
+ "fonte": null,
+ "corpo": [
+  18.0,
+  22.8
+ ],
+ "redondo": false,
+ "desenho": [],
+ "pinos": {
+  "1": {
+   "x": -5.08,
+   "y": 0.0,
+   "pad": {
+    "forma": "C",
+    "d": 1.7
+   },
+   "furo": 1.0
+  },
+  "2": {
+   "x": -2.54,
+   "y": 0.0,
+   "pad": {
+    "forma": "C",
+    "d": 1.7
+   },
+   "furo": 1.0
+  },
+  "3": {
+   "x": 0.0,
+   "y": 0.0,
+   "pad": {
+    "forma": "C",
+    "d": 1.7
+   },
+   "furo": 1.0
+  },
+  "4": {
+   "x": 2.54,
+   "y": 0.0,
+   "pad": {
+    "forma": "C",
+    "d": 1.7
+   },
+   "furo": 1.0
+  },
+  "5": {
+   "x": 5.08,
+   "y": 0.0,
+   "pad": {
+    "forma": "C",
+    "d": 1.7
+   },
+   "furo": 1.0
+  }
+ },
+ "nomes": {
+  "1": "GPIO3",
+  "2": "GPIO4",
+  "3": "GPIO9",
+  "4": "3V3",
+  "5": "GND"
+ },
+ "pendente": [],
+ "compra": "",
+ "loja": null
+}

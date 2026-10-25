@@ -1,0 +1,11 @@
+{
+  "tempo": 3,
+  "precisa": ["pino_saida"],
+  "entradas": [],
+  "confere": [
+    {"t": 0.25, "pino": "LED", "valor": 1},
+    {"t": 0.75, "pino": "LED", "valor": 0},
+    {"t": 2.25, "pino": "LED", "valor": 1},
+    {"trocas": "LED", "min": 4, "max": 7}
+  ]
+}

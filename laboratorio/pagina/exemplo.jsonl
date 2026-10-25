@@ -1,0 +1,14 @@
+{"t_ms": 0.0, "tipo": "modo", "pino": "GPIO2", "modo": "saida", "nome": "LED"}
+{"t_ms": 0.0, "tipo": "modo", "pino": "GPIO4", "modo": "pullup", "nome": "BOTAO"}
+{"t_ms": 0.0, "tipo": "aviso", "texto": "GPIO2 é pino de boot: quando o ESP32 liga ele tem que estar em 0", "codigo": "pino_boot"}
+{"t_ms": 0.0, "tipo": "pino", "pino": "GPIO2", "valor": 0, "origem": "firmware", "nome": "LED"}
+{"t_ms": 1000.0, "tipo": "pino", "pino": "GPIO4", "valor": 0, "origem": "roteiro", "nome": "BOTAO"}
+{"t_ms": 1002.0, "tipo": "serial", "dir": "tx", "texto": "apertou", "porta": "uart0"}
+{"t_ms": 1003.0, "tipo": "pino", "pino": "GPIO2", "valor": 1, "origem": "firmware", "nome": "LED"}
+{"t_ms": 1500.0, "tipo": "pino", "pino": "GPIO4", "valor": 1, "origem": "roteiro", "nome": "BOTAO"}
+{"t_ms": 1504.0, "tipo": "serial", "dir": "tx", "texto": "soltou", "porta": "uart0"}
+{"t_ms": 1504.0, "tipo": "pino", "pino": "GPIO2", "valor": 0, "origem": "firmware", "nome": "LED"}
+{"t_ms": 2000.0, "tipo": "serial", "dir": "rx", "texto": "status", "porta": "uart0"}
+{"t_ms": 2001.0, "tipo": "serial", "dir": "tx", "texto": "olá: LED apagado, botão solto", "porta": "uart0"}
+{"t_ms": 2500.0, "tipo": "fim", "estado": "tempo", "motor": "gemeo", "placa": "esp32", "alvo": "esp32", "tempo_placa_ms": 2500.0, "tempo_pc_s": 0.07, "ram_mb": 18.4}
+{"tipo": "conferencias", "ok": 6, "falhas": []}

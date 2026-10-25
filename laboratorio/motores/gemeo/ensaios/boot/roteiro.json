@@ -1,0 +1,2 @@
+{"tempo": 1, "entradas": [{"t": 0, "pino": "GPIO0", "valor": 0}],
+ "confere": [{"serial": "GPIO0 = 0"}]}

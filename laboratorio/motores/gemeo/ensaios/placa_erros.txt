@@ -1,0 +1,13 @@
+# placa com erros de propósito: LED sem resistor no GPIO13, botão no GPIO4 (o firmware esquece o pull-up),
+# e um resistor de 10k puxando o GPIO12 (pino de boot) pro 3V3
+placa 100 70
+peca U1 esp32_devkit 35 35
+peca D2 led_5mm 80 50
+peca SW1 botao_6x6 80 35
+peca R4 resistor_axial 80 15 10k
+liga U1.13 D2.1      # GPIO13 direto no + do LED (sem resistor!)
+liga D2.2 GND
+liga U1.20 SW1.1     # GPIO4 -> botão
+liga SW1.3 GND
+liga U1.16 R4.1      # 3V3 -> 10k -> GPIO12
+liga R4.2 U1.12

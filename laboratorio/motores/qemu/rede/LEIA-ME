@@ -1,0 +1,5 @@
+Receita do MicroPython 1.29 pro ESP32 com rede no QEMU (placa de rede open_eth): fora do 'lab.py instalar'.
+Precisa de ~2,5 GB em laboratorio/.ferramentas (ESP-IDF v5.5.2 0,7 GB + ferramentas 1,4 GB + build 0,3 GB),
+do git, do uv (Python 3.12, o ESP-IDF 5.5 não roda no 3.15) e de ~3 min com make -j2: sh construir_firmware_rede.sh
+Sai em .ferramentas/micropython/ESP32_QEMU_ETH-<data>-v1.29.0.bin; o QEMU precisa de -nic user,model=open_eth.
+O openeth_esp32.patch corrige o network_lan.c do 1.29 (o open_eth virava EMAC interno) e use phy_addr=1.

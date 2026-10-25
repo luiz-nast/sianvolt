@@ -1,0 +1,13 @@
+{
+  "tempo": 2,
+  "precisa": ["adc", "pino_saida", "serial"],
+  "entradas": [
+    {"t": 0, "pino": "POT", "volts": 1.0},
+    {"t": 1.0, "pino": "POT", "volts": 2.4}
+  ],
+  "confere": [
+    {"t": 0.5, "pino": "LED", "valor": 0},
+    {"t": 1.5, "pino": "LED", "valor": 1},
+    {"serial": "pot=", "ate": 0.5}
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "sobre": "o wifi_esp32 do protótipo: o WiFi.h de mentira conecta em 1,5 s",
+  "tempo": 3,
+  "precisa": ["rede", "serial"],
+  "confere": [{"serial": "conectado, IP 192.168.0.50", "ate": 1.7}]
+}

@@ -1,0 +1,11 @@
+{
+  "tempo": 2,
+  "precisa": ["serial_entrada", "pino_saida"],
+  "entradas": [{"t": 0.5, "serial": "liga\n"}, {"t": 1.5, "serial": "desliga\n"}],
+  "confere": [
+    {"t": 0.25, "pino": "LED", "valor": 0},
+    {"t": 1.0, "pino": "LED", "valor": 1},
+    {"t": 1.75, "pino": "LED", "valor": 0},
+    {"serial": "ouvi: liga", "ate": 0.6}
+  ]
+}

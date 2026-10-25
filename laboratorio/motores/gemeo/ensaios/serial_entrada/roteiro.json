@@ -1,0 +1,4 @@
+{"tempo": 3, "precisa": ["serial", "serial_entrada"],
+ "entradas": [{"t": 0.5, "serial": "Luiz\n"}, {"t": 0.85, "serial": "liga\n"}, {"t": 2.0, "serial": "tchau\n"}],
+ "confere": [{"serial": "oi, Luiz", "ate": 0.55}, {"serial": "nada em 70", "ate": 0.75},
+             {"serial": "chegou: liga", "ate": 0.9}, {"serial": "ultima: tchau", "ate": 2.1}, {"estado": "tempo"}]}

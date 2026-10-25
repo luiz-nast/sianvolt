@@ -1,0 +1,13 @@
+# ensaio do gêmeo com um chip que não é o ESP32: SuperMini C3 de teste (pecas/Cteste_c3_supermini.json,
+# pinos chamados GPIOn) + LED com 220 Ω no GPIO3 + 10k puxando o GPIO9 (pino de boot) pro GND, de propósito
+placa 60 40
+peca U1 Cteste_c3_supermini 30 20
+peca R1 resistor_axial 50 30 220
+peca D1 led_5mm 50 20
+peca R2 resistor_axial 50 10 10k
+liga U1.1 R1.1       # GPIO3 -> resistor do LED
+liga R1.2 D1.1
+liga D1.2 GND
+liga U1.5 GND
+liga U1.3 R2.1       # GPIO9 -> 10k -> GND: o C3 entraria no modo de gravação
+liga R2.2 GND

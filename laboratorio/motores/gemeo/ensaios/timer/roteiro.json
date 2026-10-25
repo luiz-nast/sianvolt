@@ -1,0 +1,3 @@
+{"tempo": 2, "precisa": ["timer", "pino_saida"],
+ "confere": [{"t": 0.1, "pino": "LED", "valor": 0}, {"t": 0.375, "pino": "LED", "valor": 1},
+             {"t": 0.625, "pino": "LED", "valor": 0}, {"trocas": "LED", "min": 7, "max": 8}, {"estado": "tempo"}]}

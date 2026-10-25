@@ -1,0 +1,3 @@
+{"tempo": 4, "precisa": ["i2c"],
+ "confere": [{"serial": "no barramento: ['0x48']"}, {"t": 2.2, "pino": "LED", "valor": 0},
+             {"t": 3.2, "pino": "LED", "valor": 1}, {"serial": "temperatura 30.0"}]}

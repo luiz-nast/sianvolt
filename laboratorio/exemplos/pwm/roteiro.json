@@ -1,0 +1,9 @@
+{
+  "tempo": 2,
+  "precisa": ["pwm"],
+  "entradas": [],
+  "confere": [
+    {"t": 0.5, "pwm": "PWM", "duty": [0.2, 0.3]},
+    {"t": 1.5, "pwm": "PWM", "duty": [0.7, 0.8]}
+  ]
+}

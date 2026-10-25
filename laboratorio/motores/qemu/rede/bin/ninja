@@ -1,0 +1,4 @@
+#!/bin/sh
+# ninja com no maximo 2 processos (a maquina tem pouca RAM livre); F vem do idf_env.sh
+F=${LAB_FERRAMENTAS:-$(cd "$(dirname "$0")/../../../.." && pwd)/.ferramentas}
+exec "$(ls -d "$F"/espressif/tools/ninja/*/ninja | head -1)" -j2 "$@"

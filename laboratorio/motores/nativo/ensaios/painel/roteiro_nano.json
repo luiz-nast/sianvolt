@@ -1,0 +1,10 @@
+{
+  "sobre": "o painel do protótipo no Nano (POT = A0, LED = D9), com a entrada do testa.sh (2,5 V)",
+  "tempo": 0.6,
+  "precisa": ["adc", "pwm", "serial"],
+  "entradas": [{"t": 0, "pino": "POT", "volts": 2.5}],
+  "confere": [
+    {"serial": "pot=512 brilho=127"},
+    {"t": 0.3, "pwm": "D9", "duty": [0.49, 0.5]}
+  ]
+}
