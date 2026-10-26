@@ -62,11 +62,21 @@ class App(Servidor):
         status, texto = self.pedir("GET", "/api/placas")
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(texto)["raiz"], str(RAIZ))
-        self.assertEqual(json.loads(texto)["placas"], ["lanterna"])
+        self.assertEqual(json.loads(texto)["placas"], ["esp32", "lanterna"])
         status, texto = self.pedir("GET", "/api/catalogo")
         d = json.loads(texto)
         self.assertGreater(len(d["pecas"]), 1000)
         self.assertEqual(d["grupos"][0], "Passivos")
+
+    def test_placa_de_teste_do_esp32(self):
+        """a placa de teste com o programa abre no Processo e no ▶ Programa, e nada é escrito nela (ela vai pro git)"""
+        status, proj = self.json("GET", "/api/projeto?placa=esp32")
+        self.assertEqual(status, 200)
+        self.assertEqual([b["ref"] for b in proj["blocos"]][:2], ["U1", "D1"])
+        self.assertEqual(self.json("GET", "/api/programa?placa=esp32"),
+                         (404, {"erro": "o programa desta placa ainda não rodou"}))
+        self.assertTrue(self.json("GET", "/api/programa?placa=lanterna")[1]["sem_programa"])
+        self.assertFalse((PLACAS / "esp32" / "saida").exists())
 
     def test_nao_sai_da_bancada_e_das_placas(self):
         for caminho in ("/bancada/../.git/HEAD", "/bancada/%2e%2e/.git/HEAD", "/placas/../ferramenta/app.py",

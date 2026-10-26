@@ -415,14 +415,14 @@
     "Voltage - Forward(Vf)": "3.2V",
     "Peak Wavelength": "-"
    },
-   "datasheet": "https://www.lcsc.com/datasheet/lcsc_datasheet_2009251739_TUOZHAN-TZ-L2-05YYBG1TDJ30-001_C779443.pdf",
+   "datasheet": "https://datasheet.lcsc.com/datasheet/pdf/65846e12289bfce1eb8c5f2f92f09836.pdf?productCode=C779443",
    "loja": "LCSC",
    "link": "https://www.lcsc.com/product-detail/led-indication-discrete_tuozhan-tz-l2-05yybg1tdj30-001_C779443.html",
    "preco": 0.0271,
    "moeda": "USD",
    "minimo": 1,
    "estoque": 21672,
-   "visto": "2026-10-25",
+   "visto": "2026-10-26",
    "situacao": "ok",
    "conferido": {
     "fonte": "datasheet TUOZHAN TZ-L2-05YYBG1TDJ30-001 (2020-08-18), https://datasheet.lcsc.com/datasheet/pdf/65846e12289bfce1eb8c5f2f92f09836.pdf?productCode=C779443: p. 4, máximos: IF 30 mA contínuo, Pd 90 mW, VR 5 V, ESD 2500 V; p. 4, tabela a IF = 20 mA: VF 2,7 a 3,2 V, 14000 a 20000 mcd, 519 a 522 nm (verde esmeralda), lente transparente; p. 5: curvas. Pino 1 = K (−), pino 2 = A (+), pelo símbolo do EasyEDA (loja.desenho, cache de 2026-10-25)",
@@ -1096,12 +1096,12 @@
     "Voltage - Forward(Vf)": "1.9V~2.4V",
     "Peak Wavelength": "-"
    },
-   "datasheet": "https://www.lcsc.com/datasheet/lcsc_datasheet_2009251739_TUOZHAN-TZ-L2-05YYBR2RDJ30-004_C779439.pdf",
+   "datasheet": "https://datasheet.lcsc.com/datasheet/pdf/038b8246d1c91a06321709d4facb8a88.pdf?productCode=C779439",
    "link": "https://www.lcsc.com/product-detail/led-indication-discrete_tuozhan-tz-l2-05yybr2rdj30-004_C779439.html",
    "preco": 0.0271,
    "minimo": 1,
    "estoque": 38741,
-   "visto": "2026-10-24",
+   "visto": "2026-10-26",
    "situacao": "ok",
    "conferido": {
     "fonte": "datasheet TUOZHAN TZ-L2-05YYBR2RDJ30-004 (2020-08-11): IF máx 30 mA contínuo; VF 1,9 a 2,4 V a 20 mA; 200 a 350 mcd a 20 mA. Pino 2 = A (+), pino 1 = K (−, pad quadrado), pelo símbolo do EasyEDA. vf_min 1,9 V (a VF mínima a 20 mA) e a cor vermelha (623 a 628 nm): tabela da p. 4 de https://datasheet.lcsc.com/datasheet/pdf/038b8246d1c91a06321709d4facb8a88.pdf?productCode=C779439",
@@ -2068,14 +2068,14 @@
     "Voltage - Forward(Vf)": "2.4V",
     "Peak Wavelength": "-"
    },
-   "datasheet": "https://wmsc.lcsc.com/wmsc/upload/file/pdf/v2/lcsc/2009251739_TUOZHAN-TZ-L2-05YYBY1YCJ30-001_C779441.pdf",
+   "datasheet": "https://datasheet.lcsc.com/datasheet/pdf/6a4da254b8daad89e63ef1f99b2bcbb1.pdf?productCode=C779441",
    "loja": "LCSC",
    "link": "https://www.lcsc.com/product-detail/led-indication-discrete_tuozhan-tz-l2-05yyby1ycj30-001_C779441.html",
    "preco": 0.0277,
    "moeda": "USD",
    "minimo": 1,
    "estoque": 480,
-   "visto": "2026-10-25",
+   "visto": "2026-10-26",
    "situacao": "ok",
    "conferido": {
     "fonte": "datasheet TUOZHAN TZ-L2-05YYBY1YCJ30-001 (2020-08-06), https://datasheet.lcsc.com/datasheet/pdf/6a4da254b8daad89e63ef1f99b2bcbb1.pdf?productCode=C779441: p. 4, máximos: IF 30 mA contínuo, Pd 60 mW, VR 5 V; p. 4, tabela a IF = 20 mA: VF 1,9 a 2,4 V, 100 a 200 mcd, 590 a 595 nm (amarelo), lente amarela; p. 5: curvas. Pino 1 = K (−), pino 2 = A (+), pelo símbolo do EasyEDA (pino 1 '-', pino 2 '+'; loja.desenho, cache de 2026-10-25)",

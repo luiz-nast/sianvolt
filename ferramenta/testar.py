@@ -1,4 +1,5 @@
-"""testar.py: gera a placa e roda a bateria de 7 etapas, escrevendo testes.json a cada etapa.
+"""testar.py: gera a placa e roda a bateria de 7 etapas, escrevendo testes.json a cada etapa. A placa com programa
+(codigo/main.py) ganha a 8ª, que roda o programa no gêmeo do laboratório.
 
 uso: python ferramenta/testar.py placas/estudo [-m "o que mudou"]
      python ferramenta/testar.py placas/estudo --resumo "texto do Claude no fim da rodada"
@@ -18,6 +19,7 @@ import catalogo
 import circuito
 import geometria
 import gerar
+import programa
 
 # regras da fabrica: https://jlcpcb.com/capabilities/pcb-capabilities (1-2 camadas, 1 oz, lido em 2026-10-23)
 TRILHA_MIN = 0.10      # largura minima da trilha
@@ -34,16 +36,19 @@ LETRA_MIN = 1.0        # altura da letra da serigrafia
 
 ETAPAS = ["Lê o txt", "Confere peças", "Confere ligações", "Liga o circuito",
           "Regras da fábrica", "Relê o Gerber", "Tira foto da placa"]
+ETAPA_PROGRAMA = "Roda o programa"   # a 8ª: só na placa com codigo/main.py
 
 
 class Falhou(Exception):
-    """etapa falhou; rotulos diz, pra cada peca, a etiqueta vermelha que a bancada desenha nela"""
+    """etapa falhou; rotulos diz, pra cada peca, a etiqueta vermelha que a bancada desenha nela;
+    codigo = a linha de código onde está o erro (a do main.py), que a bancada mostra embaixo do detalhe"""
 
-    def __init__(self, detalhe, onde=(), rotulo=None, rotulos=None):
+    def __init__(self, detalhe, onde=(), rotulo=None, rotulos=None, codigo=None):
         super().__init__(detalhe)
         self.detalhe = detalhe
         self.rotulos = rotulos or {ref: rotulo for ref in onde}
         self.onde = list(self.rotulos)
+        self.codigo = codigo
 
 
 class Pulou(Exception):
@@ -156,7 +161,7 @@ def nets_partidas(modelo, bib):
     return {net: list(ps.values()) for net, ps in pedacos.items() if len(ps) > 1}
 
 
-# as 6 etapas; cada uma devolve o detalhe ou levanta Falhou
+# as etapas; cada uma devolve o detalhe ou levanta Falhou (ou Pulou)
 def le_txt(ctx):
     ctx["texto"] = (ctx["pasta"] / "placa.txt").read_text()
     ctx["lido"] = gerar.ler(ctx["texto"])
@@ -918,12 +923,227 @@ def tira_foto(ctx):
     return "saida/foto.png, desenhada a partir do Gerber"
 
 
+# ---------- etapa 8: o programa da placa no gêmeo ----------
+# Só existe com o codigo/main.py. O programa.rodar faz a rodada inteira: o codigo/pinos.py (programa.pinos), a
+# cópia, o lab.py, o saida/programa.json e as conferências do codigo/confere.json (programa.conferir). A trava
+# saida/.rodando deixa uma rodada por placa: se o app ou um terminal está rodando o programa dela, a etapa espera.
+# O código é o do lab.py: 0 ok, 1 erro no programa, 2 nem chegou no laboratório, 3 travou, 4 conferência falhou,
+# 5 sem o motor (pula). O erro e o travou valem mesmo com o código 4 (o roteiro que confere o estado decide o código)
+# aviso do gêmeo -> rótulo. O pino da flash (GPIO6 a 11) reprova como na etapa 4: o gêmeo segue, o ESP32 de
+# verdade trava
+REPROVA = {"queima": "queima", "corrente": "corrente alta", "boot": "pino de boot", "flash": "pino da memória flash"}
+FLUTUANDO = re.compile(r"flutuando|aleatóri")   # o aviso 'entrada' do pino que nada segura: a leitura é sorteio
+# no detalhe sem reprovar (a etapa 4 também só avisa da psram); o resto fica no saida/programa.json
+MOSTRA = {"adc": "ADC fora da faixa", "entrada": "leitura incerta", "serial": "pino da serial",
+          "psram": "pino da psram", "placa": "pino fora do DevKit", "pull": "sem pull de dentro"}
+MAX_FALHAS = 4   # conferências listadas no detalhe; todas ficam no saida/programa.json
+CONFERENCIA = 4  # o código do lab.py pra conferência que falhou (os outros estão no programa.py: USO, TRAVOU...)
+
+
+def ultima_linha(texto):
+    """a última linha com texto (a do traceback é a do erro: 'NameError: ...')"""
+    linhas = [x.strip() for x in (texto or "").splitlines() if x.strip()]
+    return linhas[-1] if linhas else "o laboratório não explicou"
+
+
+def quem_no_texto(texto, prog, eu, refs):
+    """as peças de que um texto do gêmeo fala: o ESP32 (eu) e o que está ligado em cada GPIOn citado, mais as peças
+    citadas pelo nome (D1 QUEIMA...). O que vem entre aspas não conta: é a regex, o evento ('GPIO32 sobe') ou a
+    linha da serial, e não a peça com defeito"""
+    texto, achou = re.sub(r"'[^']*'", "", texto), []
+    for g in re.findall(r"\bGPIO\d+\b", texto):
+        achou += eu + ((prog["pinos"].get(g) or {}).get("quem") or "").split(", ")
+    achou += [x for x in re.findall(r"[A-Za-z_]\w*", texto) if x in refs]
+    return [r for r in dict.fromkeys(achou) if r]
+
+
+def acenderam(prog):
+    """os LEDs que acenderam em algum momento da rodada (luz ou corrente acima de 0)"""
+    acesos = [r for r, linha in prog["leds"].items() if any(x[1] > 0 or x[2] > 0 for x in linha)]
+    return sorted(acesos, key=programa.ordem)
+
+
+def frase_da_rodada(prog, parou=False):
+    """'rodou 3 s de placa: D1 acendeu; 13 de 13 conferências ok' (parou: 'parou em 0,504 s de placa: ...')"""
+    acesos = acenderam(prog)
+    apagados = [r for r in sorted(prog["leds"], key=programa.ordem) if r not in acesos]
+    leds = [f"{e_lista(rs)} {nao}{'acendeu' if len(rs) == 1 else 'acenderam'}"
+            for rs, nao in ((acesos, ""), (apagados, "não ")) if rs]
+    c = prog["conferencias"]
+    total = len(c["ok"]) + len(c["falhas"])
+    conf = (f"{len(c['ok'])} de {total} conferências ok" if total else
+            "nenhuma conferência (o roteiro.json e o confere.json não conferem nada)")
+    quanto = f"{'parou em' if parou else 'rodou'} {programa.num(prog['tempo_ms'] / 1000)} s de placa"
+    return f"{quanto}: {', '.join(leds) or 'nenhum LED no circuito'}; {conf}"
+
+
+def travou_de_gente(texto):
+    """o aviso 'travou' do gêmeo em português de gente (o texto do lab fala de motores e do qemu)"""
+    limite = re.search(r"passou do limite de ([\d,]+) s de PC", texto)
+    if limite:
+        return (f"o programa travou: passou de {limite.group(1)} s no PC sem chegar no fim do roteiro (um laço que "
+                "não acaba ou uma conta lenta demais)")
+    if "sem chamar sleep" in texto:
+        return ("o programa travou: ficou preso num laço que não espera nem mexe em nada (como while True: pass, "
+                "sem sleep); na placa ele ficaria preso aí")
+    return f"o programa travou: {texto.removeprefix('travou: ')}"
+
+
+def por_que_parou(prog):
+    """o gêmeo parou antes do fim do roteiro e um aviso diz por quê: (frase, rótulo) ou None.
+    O lab.py só põe o motivo no aviso (o 'fim' traz o estado 'travou' ou 'acabou' e mais nada)"""
+    for _, c, texto in prog["avisos"]:
+        if c == "travou":
+            return travou_de_gente(texto), "travou"
+        if c == "reset":   # machine.reset() ou machine.soft_reset()
+            como = re.search(r"machine\.\w+\(\)", texto)
+            return (f"o programa reiniciou o ESP32 ({como.group() if como else 'machine.reset()'}): na placa ele "
+                    "recomeça do zero, e o gêmeo para aí"), "reiniciou"
+        if c == "wdt":
+            ms = re.search(r"em (\d+) ms", texto)
+            quanto = f"{ms.group(1)} ms" if ms else "tempo demais"
+            return (f"o cão de guarda (WDT) reiniciou o ESP32: o programa ficou {quanto} sem chamar o feed() dele; na "
+                    "placa ele recomeça do zero, e o gêmeo para aí"), "reiniciou"
+        if c == "sono":
+            return ("o programa pôs o ESP32 pra dormir (deepsleep): na placa ele reinicia ao acordar, e o gêmeo para "
+                    "aí"), "dormiu"
+    return None
+
+
+def tempo_do_roteiro(pasta):
+    """os s de placa que o codigo/roteiro.json pede (sem 'tempo', os 5 s do lab.py)"""
+    try:
+        rot = programa.ler_json(pasta / "codigo" / "roteiro.json", {})
+    except ValueError:
+        rot = {}
+    t = rot.get("tempo") if isinstance(rot, dict) else None
+    return t if programa.numero(t) else programa.TEMPO_DO_LAB
+
+
+def acabou_cedo(prog, pasta):
+    """o main.py chegou no fim (ou chamou sys.exit()) antes do fim do roteiro: a frase, ou None"""
+    tempo = tempo_do_roteiro(pasta)
+    if prog["tempo_ms"] >= tempo * 1000 - 1:   # o lab.py para no instante pedido (3 s dá 3000 ms)
+        return None
+    return (f"o programa acabou em {programa.num(prog['tempo_ms'] / 1000)} s de placa, antes dos "
+            f"{programa.num(tempo)} s do roteiro: o main.py chegou no fim (ou chamou sys.exit()), e o resto do roteiro "
+            "não aconteceu")
+
+
+def o_que_parou(prog, pasta, eu):
+    """o programa que não chegou no fim: ([(texto, refs, rótulo)], a linha do main.py com o erro ou None)"""
+    erro, codigo = prog["erro"] or {}, prog["codigo"]
+    if codigo == programa.USO:   # o placa.txt, o roteiro.json, o gemeo.roteiro ou o confere.json não deixou começar
+        return [(f"o programa não rodou: {ultima_linha(erro.get('texto'))}", eu, "não rodou")], None
+    parou = por_que_parou(prog)
+    if parou:   # travou, reiniciou ou dormiu: vale até com o código 4 (o roteiro conferia 'estado tempo')
+        return [(parou[0], eu, parou[1])], None
+    if codigo == programa.TRAVOU:   # sem aviso do gêmeo: o lab.py passou do limite ou o sistema parou ele
+        return [(f"o programa travou: {ultima_linha(erro.get('texto'))}", eu, "travou")], None
+    if erro:
+        n = erro.get("linha")
+        onde = f" na linha {n} do main.py" if n else ""
+        texto = f"erro{onde}, em {programa.seg(erro['t'])}: {ultima_linha(erro['texto'])}"
+        linhas = (pasta / "codigo" / "main.py").read_text().splitlines() if n else []
+        return [(texto, eu, "erro no programa")], linhas[n - 1].strip() if n and n <= len(linhas) else None
+    cedo = acabou_cedo(prog, pasta)
+    if cedo and codigo != 0:   # com o código 0 (o roteiro não confere o estado), acabar cedo fica só no aviso
+        return [(cedo, eu, "acabou cedo")], None
+    if codigo not in (0, CONFERENCIA):   # um código que o lab.py não tem: não passa calado
+        return [(f"o laboratório saiu com o código {codigo}", eu, "não rodou")], None
+    return [], None
+
+
+def avisos_do_gemeo(prog, eu, refs):
+    """(os avisos que reprovam: queima, corrente, boot, flash, flutuando e o gêmeo sem circuito; os que só aparecem:
+    adc, serial, psram...)"""
+    reprova, mostra, vistos = [], [], set()   # o gêmeo avisa de novo quando o número muda: fica o primeiro de cada
+    for t, c, texto in prog["avisos"]:
+        quem = quem_no_texto(texto, prog, eu, refs) or eu
+        rotulo = REPROVA.get(c) or ("flutuando" if c == "entrada" and FLUTUANDO.search(texto) else None)
+        if c == "circuito" and texto.startswith("não deu pra ligar o circuito"):   # sem ele, nada de LED nem corrente
+            reprova.append((f"o gêmeo rodou sem o circuito ({texto}): sem ele não dá pra ver LED, corrente nem boot",
+                            eu, "sem circuito"))
+        elif (rotulo or c in MOSTRA) and (c, tuple(quem)) not in vistos:
+            vistos.add((c, tuple(quem)))
+            (reprova if rotulo else mostra).append((f"{texto} (em {programa.seg(t)})", quem, rotulo or MOSTRA[c]))
+    return reprova, mostra
+
+
+def conferencias_que_falharam(prog, eu, refs, parou):
+    falhas = prog["conferencias"]["falhas"]
+    if not falhas:
+        return []
+    quantas = "a conferência falhou" if len(falhas) == 1 else f"{len(falhas)} conferências falharam"
+    if parou:   # o erro já explica: as conferências que dependiam do resto do programa só somam
+        return [(f"{quantas} (estão no saida/programa.json)", eu, "conferência")]
+    mais = f"; e mais {len(falhas) - MAX_FALHAS} (todas no saida/programa.json)" if len(falhas) > MAX_FALHAS else ""
+    quem = list(dict.fromkeys(r for f in falhas for r in quem_no_texto(f, prog, eu, refs))) or eu
+    return [(f"{quantas}: {'; '.join(falhas[:MAX_FALHAS])}{mais}", quem, "conferência")]
+
+
+def roda_programa(ctx):
+    pasta = ctx["pasta"]
+    with programa.trava(pasta):   # uma rodada por placa: espera a do app (ou a de um terminal) acabar
+        try:   # o pinos.py sai até sem o laboratório: é ele que vai pro DevKit junto do main.py
+            programa.pinos(pasta)
+        except (OSError, ValueError) as e:
+            ctx["programa"] = {"ok": False, "acesos": None}
+            raise Falhou(f"não deu pra gerar o codigo/pinos.py: {e}")
+        if not programa.tem_laboratorio():
+            raise Pulou("o laboratório não está nesta máquina (o laboratorio/lab.py e o MicroPython do PC): o "
+                        "programa não rodou no papel; o codigo/pinos.py foi gerado")
+        prog = programa.rodar(pasta)   # já confere o codigo/confere.json (programa.conferir) e grava o programa.json
+        if not pasta.resolve().is_relative_to(programa.RAIZ / "placas"):
+            # uma cópia (obra, testes): a vaga que o lab.py abriu pra ela não volta. A da placa de verdade fica: o
+            # lab.py reaproveita
+            programa.apagar_vaga(programa.nome_da_copia(pasta))
+    if prog["codigo"] == programa.INDISPONIVEL:
+        motivo = next((t for _, c, t in prog["avisos"] if c == "indisponivel"), "falta o motor gemeo do laboratório")
+        raise Pulou(f"o programa não rodou no papel: {motivo}")
+    modelo = ctx.get("modelo") or programa.modelo_da_placa(pasta)
+    u = programa.mcu_da(modelo)
+    eu, refs = [u["ref"]] if u else [], {p["ref"] for p in modelo["pecas"]}   # eu = o ESP32, que leva o rótulo geral
+    parou, linha = o_que_parou(prog, pasta, eu)
+    reprova, avisos = avisos_do_gemeo(prog, eu, refs)
+    cedo = prog["codigo"] == 0 and acabou_cedo(prog, pasta)   # passou, mas o resto do roteiro nem rodou
+    if cedo:
+        avisos.insert(0, (cedo, eu, "acabou cedo"))
+    problemas = parou + reprova + conferencias_que_falharam(prog, eu, refs, bool(parou))
+    if prog["codigo"] != 0 and not problemas:   # código de falha sem nada que explique: falha mesmo assim
+        problemas.append((f"o laboratório saiu com o código {prog['codigo']} sem dizer o que falhou", eu, "não rodou"))
+    rodou = prog["codigo"] != programa.USO
+    ctx["programa"] = {"ok": not problemas, "acesos": acenderam(prog) if rodou else None}   # os requisitos usam isto
+    resumo = [frase_da_rodada(prog, bool(parou))] if rodou else []
+    if problemas:
+        raise Falhou(" · ".join([t for t, _, _ in problemas] + resumo), rotulos=rotulos_de(problemas), codigo=linha)
+    if avisos:
+        ctx["aviso"] = {"texto": " · ".join(t for t, _, _ in avisos), "rotulos": rotulos_de(avisos)}
+    return " · ".join(resumo + [f"aviso: {t}" for t, _, _ in avisos])
+
+
 # requisitos: o requisitos.md declara o objetivo e, pra cada requisito, as pecas e como verificar
 CHECAGENS = {"existe": 1, "ligado": 2, "separado": 2, "sem_pino_solto": 1, "acende": 1, "nao_queima": 1,
-             "brilho": 1, "pino_seguro": 1, "adc_na_faixa": (1, None)}   # checagem -> quantos valores ((1, None) = 1 ou mais)
+             "brilho": 1, "pino_seguro": 1, "adc_na_faixa": (1, None),   # checagem -> quantos valores ((1, None) = 1 ou mais)
+             "programa_ok": 0, "programa_acende": 1}
 MOTIVOS = {"existe": "falta a peça", "ligado": "falta ligar", "separado": "em curto", "sem_pino_solto": "pino solto",
            "acende": "não acende", "nao_queima": "queima", "brilho": "brilho diferente do pedido",
-           "pino_seguro": "pino do ESP32 em risco", "adc_na_faixa": "fora da faixa boa do ADC"}
+           "pino_seguro": "pino do ESP32 em risco", "adc_na_faixa": "fora da faixa boa do ADC",
+           "programa_ok": "o programa falhou no gêmeo", "programa_acende": "o LED não acendeu no programa"}
+# o '?' de cada checagem: o que faltou pra saber (as do programa dependem da etapa 8)
+SEM_RESPOSTA = {"programa_ok": "o programa não rodou no gêmeo", "programa_acende": "o programa não rodou no gêmeo"}
+
+
+def sem_resposta(texto, modelo):
+    """por que a checagem ficou em '?': a peça que não existe ou não é LED (erro no requisitos.md) antes do resto"""
+    cmd, *a = texto.split()
+    if cmd == "programa_acende":
+        p = next((p for p in modelo["pecas"] if p["ref"] == a[0]), None)
+        if p is None:
+            return f"{a[0]} não está no placa.txt"
+        if modelo_de(p) != "led":
+            return f"{a[0]} não é LED: o programa_acende só confere LED"
+    return SEM_RESPOSTA.get(cmd, "não dá pra ligar no papel")
 
 
 def ler_requisitos(texto):
@@ -950,7 +1170,8 @@ def ler_requisitos(texto):
             quantos = CHECAGENS[p[0]]
             minimo, maximo = quantos if isinstance(quantos, tuple) else (quantos, quantos)
             if len(p) - 1 < minimo or (maximo is not None and len(p) - 1 > maximo):
-                raise gerar.ErroTxt(n, f"'{p[0]}' espera {quantos} valores" if maximo else f"'{p[0]}' espera {minimo} ou mais valores")
+                raise gerar.ErroTxt(n, f"'{p[0]}' não leva valores" if maximo == 0 else f"'{p[0]}' espera {quantos} valores"
+                                    if maximo else f"'{p[0]}' espera {minimo} ou mais valores")
             if p[0] == "adc_na_faixa":   # adc_na_faixa LDR1 10 23: os lux em que o programa decide (1,5 vale)
                 for lux in p[2:]:
                     try:
@@ -965,8 +1186,9 @@ def ler_requisitos(texto):
     return obj
 
 
-def checar(texto, modelo, sim, projeto=None):
-    """True/False, ou None quando nao da pra saber (acende/nao_queima/brilho sem simulacao)"""
+def checar(texto, modelo, sim, projeto=None, rodada=None):
+    """True/False, ou None quando nao da pra saber (acende/nao_queima/brilho sem simulacao; programa_* sem a etapa 8).
+    rodada = o que a etapa 8 viu: {"ok": passou?, "acesos": [LEDs que acenderam] ou None se o programa nem rodou}"""
     cmd, *a = texto.split()
     pecas = {p["ref"]: p for p in modelo["pecas"]}
     pecas_da_net = {}   # net -> pecas que tem pino nela
@@ -1016,10 +1238,17 @@ def checar(texto, modelo, sim, projeto=None):
             return False
         luxes = [lux_de(x) for x in a[1:]] or [circuito.LUX_PADRAO]
         return all(e["adc_min"] <= v <= e["adc_max"] for lux in luxes for v in faixa_do_ldr(modelo, info, a[0], lux))
+    if cmd == "programa_ok":   # a etapa 8 passou: sem erro, sem travar, sem aviso que reprova e as conferências ok
+        return rodada["ok"] if rodada else None
+    if cmd == "programa_acende":   # o LED acendeu em algum momento do programa no gêmeo
+        if not rodada or rodada["acesos"] is None or modelo_de(pecas.get(a[0]) or {}) != "led":
+            return None
+        return a[0] in rodada["acesos"]
 
 
-def avaliar_requisitos(pasta, modelo, sim=None):
-    """sim = o resultado da etapa 4 (so existe se ela passou); sem ele, acende/nao_queima ficam em '?'"""
+def avaliar_requisitos(pasta, modelo, sim=None, rodada=None):
+    """sim = o resultado da etapa 4 (so existe se ela passou); sem ele, acende/nao_queima ficam em '?'.
+    rodada = o que a etapa 8 viu do programa; sem ela, programa_ok/programa_acende ficam em '?'"""
     arq = pasta / "requisitos.md"
     if not arq.exists():
         return None
@@ -1033,12 +1262,13 @@ def avaliar_requisitos(pasta, modelo, sim=None):
             item.update(status="?", motivo="a placa não montou")
             continue
         for v in item["verifica"]:
-            v["ok"] = checar(v["texto"], modelo, sim, projeto)
+            v["ok"] = checar(v["texto"], modelo, sim, projeto, rodada)
         falha = next((v for v in item["verifica"] if v["ok"] is False), None)
         if not item["verifica"]:
             item.update(status="?", motivo="sem verificação")
         elif any(v["ok"] is None for v in item["verifica"]) and not falha:
-            item.update(status="?", motivo="não dá pra ligar no papel")
+            sem = next(v["texto"] for v in item["verifica"] if v["ok"] is None)
+            item.update(status="?", motivo=sem_resposta(sem, modelo))
         elif falha:
             item.update(status="falha", motivo=MOTIVOS[falha["texto"].split()[0]])
         else:
@@ -1053,19 +1283,40 @@ def salvar(arq, estado):
     tmp.replace(arq)   # troca de uma vez: a bancada nunca le arquivo pela metade
 
 
+def requisitos_da(etapa, itens):
+    """os requisitos que a etapa toca: os que citam uma peça marcada nela. Na do programa, o rótulo geral fica no
+    ESP32, mas um erro no main.py não põe o ESP32 em risco: contam os requisitos que não ficaram ok e que citam uma
+    peça marcada ou conferem o programa (programa_ok, programa_acende)"""
+    onde = set(etapa["onde"])
+    if etapa["nome"] != ETAPA_PROGRAMA:
+        return [i["id"] for i in itens if set(i["pecas"]) & onde]
+    return [i["id"] for i in itens if i["status"] != "ok" and (set(i["pecas"]) & onde or any(
+        v["texto"].startswith("programa_") for v in i["verifica"]))]
+
+
+def etapas_da(pasta):
+    """(nomes, funções) desta placa, montadas na hora: as 7 de sempre e, com o codigo/main.py, a 8ª (o programa)"""
+    nomes = list(ETAPAS)
+    funcoes = [le_txt, confere_pecas, confere_ligacoes, liga_circuito, regras_fabrica, rele_gerber, tira_foto]
+    if (pasta / "codigo" / "main.py").is_file():
+        nomes.append(ETAPA_PROGRAMA)
+        funcoes.append(roda_programa)
+    return nomes, funcoes
+
+
 def rodar(pasta, frase=None):
     arq = pasta / "testes.json"
     try:
         anterior = json.loads(arq.read_text())
     except (OSError, ValueError):
         anterior = {}
+    nomes, funcoes = etapas_da(pasta)
     estado = {"versao": None, "rodando": True, "inicio": datetime.now().isoformat(timespec="seconds"),
-              "etapas": [{"nome": n, "estado": "aguardando", "detalhe": ""} for n in ETAPAS],
+              "etapas": [{"nome": n, "estado": "aguardando", "detalhe": ""} for n in nomes],
               "requisitos": {}, "resumo": ""}
     ctx = {"pasta": pasta, "frase": frase, "estado": estado, "anterior": anterior}
     (pasta / "saida" / "fabrica.zip").unlink(missing_ok=True)
     salvar(arq, estado)
-    funcoes = [le_txt, confere_pecas, confere_ligacoes, liga_circuito, regras_fabrica, rele_gerber, tira_foto]
     try:
         rodar_etapas(ctx, funcoes, arq)
     finally:   # aconteca o que acontecer, o testes.json nunca fica "rodando" pra sempre
@@ -1091,6 +1342,8 @@ def rodar_etapas(ctx, funcoes, arq):
             etapa.update(estado="pulou", detalhe=str(e))
         except Falhou as e:
             etapa.update(estado="falhou", detalhe=e.detalhe, onde=e.onde, rotulos=e.rotulos)
+            if e.codigo:   # a linha do main.py com o erro
+                etapa["codigo"] = e.codigo
         except gerar.ErroTxt as e:
             linhas = ctx.get("texto", "").splitlines()
             etapa.update(estado="falhou", detalhe=f"linha {e.linha}: {e.msg}", onde=e.onde, linha=e.linha,
@@ -1106,7 +1359,7 @@ def rodar_etapas(ctx, funcoes, arq):
     if tudo_ok and ctx["modelo"]["fabrica"]["pronta"]:
         gerar.zipar(pasta / "saida", ctx["arquivos"])   # fabrica.zip so existe se passou em tudo
     try:
-        objetivo = avaliar_requisitos(pasta, ctx.get("modelo"), ctx.get("sim"))
+        objetivo = avaliar_requisitos(pasta, ctx.get("modelo"), ctx.get("sim"), ctx.get("programa"))
     except Exception as e:   # requisito nao pode derrubar a rodada inteira
         objetivo = {"titulo": "", "texto": "", "itens": [], "erro": f"requisitos: erro inesperado: {e!r}"}
     if objetivo:
@@ -1114,7 +1367,7 @@ def rodar_etapas(ctx, funcoes, arq):
         estado["requisitos"] = {i["id"]: i["status"] for i in objetivo["itens"]}
         for etapa in estado["etapas"]:
             if etapa.get("onde"):
-                etapa["requisitos"] = [i["id"] for i in objetivo["itens"] if set(i["pecas"]) & set(etapa["onde"])]
+                etapa["requisitos"] = requisitos_da(etapa, objetivo["itens"])
     if ctx["anterior"].get("resumo") and ctx["anterior"].get("versao") == estado["versao"]:
         estado["resumo"] = ctx["anterior"]["resumo"]   # a placa nao mudou, o resumo do Claude continua valendo
 

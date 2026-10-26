@@ -38,6 +38,19 @@ header .direita { flex: 1 1 200px; display: flex; justify-content: flex-end; ali
 .versoes .frase { font-size: 13px; line-height: 1.4; }
 .versoes label { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 10px; margin-top: 4px; border-top: 1px solid var(--borda); font-size: 13px; color: #C8CDD2; cursor: pointer; }
 .versoes input { width: 16px; height: 16px; accent-color: var(--ok); }
+/* tela estreita (celular): as abas descem pra uma linha só delas, e nada da barra de cima empurra a página pro lado */
+@media (max-width: 720px) {
+  header { flex-wrap: wrap; gap: 0 8px; padding: 6px 12px 0; }
+  header .nome { flex: 1 1 0; min-width: 0; }
+  header .direita { flex: 0 1 auto; min-width: 0; }
+  header nav { order: 3; flex: 1 1 100%; min-width: 0; overflow-x: auto; }
+  header nav button { min-height: 44px; padding: 0 12px; flex: none; }
+  .versoes { top: calc(100% + 4px); right: 12px; max-width: calc(100vw - 24px); }
+  /* aba Projeto: o painel do ▶ Ligar (e o inspetor) desce pra baixo da placa, em vez de espremer ela de lado */
+  main[data-aba="projeto"] { flex-direction: column; }
+  main[data-aba="projeto"] > .area { flex: 1 1 auto; min-height: 240px; }
+  main[data-aba="projeto"] > aside.inspetor { flex: 0 1 auto; max-height: 55%; border-left: 0; border-top: 1px solid var(--borda); padding: 16px; }
+}
 
 main { flex: 1; min-height: 0; display: flex; }
 .vazio { margin: auto; color: var(--sec); font-size: 14px; text-align: center; line-height: 1.6; }
@@ -87,6 +100,19 @@ main { flex: 1; min-height: 0; display: flex; }
 .agora { font-family: var(--mono); font-size: 13px; padding: 8px 10px; border-radius: 8px; background: #173A26; color: var(--ok); }
 .agora.queima { background: #3A1A1A; color: var(--erro); }
 .formula { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--sec); line-height: 1.6; }
+.formula .linha { display: block; }
+/* ▶ Ligar com o cérebro: um bloco por GPIO usado, com a chave 0/1 (ou o botão, ou a luz do LDR) e o que o pino lê */
+.gpios { display: flex; flex-direction: column; gap: 12px; }
+.gpio { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.gpio .quem { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.gpio .quem b { font-family: inherit; font-weight: 600; } .gpio .quem .mono { font-size: 12px; color: var(--sec); }
+.gpio .controles { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.gpio .controles .pilula[aria-pressed="true"] { background: var(--ativo); color: var(--texto); border-color: var(--borda2); }
+.escolhas.mini button { min-height: 32px; padding: 0 12px; font-size: 13px; }
+.gpio .le { font-family: var(--mono); font-size: 12px; color: #C8CDD2; line-height: 1.5; }
+.gpio .le.queima { color: var(--erro); } .gpio .le.fora { color: var(--cobre); } .gpio .le.ok { color: var(--ok); }
+.painel .pendentes { display: flex; flex-direction: column; gap: 4px; }
+.painel .pendentes .a-conferir { font-size: 12px; }
 
 aside.inspetor { flex: 0 0 340px; overflow: auto; padding: 20px; border-left: 1px solid var(--borda); display: flex; flex-direction: column; gap: 16px; font-size: 14px; }
 .inspetor .cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
@@ -314,6 +340,7 @@ table.lux .de-ate { display: block; font-size: 10.5px; opacity: 0.75; }   /* a f
 .sel { fill: none; stroke: var(--destaque); stroke-width: 0.3; pointer-events: none; }
 .sel-pino { fill: none; stroke: #FFFFFF; stroke-width: 0.25; pointer-events: none; }
 .erro { fill: none; stroke: #FF6B5E; stroke-width: 0.35; stroke-dasharray: 0.9 0.5; pointer-events: none; }
+.aviso-peca { fill: none; stroke: var(--cobre); stroke-width: 0.3; stroke-dasharray: 0.9 0.5; pointer-events: none; }   /* passou, com aviso */
 .novo { fill: none; stroke: var(--ok); stroke-width: 0.25; stroke-dasharray: 0.8 0.5; pointer-events: none; }
 .etiqueta rect { pointer-events: none; }
 .etiqueta text { font-family: var(--mono); font-weight: 500; pointer-events: none; }
@@ -352,7 +379,7 @@ const BASE = `../placas/${encodeURIComponent(PLACA)}/`;
 const S = {
   aba: 'processo', detalhado: false,
   ligado: false,         // circuito ligado no papel (aba Projeto)
-  ajustes: { pilha: {}, resistor: {}, chave: {} },   // o que o painel mudou
+  ajustes: novosAjustes(),   // o que o painel mudou
   api: false,            // true quando a pagina vem do app.py (da pra rodar os testes daqui)
   cotacao: null,         // fabrica.json: o que aconteceu no site da fabrica
   projeto: null,         // /api/projeto: objetivo, perguntas, blocos e carrinho (passos 1 a 3)
@@ -460,10 +487,6 @@ function nomePino(m, nome) {
 function traduz(m, texto) {
   if (!m) return texto;
   return String(texto).replace(/\b([A-Za-z_]\w*)\.(\w+)\b/g, (s, ref, n) => nomePino(m, `${ref}.${n}`));
-}
-
-function eletricaDe(m, nome) {
-  return m.pecas.find(p => p.ref === nome.split('.')[0])?.eletrica;
 }
 
 // ---------- liga o circuito no papel (o mesmo modelo de ferramenta/circuito.py; mudou la, muda aqui) ----------
@@ -699,7 +722,7 @@ function novidades(m, ant) {
 }
 
 // ---------- desenho da placa em SVG ----------
-// o: {sel, novos:Set, erros:{ref:texto}, interativo, sim (circuito ligado), ajustes}
+// o: {sel, novos:Set, erros:{ref:texto}, avisos:{ref:texto} (etiqueta amarela), interativo, sim (circuito ligado), ajustes}
 function placaSVG(m, o = {}) {
   const W = m.placa.w, H = m.placa.h, Y = y => H - y;   // origem do txt e embaixo; a do SVG, em cima
   const fonte = Math.max(1.2, Math.min(2.2, Math.min(W, H) / 22));
@@ -729,8 +752,8 @@ function placaSVG(m, o = {}) {
     for (const p of m.pecas) {
       const r = o.sim.pecas[p.ref];
       if (!r || p.eletrica?.modelo !== 'led' || !r.acende) continue;
-      const forca = Math.min(1, r.i / p.eletrica.i_teste);
-      s += `<circle class="brilho" cx="${p.x}" cy="${Y(p.y)}" r="${p.corpo.w / 2 + 1.5 + forca * 1.5}" opacity="${(0.25 + 0.5 * forca).toFixed(2)}" filter="url(#borrao)"/>`;
+      const forca = Math.min(1, r.i / p.eletrica.i_teste), cor = COR_DE_TELA[p.eletrica.cor];   // a cor do LED, da eletrica dele
+      s += `<circle class="brilho" cx="${p.x}" cy="${Y(p.y)}" r="${p.corpo.w / 2 + 1.5 + forca * 1.5}" opacity="${(0.25 + 0.5 * forca).toFixed(2)}"${cor ? ` style="fill:${cor}"` : ''} filter="url(#borrao)"/>`;
     }
   }
   for (const p of m.pecas) {
@@ -785,12 +808,16 @@ function placaSVG(m, o = {}) {
       if (o.sim.pecas[p.ref]?.queima) { s += contorno(p.ref, 'erro', 1.2) + etiquetaAoLado(p, Y, W, 'queima!', fonte * 0.8, 'var(--erro)', '#2A0B08'); }
     }
   }
-  for (const [ref, rotulo] of Object.entries(o.erros || {})) {
+  // os erros (vermelho) e os avisos (amarelo) da aba Testes: contorno em cada peça e a etiqueta onde o rótulo veio ('' = só
+  // o contorno); os erros escolhem o lugar primeiro, cada etiqueta num canto livre, e os erros ficam por cima
+  const ocupado = [];
+  const camada = (lista, classe, fundo, cor, pula = {}) => Object.entries(lista || {}).map(([ref, rotulo]) => {
     const p = m.pecas.find(q => q.ref === ref);
-    if (!p) continue;
-    s += contorno(ref, 'erro', 1.2);
-    if (rotulo) s += etiquetaAoLado(p, Y, W, rotulo, fonte * 0.8, 'var(--erro)', '#2A0B08');
-  }
+    if (!p || ref in pula) return '';
+    return contorno(ref, classe, 1.2) + (rotulo ? etiquetaLivre(m, p, Y, rotulo, fonte * 0.8, fundo, cor, ocupado, fonte) : '');
+  }).join('');
+  const erros = camada(o.erros, 'erro', 'var(--erro)', '#2A0B08');
+  s += camada(o.avisos, 'aviso-peca', 'var(--cobre)', '#2A1A05', o.erros || {}) + erros;
   for (const k of o.novos || []) {
     const [tipo, id] = k.split(':');
     if (tipo === 'peca') {
@@ -805,10 +832,49 @@ function placaSVG(m, o = {}) {
   return s;
 }
 
-// corrente andando pela trilha, de (x1,y1) pra (x2,y2); olha a ponta que e resistor/LED, que so tem um caminho
+// corrente andando pela trilha, de (x1,y1) pra (x2,y2), em A (positivo = do 'de' pro 'ate'); null = não dá pra saber.
+// Cada ligação do placa.txt (os pedaços com o mesmo de, ate e linha) é um galho da net, e cada ponta é uma peça com a
+// corrente que sai da net e entra nela por aquele pino (sim.entra). Cortando o galho, o que as peças do lado de lá puxam
+// passa por ele (lei dos nós): assim o GND repartido (LED, LDR, botão) leva a soma certa em cada pedaço. O cérebro não
+// tem 'entra' (as pilhas de mentira dele não são pinos da placa): ele fecha a conta do lado dele. Cérebro dos dois
+// lados ou galho num laço (a corrente se divide) dão null
+const correntesJaFeitas = new WeakMap();   // sim -> {m, porLiga}: o desenho pergunta trilha por trilha
+const chaveDaLiga = t => `${t.de}|${t.ate}|${t.linha}`;
 function correnteNaTrilha(m, sim, t) {
-  const peso = nome => ({ resistor: 2, led: 2, chave: 1 }[eletricaDe(m, nome)?.modelo] ?? 0);
-  return peso(t.ate) >= peso(t.de) ? (sim.entra[t.ate] ?? 0) : -(sim.entra[t.de] ?? 0);
+  let feito = correntesJaFeitas.get(sim);
+  if (feito?.m !== m) correntesJaFeitas.set(sim, feito = { m, porLiga: correntesNasLigas(m, sim) });
+  return feito.porLiga.get(chaveDaLiga(t)) ?? null;
+}
+
+function correntesNasLigas(m, sim) {
+  // ponta = a peça naquela net (os pinos de um mesmo lado do botão e os GND do DevKit são uma ponta só)
+  const ponta = nome => { const p = pinoDe(m, nome); return p?.net ? `${nome.split('.')[0]}@${p.net}` : `?${nome}`; };
+  const puxa = {};   // ponta -> corrente que sai da net por ela (null = não se sabe: o cérebro)
+  for (const p of m.pecas) {
+    const lados = p.eletrica?.modelo === 'chave' ? p.eletrica.lados.map(l => l[0]) : p.pinos.map(q => q.n);   // o 'entra' do botão repete em cada pino do lado
+    const sabe = lados.some(n => `${p.ref}.${n}` in sim.entra);
+    for (const q of p.pinos) if (q.net) puxa[`${p.ref}@${q.net}`] = sabe ? 0 : null;
+    if (sabe) for (const n of lados) { const net = p.pinos.find(q => q.n === n)?.net; if (net) puxa[`${p.ref}@${net}`] += sim.entra[`${p.ref}.${n}`] ?? 0; }
+  }
+  const ligas = new Map();   // chave -> [ponta de, ponta ate]
+  for (const t of m.trilhas) ligas.set(chaveDaLiga(t), [ponta(t.de), ponta(t.ate)]);
+  const lado = (de, sem) => {   // as pontas que o 'de' alcança sem passar pelo galho 'sem'
+    const visto = new Set([de]), fila = [de];
+    for (const x of fila) for (const [k, [a, b]] of ligas) {
+      const outra = a === x ? b : b === x ? a : null;
+      if (k !== sem && outra && !visto.has(outra)) { visto.add(outra); fila.push(outra); }
+    }
+    return visto;
+  };
+  const soma = pontas => [...pontas].reduce((s, x) => (s === null || puxa[x] == null ? null : s + puxa[x]), 0);
+  const porLiga = new Map();
+  for (const [k, [a, b]] of ligas) {
+    const daqui = lado(a, k);
+    if (a === b || daqui.has(b)) { porLiga.set(k, null); continue; }   // num laço a corrente se divide: sem número
+    const sai = soma(daqui), chega = sai === null ? soma(lado(b, k)) : null;
+    porLiga.set(k, sai !== null ? -sai : chega);
+  }
+  return porLiga;
 }
 
 function larguraEtiqueta(texto, fonte) { return texto.length * fonte * 0.62 + fonte * 1.2; }
@@ -818,6 +884,31 @@ function etiquetaAoLado(p, Y, W, texto, fonte, fundo, cor) {
   const w = larguraEtiqueta(texto, fonte), dir = p.x + p.corpo.w / 2 + 1.4;
   const x = dir + w <= W ? dir : p.x - p.corpo.w / 2 - 1.4 - w;
   return etiqueta(x, Y(p.y) - p.corpo.h / 2 - 0.4, texto, fonte, fundo, cor);
+}
+
+// a caixa de uma peça no desenho (o corpo e os pads), em coordenadas do SVG: [x0, y0, x1, y1]
+function caixaDaPeca(p, Y) {
+  const xs = [p.x - p.corpo.w / 2, p.x + p.corpo.w / 2], ys = [Y(p.y) - p.corpo.h / 2, Y(p.y) + p.corpo.h / 2];
+  for (const q of p.pinos) {
+    const [mw, mh] = q.pad.forma === 'C' ? [q.pad.d / 2, q.pad.d / 2] : [q.pad.w / 2, q.pad.h / 2];
+    xs.push(q.x - mw, q.x + mw); ys.push(Y(q.y) - mh, Y(q.y) + mh);
+  }
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+
+// a etiqueta perto da peça, no primeiro lugar que não cobre outra peça, o nome dela (R4, SW1) nem outra etiqueta (à
+// direita, à esquerda, em cima ou embaixo); se nenhum está livre, o que cobre menos. ocupado ganha a caixa da posta.
+// fonteRef: o tamanho do nome das peças no desenho
+function etiquetaLivre(m, p, Y, texto, fonte, fundo, cor, ocupado, fonteRef) {
+  const w = larguraEtiqueta(texto, fonte), h = fonte * 1.6, [x0, y0, x1, y1] = caixaDaPeca(p, Y), topo = Y(p.y) - p.corpo.h / 2 - 0.4;
+  const nome = q => { const yb = Y(q.y) - q.corpo.h / 2 - fonteRef * 0.45, l = q.ref.length * fonteRef * 0.62; return [q.x - l / 2, yb - fonteRef, q.x + l / 2, yb + fonteRef * 0.2]; };
+  const lugares = [[x1 + 1.4, topo], [x0 - 1.4 - w, topo], [p.x - w / 2, Math.min(y0, nome(p)[1]) - 0.4 - h / 2], [p.x - w / 2, y1 + 0.8 + h / 2]];
+  const outras = [...m.pecas.filter(q => q !== p).flatMap(q => [caixaDaPeca(q, Y), nome(q)]), nome(p), ...ocupado];
+  const cobre = ([x, y]) => outras.reduce((soma, [a, b, c, d]) => soma + Math.max(0, Math.min(x + w, c) - Math.max(x, a)) * Math.max(0, Math.min(y + h / 2, d) - Math.max(y - h / 2, b)), 0)
+    + (x < -3 || x + w > m.placa.w + 3 || y - h / 2 < -3 || y + h / 2 > m.placa.h + 3 ? 1e6 : 0);   // fora do desenho: só se não tiver jeito
+  const [x, y] = lugares.reduce((melhor, l) => (cobre(l) < cobre(melhor) ? l : melhor));
+  ocupado.push([x, y - h / 2, x + w, y + h / 2]);
+  return etiqueta(x, y, texto, fonte, fundo, cor);
 }
 
 function etiqueta(x, y, texto, fonte, fundo, cor) {
@@ -873,6 +964,9 @@ function desenharProjeto(main) {
         <span class="tamanho"></span>
         <div class="hud" hidden><span class="nome-hud"></span><span class="xy"></span></div>
       </section>`;
+    // o painel do ▶ Ligar (ou o inspetor) entra depois do zoom e muda o tamanho da área (no celular, a altura): refaz o zoom
+    const nova = main.querySelector('.area');
+    new ResizeObserver(() => { if (nova.isConnected && S.cx !== null && nova.clientWidth > 150 && nova.clientHeight > 64) aplicarZoom(); }).observe(nova);
   }
   const area = main.querySelector('.area');
   area.querySelector('.tamanho').textContent = `${mm(m.placa.w, 0)} × ${mm(m.placa.h, 0)} mm · 2 camadas`;
@@ -881,7 +975,8 @@ function desenharProjeto(main) {
   ligar.disabled = !!motivo && !S.ligado;   // ligado, o botao sempre deixa desligar
   ligar.setAttribute('aria-pressed', S.ligado);
   ligar.title = motivo ? `Não dá pra ligar no papel: ${motivo}` : (S.ligado ? 'Desligar (L)' : 'Ligar o circuito (L)');
-  const sim = S.ligado && !motivo ? simular(m, S.ajustes) : null;
+  let sim = null, erroSim = '';   // erroSim: o numero que a conta pede e esta pendente (o comPinos e o ohmsDoLdr dizem qual)
+  if (S.ligado && !motivo) try { sim = simLigado(m); } catch (err) { erroSim = err.message; }
   const semSolucao = S.ligado && !sim;
   area.classList.toggle('mao', S.modo === 'mao');
   area.querySelectorAll('[data-modo]').forEach(b => b.setAttribute('aria-pressed', b.dataset.modo === S.modo));
@@ -908,11 +1003,12 @@ function desenharProjeto(main) {
     painel.className = 'inspetor painel';
     painel.innerHTML = `<div class="cab"><div><div class="tipo">Circuito ligado</div><div class="titulo">Painel</div></div>
       <button type="button" class="fechar" data-ligar aria-label="Desligar o circuito"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg></button></div>
-      <p class="dica">${esc(motivo ? `Não dá pra ligar esta placa no papel: ${motivo}.` : 'Não achei solução pra esse circuito. Confere as ligações.')}</p>`;
+      <p class="dica">${esc(motivo || erroSim ? `Não dá pra ligar esta placa no papel: ${motivo || erroSim}.` : 'Não achei solução pra esse circuito. Confere as ligações.')}</p>`;
     return;
   }
   if (!info) {   // circuito ligado e nada escolhido: o painel de controles
-    const assinatura = `painel:${PLACA}:${m.versao}`;
+    const c = pinosDoCerebro(m);   // com o cérebro, o nome de gente dos pinos vem do projeto.json, que chega depois do modelo
+    const assinatura = `painel:${PLACA}:${m.versao}${c ? ':' + c.pinos.map(g => nomeDoGpio(m, c, g).quem).join() : ''}`;
     if (painel.dataset.assinatura !== assinatura) {
       painel.dataset.assinatura = assinatura;
       painel.className = 'inspetor painel';
@@ -946,37 +1042,287 @@ function desenharProjeto(main) {
 // ---------- painel: mexer na pilha, no resistor e no botao e ver o que acontece ----------
 function porModelo(m, modelo) { return m.pecas.filter(p => p.eletrica?.modelo === modelo); }
 
+// ---- ▶ Ligar com o cérebro (ESP32): cada GPIO usado vira uma chave 0/1 na mão; o botão aperta e o LDR ganha a luz ----
+// o que o painel mudou: pilha (V), resistor (Ω), chave (apertada), pinos (GPIOn: 0 ou 1), lux (LDR: 0 = escuro), piezo (na virada)
+function novosAjustes() { return { pilha: {}, resistor: {}, chave: {}, pinos: {}, lux: {}, piezo: {} }; }
+const LUXES = [[0, 'escuro'], [1, '1 lux'], [10, '10 lux'], [100, '100 lux']];   // as luzes da tabelinha do LDR no Carrinho
+const NOME_DO_MODELO = { led: 'LED', chave: 'Botão', ldr: 'Olho de luz', piezo: 'Som', capacitor: 'Capacitor' };
+const QUEM_MANDA = ['led', 'piezo', 'chave', 'ldr', 'capacitor'];   // a peça do ramo que dá nome ao pino, nesta ordem
+const modeloDaPeca = (m, ref) => m.pecas.find(p => p.ref === ref)?.eletrica?.modelo;
+// o que o regulador do 3V3 entrega: o 3V3 mais os pinos que fornecem (o que afunda não soma), como o testar.soma_3v3
+const soma3v3 = sim => Object.entries(sim?.pecas || {}).reduce((s, [ref, x]) => s + (ref === '~3V3' || ref.startsWith('~GPIO') ? Math.max(x.i, 0) : 0), 0);
+
+// o papel de cada GPIO ligado, tirado do circuito, com a mesma regra da etapa 4 (testar.py, papel_dos_pinos): olha as peças
+// no pino e as que vêm depois de UM resistor (ou de dois em série). Chave = 'pullup' ('pullup_fora'/'pulldown_fora' com
+// resistor pro 3V3/GND), LDR = 'analogica', LED, piezo ou capacitor = 'saida', direto no 3V3/GND/VIN = 'energia'.
+// Sem cérebro, null; com ele, {u, pinos: [{nome, n, net, papel, ramo}]} na ordem em que as peças estão no placa.txt
+function pinosDoCerebro(m) {
+  const u = m.pecas.find(p => p.eletrica?.modelo === 'mcu');
+  if (!u) return null;
+  const pecas = Object.fromEntries(m.pecas.map(p => [p.ref, p])), modeloDe = ref => pecas[ref]?.eletrica?.modelo;
+  const naNet = {};   // net -> as peças nela, sem o cérebro
+  for (const p of m.pecas) if (p !== u) for (const q of p.pinos) if (q.net && !(naNet[q.net] ||= []).includes(p.ref)) naNet[q.net].push(p.ref);
+  const energia = Object.fromEntries(['3V3', 'GND', 'VIN'].map(k => [k, new Set(u.pinos.filter(q => q.nome === k && q.net).map(q => q.net))]));
+  const todas = new Set(Object.values(energia).flatMap(s => [...s]));
+  const resistores = (net, sem) => (naNet[net] || []).filter(x => modeloDe(x) === 'resistor' && x !== sem);
+  const outraPonta = (ref, net) => pecas[ref].pinos.map(q => q.net).filter(n => n && n !== net);
+  const gpios = u.pinos.filter(q => q.net && /^GPIO\d+$/.test(q.nome || ''));
+  const colados = new Set(gpios.filter(q => !todas.has(q.net)).flatMap(q => (naNet[q.net] || []).filter(x => modeloDe(x) === 'ldr')));
+  const pinos = gpios.map(q => {
+    const g = { nome: q.nome, n: q.n, net: q.net, papel: 'energia', ramo: [] };
+    if (todas.has(q.net)) return g;
+    const direto = naNet[q.net] || [], chega = new Set();
+    g.ramo = [...direto];
+    for (const r1 of resistores(q.net)) for (const net of outraPonta(r1, q.net)) {
+      chega.add(net);
+      if (todas.has(net)) continue;   // o que vai pro 3V3 ou pro GND não leva adiante
+      for (const x of naNet[net] || []) if (!g.ramo.includes(x)) g.ramo.push(x);
+      for (const r2 of resistores(net, r1)) for (const n of outraPonta(r2, net)) chega.add(n);
+    }
+    const puxa = k => [...chega].some(n => energia[k].has(n)), tem = k => g.ramo.some(x => modeloDe(x) === k);
+    const ldrs = g.ramo.filter(x => modeloDe(x) === 'ldr');
+    if (tem('chave')) g.papel = puxa('3V3') ? 'pullup_fora' : puxa('GND') ? 'pulldown_fora' : 'pullup';
+    else if (ldrs.some(x => direto.includes(x) || !colados.has(x)) || (ldrs.length && puxa('3V3'))) g.papel = 'analogica';
+    else g.papel = ldrs.length || ['led', 'piezo', 'capacitor'].some(k => tem(k)) ? 'saida' : null;
+    return g;
+  });
+  const ordem = g => Math.min(Infinity, ...g.ramo.map(x => m.pecas.findIndex(p => p.ref === x)));
+  return { u, pinos: pinos.sort((a, b) => ordem(a) - ordem(b)) };
+}
+
+// o estado de cada GPIO pro comPinos: a saída como o painel deixou (começa em 0), o botão com o pull-up de dentro e o
+// resto solto (o LDR, o pino só de entrada, o que está direto na energia). Igual à etapa 4, só que o 0 e o 1 são na mão
+function estadoDosPinos(c) {
+  const so = new Set(c.u.eletrica.so_entrada || []), estado = {};
+  for (const g of c.pinos) {
+    if (so.has(g.nome)) continue;   // GPIO34 a 39 só leem: nem saída nem pull-up de dentro
+    if (g.papel === 'saida') estado[g.nome] = S.ajustes.pinos?.[g.nome] ?? 0;
+    else if (g.papel === 'pullup' || g.papel === 'pullup_fora') estado[g.nome] = 'pullup';
+  }
+  return estado;
+}
+
+// os ajustes no formato do simular: o LDR vai em ohms, pela luz escolhida (sem escolha, os 10 lux de sempre do simular).
+// cantos: {LDR1: 'min' | 'max'}, o LDR mais claro ou mais escuro que a loja pode mandar (sem canto, o do meio)
+function ajustesDoSimular(m, cantos = {}) {
+  const aj = S.ajustes, ldr = {};
+  for (const p of porModelo(m, 'ldr')) {
+    const lux = aj.lux?.[p.ref], canto = cantos[p.ref];
+    if (lux != null || canto) ldr[p.ref] = ohmsDoLdr(p.eletrica, lux ?? LUX_PADRAO, canto || 'meio', p.ref);
+  }
+  return { pilha: aj.pilha, resistor: aj.resistor, chave: aj.chave, piezo: aj.piezo || {}, ldr };
+}
+
+// o circuito ligado como o painel deixou; com o cérebro, os pinos viram pilhas de mentira (comPinos). vdd null = o do meio.
+// Número pendente na conta (comPinos, ohmsDoLdr) lança Error com a frase de gente, pra mostrar no painel
+function simLigado(m, vdd = null, cantos = {}) {
+  const c = pinosDoCerebro(m);
+  return simular(c ? comPinos(m, estadoDosPinos(c), vdd) : m, ajustesDoSimular(m, cantos));
+}
+
+// o modelo com cada LED no vf_min ou no vf_max do datasheet, como o testar.com_vf (LED sem o campo fica no vf típico)
+const comVf = (m, campo) => ({ ...m, pecas: m.pecas.map(p => p.eletrica?.modelo === 'led' && positivo(p.eletrica[campo])
+  ? { ...p, eletrica: { ...p.eletrica, vf: p.eletrica[campo] } } : p) });
+const ouNada = f => { try { return f(); } catch { return null; } };   // conta com número pendente: sem faixa, em vez de chute
+
+// os volts no GPIO do LDR nos cantos, como a etapa 4 (testar.faixa_do_ldr): o LDR mais claro e o mais escuro da loja,
+// com o 3V3 no mínimo e no máximo (a ponta pendente fica no do meio). {de, ate, com3v3} ou null
+function cantosDoLdr(m, c, g, ldrs) {
+  const e = c.u.eletrica, vdds = ['vdd_min', 'vdd_max'].map(k => (positivo(e[k]) ? e[k] : e.vdd));
+  const vs = ['min', 'max'].flatMap(canto => vdds.map(v => ouNada(() => simLigado(m, v, Object.fromEntries(ldrs.map(r => [r, canto]))).nets[g.net])));
+  if (vs.some(v => v == null)) return null;
+  return { de: Math.min(...vs), ate: Math.max(...vs), com3v3: positivo(e.vdd_min) && positivo(e.vdd_max) };
+}
+
+// número do cérebro que é estimativa (a fonte diz), e não do datasheet: a tela marca com ~ e diz de onde veio
+function estimativa(e, campo) {
+  const f = [].concat(e.fontes?.[campo] || []).join(' ');   // a fonte: 'MicroPython quickref ESP32 https://...: ...'
+  return /estimativa|suposi[cç]/i.test(f) ? (f.split(/ https?:|: /)[0] || 'uma estimativa') : null;
+}
+
+// "LED A (D1)" + "D32 · GPIO32": o apelido do bloco no projeto.json (ou a peça do ramo), o que está escrito no DevKit e o pino
+function nomeDoGpio(m, c, g) {
+  const b = S.projeto?.blocos?.find(x => x.pino === g.nome && x.apelido && g.ramo.includes(x.ref));
+  const principal = QUEM_MANDA.map(k => g.ramo.filter(x => modeloDaPeca(m, x) === k)).find(l => l.length) || [];
+  const quem = b?.apelido ? `${b.apelido} (${b.ref})` : principal.map(ref => `${NOME_DO_MODELO[modeloDaPeca(m, ref)]} ${ref}`).join(' e ')
+    || (g.papel === 'energia' ? 'direto na energia' : 'sem peça que eu conheça');
+  const ser = c.u.serigrafia?.[g.n];
+  return { quem, onde: [ser && ser !== g.nome ? ser : null, g.nome].filter(Boolean).join(' · ') };
+}
+
+// uma linha por GPIO usado: quem está nele, a chave 0/1 (saída), o botão (entrada), a luz do LDR (analógica) e o que o
+// pino lê (preencherPinos). Devolve {html, chaves}: os botões que já têm linha não repetem na lista de baixo
+function pinosHTML(m, c) {
+  const so = new Set(c.u.eletrica.so_entrada || []), chaves = new Set();
+  const linhas = c.pinos.map(g => {
+    const { quem, onde } = nomeDoGpio(m, c, g), de = k => g.ramo.filter(x => modeloDaPeca(m, x) === k);
+    const cor = de('led').map(ref => bolinha(m.pecas.find(p => p.ref === ref).eletrica.cor)).join('');
+    let ctl = '';
+    if (g.papel === 'saida') ctl += so.has(g.nome) ? '<span class="sub">só lê: não dá pra ligar daqui</span>'
+      : `<div class="escolhas mini" role="group" aria-label="${esc(g.nome)} em 0 ou 1">${[0, 1].map(n => `<button type="button" data-gpio="${esc(g.nome)}" data-nivel="${n}">${n}</button>`).join('')}</div>`;
+    for (const ref of de('chave').filter(x => !chaves.has(x))) { chaves.add(ref); ctl += `<button type="button" class="pilula" data-chave="${esc(ref)}"></button>`; }
+    if (g.papel === 'analogica') for (const ref of de('ldr')) {
+      ctl += `<div class="escolhas mini" role="group" aria-label="Luz no ${esc(ref)}">${LUXES.map(([lux, txt]) => `<button type="button" data-lux="${esc(ref)}" data-valor="${lux}">${txt}</button>`).join('')}</div>`;
+    }
+    for (const ref of de('piezo')) ctl += `<button type="button" class="pilula" data-piezo="${esc(ref)}"></button>`;
+    return `<div class="gpio"><span class="quem">${cor}<b>${esc(quem)}</b><span class="mono">· ${esc(onde)}</span></span>
+      ${ctl ? `<div class="controles">${ctl}</div>` : ''}<span class="le" data-le="${esc(g.nome)}"></span></div>`;
+  });
+  return { chaves, html: `<div class="gpios leitura">${linhas.join('')}</div>` };
+}
+
+// o que cada pino faz e lê agora: a saída (quanto dá ou puxa, contra a força padrão do pino), o botão (lê 0 pelo VIL do
+// datasheet), o LDR (os volts contra a faixa boa do ADC); e quanto o 3V3 entrega, contra o que sobra dele pras peças
+function preencherPinos(m, c, sim, q) {
+  const e = c.u.eletrica, aj = S.ajustes, vdd = e.vdd, so = new Set(e.so_entrada || []);
+  const todos = sel => document.querySelectorAll('aside.painel ' + sel);
+  for (const b of todos('[data-gpio]')) b.setAttribute('aria-pressed', +b.dataset.nivel === (aj.pinos[b.dataset.gpio] ?? 0));
+  for (const b of todos('[data-lux]')) b.setAttribute('aria-pressed', +b.dataset.valor === (aj.lux[b.dataset.lux] ?? LUX_PADRAO));
+  for (const b of todos('[data-piezo]')) {
+    const fio = !!aj.piezo[b.dataset.piezo];
+    b.setAttribute('aria-pressed', fio);
+    b.textContent = `Som ${b.dataset.piezo} · ${fio ? 'na virada do apito' : 'parado'}`;
+  }
+  const vil = positivo(e.vil) ? e.vil * vdd : null;   // vil é fração do 3V3 (DS v5.3, Tabela 5-3)
+  const adc = positivo(e.adc_min) && positivo(e.adc_max);
+  for (const g of c.pinos) {
+    const el = q(`[data-le="${g.nome}"]`), v = sim?.nets[g.net], de = k => g.ramo.filter(x => modeloDaPeca(m, x) === k);
+    if (!el) continue;
+    if (v == null) { el.textContent = '?'; el.className = 'le'; continue; }
+    const partes = [`${mm(v, 2)} V no pino`];
+    let classe = '';
+    if (g.papel === 'saida' && !so.has(g.nome)) {
+      const i = sim.pecas['~' + g.nome]?.i ?? 0;
+      partes[0] = `em ${aj.pinos[g.nome] ?? 0}: ${partes[0]}`;
+      partes.push(Math.abs(i) < 1e-6 ? 'não passa corrente' : `${i > 0 ? 'dá' : 'puxa'} ${mA(Math.abs(i))} mA`);
+      if (positivo(e.i_pino) && Math.abs(i) > e.i_pino) { partes.push(`passa da força padrão do pino (~${mA(e.i_pino)} mA)`); classe = 'queima'; }
+      for (const ref of de('piezo')) {
+        const r = sim.pecas[ref];
+        partes.push(r?.fio ? `${ref} na virada do apito: ${mA(Math.abs(r.i))} mA` : `${ref} parado: não passa corrente`);
+      }
+    } else if (g.papel === 'analogica') {   // o veredito vale nos cantos, como a etapa 4 e o Carrinho (o LDR do meio só não basta)
+      const cantos = cantosDoLdr(m, c, g, de('ldr'));
+      if (cantos) partes[0] += ` (de ${mm(cantos.de, 2)} a ${mm(cantos.ate, 2)} V nos cantos do LDR${cantos.com3v3 ? ' e do 3V3' : '; a faixa do 3V3 está pendente'})`;
+      for (const ref of de('ldr')) if (sim.pecas[ref]) partes.push(`${ref} com ${ohmsCurto(sim.pecas[ref].ohms)}`);
+      if (adc) {
+        const faixa = `da faixa boa do ADC (${mm(e.adc_min, 2)} a ${mm(e.adc_max, 2)} V)`, na = x => x >= e.adc_min && x <= e.adc_max;
+        const meio = na(v), todos = cantos ? na(cantos.de) && na(cantos.ate) : meio;
+        partes.push(todos ? `dentro ${faixa}${cantos ? ', até nos cantos' : ''}` : meio ? `fora ${faixa} em algum canto: com o LDR que vier, a leitura pode não ser confiável`
+          : `fora ${faixa}: a leitura não é confiável`);
+        classe = todos ? 'ok' : 'fora';
+      }
+    } else if (g.papel === 'pullup' && so.has(g.nome)) {   // GPIO34 a 39: sem pull-up de dentro, o botão solto deixa o pino no ar
+      partes.push('este pino não tem pull-up de dentro: com o botão solto, ele fica no ar e lê qualquer coisa');
+      classe = 'fora';
+    } else if (['pullup', 'pullup_fora', 'pulldown_fora'].includes(g.papel)) {
+      if (vil !== null && v <= vil) partes.push(`lê 0 (até ${mm(vil, 2)} V o pino lê 0)`);
+      else if (Math.abs(v - vdd) < 0.005) partes.push('no 3V3: lê 1');
+      else if (g.papel === 'pulldown_fora')   // no pull-down, apertado é pra ler 1: não é problema, só falta o número
+        partes.push(`${vil !== null ? `não lê 0 (até ${mm(vil, 2)} V o pino lê 0)` : 'o VIL está pendente'}; se ele lê 1 depende do VIH (onde o pino passa a ler 1), que está pendente`);
+      else if (vil !== null) { partes.push(`não chega a ler 0 (até ${mm(vil, 2)} V o pino lê 0)`); classe = 'fora'; }
+    } else partes.push(g.papel === 'energia' ? 'ligado direto na energia: fica solto (nunca vire saída)' : 'fica solto: o pino só lê');
+    el.textContent = partes.join(' · ');
+    el.className = `le ${classe}`;
+  }
+  const b = q('[data-soma-3v3]'), soma = soma3v3(sim), orc = positivo(e.orcamento_3v3) ? e.orcamento_3v3 : null;
+  if (b) {
+    b.textContent = `${mA(soma)} mA${orc ? ` de ~${mA(orc)} mA que sobram pras peças` : ' (o que sobra pras peças está pendente)'}`;
+    b.className = orc && soma > orc ? 'queima' : 'ok';
+  }
+}
+
+// a conta de cada LED no pino, como a da pilha: (pino − LED) ÷ (resistor + pino). Só no caso clássico:
+// GPIO → um resistor → + do LED, e o − dele no GND do cérebro
+function contasDosPinos(m, c, sim) {
+  const e = c.u.eletrica, aj = S.ajustes, linhas = [];
+  const peca = ref => m.pecas.find(p => p.ref === ref), netDe = (p, n) => p.pinos.find(q => q.n === n)?.net;
+  const gnd = c.u.pinos.filter(q => q.nome === 'GND' && q.net).map(q => q.net);
+  for (const g of c.pinos) {
+    const leds = g.ramo.map(peca).filter(p => p.eletrica?.modelo === 'led'), rs = g.ramo.map(peca).filter(p => p.eletrica?.modelo === 'resistor');
+    if (g.papel !== 'saida' || leds.length !== 1 || rs.length !== 1) continue;
+    const [led, r] = [leds[0], rs[0]], [mais, menos] = polos(led.eletrica), nets = r.pinos.map(q => q.net);
+    if (!gnd.includes(netDe(led, menos)) || !nets.includes(g.net) || !nets.includes(netDe(led, mais))) continue;
+    const x = sim.pecas[led.ref], nivel = aj.pinos[g.nome] ?? 0, v = e.vdd, ohms = aj.resistor[r.ref] ?? r.valor, j = joelho(led.eletrica);
+    const rPino = `${estimativa(e, 'r_pino') ? '~' : ''}${e.r_pino}`;   // ~: estimativa, não datasheet (o rodapé diz de onde)
+    // o LED com as casas que fazem a conta fechar na mão (2; 3 ou 4 quando o arredondamento cai na beirada do mA mostrado)
+    const passo = Math.abs(x?.i ?? 0) >= 0.0095 ? 1e-3 : 1e-4, fecha = k => {
+      const q = (v - +(x.v.toFixed(k))) / (ohms + e.r_pino) / passo;
+      return Math.abs(q - Math.round(q)) < 0.45 && Math.round(q) === Math.round(x.i / passo);
+    };
+    linhas.push(`${led.ref}: ` + ((e.so_entrada || []).includes(g.nome) ? `o ${g.nome} só lê: ele não tem saída pra acender o LED`
+      : !nivel ? `o ${g.nome} está em 0 (0 V): nada empurra a corrente e o LED fica apagado`
+      : x?.i > 1e-6 ? `corrente = (pino − LED) ÷ (resistor + pino) = (${volts(v)} − ${mm(x.v, [2, 3, 4].find(fecha) ?? 4)}) ÷ (${ohms} + ${rPino}) = ${mA(x.i)} mA`
+      : v <= j ? `o pino (${volts(v)} V) não passa dos ${volts(j)} V que o LED pede pra começar: ele fica apagado`
+      : 'o circuito está aberto: a corrente não tem por onde passar'));
+  }
+  return linhas;
+}
+
+// em letra pequena: o 3V3 de verdade (a faixa e a condição dela) e o que falta conferir nas peças (a porta USB...)
+function rodapeDoCerebro(m, u) {
+  const e = u.eletrica, porTexto = {};
+  for (const p of m.pecas) for (const t of p.eletrica?.pendentes || []) (porTexto[t] ||= []).push(p.ref);
+  const faixa = positivo(e.vdd_min) && positivo(e.vdd_max) ? `3V3 de verdade: de ${mm(e.vdd_min, 3)} a ${mm(e.vdd_max, 3)} V (a conta usa ${volts(e.vdd)} V)`
+    : `a faixa do 3V3 está pendente (a conta usa ${volts(e.vdd)} V)`;
+  // os números das contas do painel que são estimativa (a fonte deles diz), se o pendentes da peça ainda não fala deles
+  const chutes = ['r_pino', 'r_pull', 'r_3v3'].filter(k => positivo(e[k]) && estimativa(e, k) && !(e.pendentes || []).some(t => t.startsWith(k + ':')))
+    .map(k => `${k}: ${k === 'r_pino' ? '~' : ''}${ohmsTxt(e[k])} é estimativa (${estimativa(e, k)}), não vem do datasheet`);
+  return `<div class="pendentes"><span class="sub">${esc(faixa)}${e.condicao_3v3 ? `; ${esc(e.condicao_3v3)}` : ''}.</span>
+    ${Object.entries(porTexto).map(([t, refs]) => pendenteHTML(refs.join() === u.ref ? t : `${refs.join(', ')} · ${t}`)).join('')}${chutes.map(pendenteHTML).join('')}</div>`;
+}
+
+// a faixa verde de um LED no pino do cérebro, com as palavras da etapa 4: de (vf_max) a (vf_min) no 3V3 do meio, e o pior
+// caso (vf_min e o 3V3 máximo). e: a eletrica do LED; u: a do cérebro. A ponta sem vf no datasheet fica no vf típico, e diz
+function faixaNoPino(e, u, iDe, iAte, iPior) {
+  if (Math.max(iDe, iAte) < 1e-6) return 'nenhuma agora, o LED está apagado';
+  const falta = ['vf_min', 'vf_max'].filter(k => !positivo(e[k])), nome = { vf_min: 'vf mínimo', vf_max: 'vf máximo' };
+  const faixa = falta.length === 2 ? `${mA(iAte)} mA com ${volts(u.vdd)} V e o vf típico (o vf mínimo e o máximo do LED estão pendentes)`
+    : `de ${mA(Math.min(iDe, iAte))} a ${mA(Math.max(iDe, iAte))} mA com ${volts(u.vdd)} V, cada LED sai um pouco diferente`
+      + (falta.length ? ` (o ${nome[falta[0]]} do LED está pendente: essa ponta fica no vf típico)` : '');
+  return faixa + (iPior != null ? `; até ${mA(iPior)} mA no pior caso, com o 3V3 em ${mm(u.vdd_max, 3)} V` : '');
+}
+
 function painelHTML(m) {
   const pilhas = porModelo(m, 'pilha'), chaves = porModelo(m, 'chave'), resistores = porModelo(m, 'resistor'), leds = porModelo(m, 'led');
+  const c = pinosDoCerebro(m), comCerebro = c ? pinosHTML(m, c) : null;   // os botões de um GPIO ficam na linha dele
+  const soltas = chaves.filter(p => !comCerebro?.chaves.has(p.ref));
   const desliga = '<button type="button" class="fechar" data-ligar aria-label="Desligar o circuito"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg></button>';
   return `
     <div class="cab"><div><div class="tipo">Circuito ligado</div><div class="titulo">Painel</div></div>${desliga}</div>
-    <p class="dica">As bolinhas nas trilhas são a corrente andando. Mexa aqui e veja o que muda.${chaves.length ? ' Clique no botão da placa pra apertar e soltar.' : ''}</p>
+    <p class="dica">${c ? `Cada pino do cérebro é como uma pilhinha de ${volts(c.u.eletrica.vdd)} V que o programa liga (1) e desliga (0); aqui você faz isso na mão. As bolinhas nas trilhas são a corrente andando.`
+      : 'As bolinhas nas trilhas são a corrente andando. Mexa aqui e veja o que muda.'}${chaves.length ? ' Clique no botão da placa pra apertar e soltar.' : ''}</p>
     ${pilhas.map(p => `<label class="controle"><span>Pilha · ${esc(p.ref)} <b data-txt-pilha="${esc(p.ref)}"></b></span>
       <input type="range" data-pilha="${esc(p.ref)}" min="${p.eletrica.v_min}" max="${p.eletrica.v_max}" step="0.1" value="${p.eletrica.v}">
       <span class="faixa"><i>fraca ${volts(p.eletrica.v_min)} V</i><i>nova ${volts(p.eletrica.v_max)} V</i></span></label>`).join('')}
-    ${chaves.length ? `<div class="chaves">${chaves.map(p => `<button type="button" class="pilula" data-chave="${esc(p.ref)}"></button>`).join('')}</div>` : ''}
+    ${comCerebro ? comCerebro.html : ''}
+    ${soltas.length ? `<div class="chaves">${soltas.map(p => `<button type="button" class="pilula" data-chave="${esc(p.ref)}"></button>`).join('')}</div>` : ''}
     ${resistores.map(p => {
       const lista = OHMS.includes(p.valor) ? OHMS : [...OHMS, p.valor].sort((a, b) => a - b);
       return `<label class="controle"><span>Resistor · ${esc(p.ref)} <b data-txt-resistor="${esc(p.ref)}"></b></span>
       <input type="range" data-resistor="${esc(p.ref)}" data-lista="${lista.join(',')}" min="0" max="${lista.length - 1}" step="1" value="${lista.indexOf(p.valor)}">
       <span class="faixa"><i>${ohmsTxt(lista[0])}</i><i>${ohmsTxt(lista[lista.length - 1])}</i></span></label>`;
     }).join('')}
-    ${leds.map(p => `<div class="leitura"><span>LED · ${esc(p.ref)} <b data-led="${esc(p.ref)}"></b></span>
+    ${leds.map(p => `<div class="leitura"><span>${COR_DE_TELA[p.eletrica.cor] ? `<span>LED · ${esc(p.ref)} ${bolinha(p.eletrica.cor)}</span>` : `LED · ${esc(p.ref)}`} <b data-led="${esc(p.ref)}"></b></span>
       <div class="barra"><i class="faixa-b" data-faixa="${esc(p.ref)}"></i><i class="teste" data-teste="${esc(p.ref)}"></i><i class="limite" data-limite="${esc(p.ref)}"></i><i class="marca" data-marca="${esc(p.ref)}"></i></div>
       <span class="legenda" data-legenda="${esc(p.ref)}"></span></div>`).join('')}
     ${resistores.map(p => `<div class="leitura"><span>Resistor · ${esc(p.ref)} esquenta <b data-pot="${esc(p.ref)}"></b></span></div>`).join('')}
     ${pilhas.map(p => `<div class="leitura"><span>Pilha · ${esc(p.ref)} gasta <b data-gasto="${esc(p.ref)}"></b></span></div>`).join('')}
+    ${c ? `<div class="leitura"><span>3V3 do ${esc(c.u.ref)} entrega <b data-soma-3v3></b></span></div>` : ''}
     <p class="formula" data-formula></p>
+    ${c ? rodapeDoCerebro(m, c.u) : ''}
     <button type="button" class="link" data-reset>Voltar aos valores da placa</button>`;
 }
 
 function preencherPainel(m, sim) {
   const q = sel => $('aside.painel ' + sel.replace(/="([^"]*)"/g, (_, v) => `="${CSS.escape(v)}"`));
   const pilhas = porModelo(m, 'pilha');
-  const aj = S.ajustes;
-  const com = v => simular(m, { ...aj, pilha: Object.fromEntries(pilhas.map(p => [p.ref, p.eletrica[v]])) });
-  const fraca = com('v_min'), nova = com('v_max');
+  const aj = S.ajustes, c = pinosDoCerebro(m), e3 = c?.u.eletrica;
+  const com = v => simular(m, { ...ajustesDoSimular(m), pilha: Object.fromEntries(pilhas.map(p => [p.ref, p.eletrica[v]])) });
+  // a faixa de cada LED: entre a pilha fraca e a nova; com o cérebro, a mesma da etapa 4 e do Carrinho: no 3V3 do meio, do
+  // LED de vf mais alto (vf_max, a menor corrente) ao de vf mais baixo (vf_min, a maior); e o pior caso, com o 3V3 no máximo
+  const [fraca, nova] = c ? [ouNada(() => simLigado(comVf(m, 'vf_max'))), ouNada(() => simLigado(comVf(m, 'vf_min')))] : [com('v_min'), com('v_max')];
+  const pior = c && positivo(e3.vdd_max) ? ouNada(() => simLigado(comVf(m, 'vf_min'), e3.vdd_max)) : null;
+  if (c) preencherPinos(m, c, sim, q);
   for (const p of pilhas) {
     const v = aj.pilha[p.ref] ?? p.eletrica.v;
     q(`[data-txt-pilha="${p.ref}"]`).textContent = `${volts(v)} V`;
@@ -1015,12 +1361,16 @@ function preencherPainel(m, sim) {
     q(`[data-marca="${p.ref}"]`).style.left = pct(r.i);
     q(`[data-teste="${p.ref}"]`).style.left = pct(e.i_teste);
     q(`[data-limite="${p.ref}"]`).style.left = pct(e.i_max);
-    q(`[data-legenda="${p.ref}"]`).textContent = `faixa verde: de ${mA(Math.min(iF, iN))} a ${mA(Math.max(iF, iN))} mA entre pilha fraca e nova · risquinho: ${mA(e.i_teste)} mA, onde o datasheet mediu · vermelho: ${mA(e.i_max)} mA, acima disso queima`;
+    const verde = c ? faixaNoPino(e, e3, iF, iN, pior?.pecas[p.ref]?.i) : `de ${mA(Math.min(iF, iN))} a ${mA(Math.max(iF, iN))} mA entre pilha fraca e nova`;
+    q(`[data-legenda="${p.ref}"]`).textContent = `faixa verde: ${verde} · risquinho: ${mA(e.i_teste)} mA, onde o datasheet mediu · vermelho: ${mA(e.i_max)} mA, acima disso queima`;
   }
   // a conta, quando o circuito e o classico pilha + botao + resistor + LED em serie
   const leds = porModelo(m, 'led'), resistores = porModelo(m, 'resistor');
   const formula = q('[data-formula]');
-  if (pilhas.length === 1 && leds.length === 1 && resistores.length === 1 && sim) {
+  if (c) {   // com o cérebro: uma conta por LED, o pino no lugar da pilha
+    const linhas = sim ? contasDosPinos(m, c, sim) : [];
+    formula.replaceChildren(...linhas.map(t => Object.assign(document.createElement('span'), { className: 'linha', textContent: t })));
+  } else if (pilhas.length === 1 && leds.length === 1 && resistores.length === 1 && sim) {
     const v = aj.pilha[pilhas[0].ref] ?? pilhas[0].eletrica.v, ohms = aj.resistor[resistores[0].ref] ?? resistores[0].valor;
     const r = sim.pecas[leds[0].ref], j = joelho(leds[0].eletrica);
     const rp = pilhas[0].eletrica.r_interna || 0;
@@ -1034,7 +1384,7 @@ function alternarLigado() {
   const m = modeloVisto();
   if (!S.ligado && (!m || motivoSemSimulacao(m))) return;   // desligar pode sempre; ligar so quando da
   S.ligado = !S.ligado;
-  if (S.ligado) { S.ajustes = { pilha: {}, resistor: {}, chave: {} }; S.sel = null; }
+  if (S.ligado) { S.ajustes = novosAjustes(); S.sel = null; }
   desenhar();
 }
 
@@ -1046,10 +1396,13 @@ function requisitosDa(ref) {
 // o que o inspetor mostra pra cada coisa clicada
 function agoraDe(m, ref, sim) {
   const p = m.pecas.find(q => q.ref === ref), r = sim?.pecas[ref];
+  if (p?.eletrica?.modelo === 'mcu' && sim) return `agora: o 3V3 entrega ${mA(soma3v3(sim))} mA`;
   if (!p?.eletrica || !r) return '';
   switch (p.eletrica.modelo) {
+    case 'ldr': return `agora: ${ohmsCurto(r.ohms)} · ${mA(Math.abs(r.i))} mA passando`;
+    case 'piezo': return `agora: ${r.fio ? `na virada do apito, ${mA(Math.abs(r.i))} mA` : 'parado, não passa corrente'}`;
     case 'led': return `agora: ${mA(r.i)} mA · ${TEXTO_LED[estadoLed(r)]}`;
-    case 'resistor': return `agora: ${mA(r.i)} mA passando · esquenta ${mW(r.p)} mW, aguenta ${mW(p.eletrica.potencia_max)}`;
+    case 'resistor': return `agora: ${mA(Math.abs(r.i))} mA passando · esquenta ${mW(r.p)} mW, aguenta ${mW(p.eletrica.potencia_max)}`;
     case 'pilha': return `agora: ${volts(r.v)} V · entrega ${mA(r.i)} mA`;
     case 'chave': return `agora: ${r.apertada ? 'apertado, passando ' + mA(Math.abs(r.i)) + ' mA' : 'solto, não passa nada'}`;
   }
@@ -1893,20 +2246,38 @@ async function abrirOpcoes(ref, online = false) {
   desenhar();
 }
 
+// as linhas 'liga' que o escolher virou ({antes, depois}), com o nome de gente dos furos: o + e o − vêm do modelo de
+// antes da troca (o LED velho), e o + continua no mesmo lugar. Sem saber o nome do furo, mostra as linhas como estão
+function viradaDeGente(m, ligas) {
+  const furos = new Map();   // 'D1.2' -> 'D1.1': o furo de antes e o de agora
+  for (const l of ligas) {
+    const a = l.antes.split(' '), b = l.depois.split(' ');
+    a.forEach((x, i) => { if (x !== b[i] && /^\w+\.\w+$/.test(x)) furos.set(x, b[i]); });
+  }
+  const ref = [...furos.keys()][0]?.split('.')[0], quantas = ligas.length > 1 ? `as ${ligas.length} ligações` : 'a ligação';
+  const papeis = [...furos].map(([de, ate]) => [m && pinoDe(m, de)?.nome, de.split('.')[1], ate.split('.')[1]]);
+  if (!ref || papeis.some(([nome]) => !['+', '−'].includes(nome)))
+    return `No LED novo o + fica no outro furo, então virei ${quantas} dele no placa.txt: ${ligas.map(l => `${l.antes} → ${l.depois}`).join('; ')}.`;
+  return `No LED novo o + fica no outro furo, então virei ${quantas} do ${ref} no placa.txt pra ele continuar virado pro mesmo lado: `
+    + papeis.map(([nome, de, ate]) => `o ${nome} era o furo ${de} e agora é o ${ate}`).join('; ') + '.';
+}
+
 async function mexer(caminho, corpo, recado) {
   S.mexendo = true; S.recado = recado; desenhar();
   try {
     const r = await fetch(`/api/${caminho}?placa=${encodeURIComponent(PLACA)}`, {
       method: 'POST', headers: { 'X-Bancada': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
     const d = await r.json().catch(() => ({}));
-    S.recado = r.ok ? (d.pendente?.length ? `Peça nova no carrinho. Falta o Claude conferir no datasheet: ${d.pendente.join('; ')}.` : 'Feito. Os testes estão rodando de novo com a mudança.')
+    S.recado = r.ok ? [d.pendente?.length ? `Peça nova no carrinho. Falta o Claude conferir no datasheet: ${d.pendente.join('; ')}.` : 'Feito. Os testes estão rodando de novo com a mudança.',
+      d.ligas?.length ? viradaDeGente(S.modelo, d.ligas) : '',   // o LED novo com o + no outro furo: o escolher virou as 'liga' dele
+      ...[].concat(d.avisos || []).map(a => `Atenção: ${String(a).replace(/[.\s]+$/, '')}.`)].filter(Boolean).join(' ')
       : (d.erro || 'não deu certo');
     return r.ok;
   } catch { S.recado = 'sem resposta do app (ele está aberto?)'; return false; }
   finally {
     S.mexendo = false; S.brutos.projeto = null; await atualizar(); desenhar();
-    const este = S.recado;
-    setTimeout(() => { if (S.recado === este) { S.recado = ''; desenhar(); } }, 10000);   // o recado sai sozinho
+    const este = S.recado, longo = este.length > 120;   // com virada ou aviso, dá tempo de ler
+    setTimeout(() => { if (S.recado === este) { S.recado = ''; desenhar(); } }, longo ? 30000 : 10000);   // o recado sai sozinho
   }
 }
 
@@ -1953,7 +2324,25 @@ function desenharTestes(main) {
   if (!t) { main.innerHTML = `<p class="vazio">Ainda não rodou nenhum teste.<br>Rode <span class="mono">python ferramenta/testar.py placas/${esc(PLACA)}</span>.</p>`; return; }
   const falha = !t.rodando && t.etapas.find(e => e.estado === 'falhou');
   const m = S.modelo;
-  const erros = falha ? (falha.rotulos || {}) : {};
+  // o rótulo uma vez só por problema, numa peça que ainda não tem, de preferência fora do cérebro (o DevKit é grande e já
+  // ganha o contorno; três etiquetas iguais amontoadas não dizem mais que uma): {ref: rótulo, ou '' = só o contorno}
+  const eCerebro = ref => m?.pecas.find(p => p.ref === ref)?.eletrica?.modelo === 'mcu';
+  const umaVez = (rotulos, ja = {}) => {
+    const porRotulo = {}, saida = {};
+    for (const [ref, rot] of Object.entries(rotulos || {})) (porRotulo[rot] ||= []).push(ref);
+    for (const [rot, refs] of Object.entries(porRotulo)) {
+      const livres = refs.filter(r => !ja[r] && !saida[r]), dono = livres.find(r => !eCerebro(r)) ?? livres[0];
+      for (const r of refs) if (!ja[r] && !saida[r]) saida[r] = r === dono ? rot : '';
+    }
+    return saida;
+  };
+  const erros = falha ? umaVez(falha.rotulos) : {};
+  // a etapa que passou com aviso (a antena, a psram, o pino de boot, os pinos juntos, o botão que não lê 0): contorno e
+  // etiqueta amarela, do mesmo jeito
+  const avisos = {};
+  if (!t.rodando) for (const e of t.etapas) if (e.estado === 'ok' && e.aviso) {
+    for (const [ref, rot] of Object.entries(umaVez(e.rotulos, avisos))) if (!avisos[ref]) avisos[ref] = rot;
+  }
   const quando = t.rodando ? `começou ${hora(t.inicio)}` : `rodou ${hora(t.fim || t.inicio)}`;
   const fotoOk = t.etapas.find(e => e.nome === 'Tira foto da placa')?.estado === 'ok';
 
@@ -1961,17 +2350,20 @@ function desenharTestes(main) {
     const [icone, texto] = ESTADOS[e.estado] || ESTADOS.aguardando;
     let detalhe = ['ok', 'falhou', 'pulou'].includes(e.estado) ? traduz(m, e.detalhe) : '';
     if (e.estado === 'falhou' && e.requisitos?.length) detalhe += ` · requisitos ${e.requisitos.join(', ')}`;
+    const comAviso = e.estado === 'ok' && e.aviso;   // o aviso sai do meio do detalhe e fica à vista, um por linha
+    if (comAviso) detalhe = detalhe.split(' · ').filter(x => !x.startsWith('aviso: ')).join(' · ');
     return `<li class="etapa ${esc(e.estado)}">
       <span class="bola" aria-hidden="true">${icone}</span>
       <div class="meio"><span class="nome-etapa">${esc(e.nome)}</span>
         ${detalhe ? `<span class="detalhe">${esc(detalhe)}</span>` : ''}
+        ${comAviso ? traduz(m, e.aviso).split(' · ').map(a => `<span class="aviso">Aviso: ${esc(a)}</span>`).join('') : ''}
         ${e.codigo ? `<code>${esc(e.codigo)}</code>` : ''}</div>
       <span class="estado">${texto}</span></li>`;
   }).join('');
 
-  const placa = m ? miniatura(m, { erros }) : '';
-  const titulo = t.rodando ? 'Conferindo a placa…' : falha ? 'Onde está o problema' : 'Placa sem problemas';
-  const links = Object.keys(erros).filter(ref => m?.pecas.some(p => p.ref === ref))
+  const placa = m ? miniatura(m, { erros, avisos }) : '';
+  const titulo = t.rodando ? 'Conferindo a placa…' : falha ? 'Onde está o problema' : Object.keys(avisos).length ? 'Placa sem problemas, com avisos' : 'Placa sem problemas';
+  const links = [...new Set([...Object.keys(erros), ...Object.keys(avisos)])].filter(ref => m?.pecas.some(p => p.ref === ref))
     .map(ref => `<button type="button" data-abrir="${esc(ref)}">Abrir ${esc(ref)} no Projeto →</button>`).join('');
 
   main.innerHTML = `<section class="testes" aria-label="Testes">
@@ -2028,7 +2420,7 @@ document.addEventListener('click', async e => {
     const v = +b.dataset.versao;
     S.ver = v === versaoAtual() ? null : v;
     await Promise.all([modeloDaVersao(v), v > 1 && modeloDaVersao(v - 1)]);
-    S.sel = null; S.cx = null; S.ligado = false; S.ajustes = { pilha: {}, resistor: {}, chave: {} };
+    S.sel = null; S.cx = null; S.ligado = false; S.ajustes = novosAjustes();
     $('#versoes').hidden = true;
     return desenhar();
   }
@@ -2072,7 +2464,10 @@ document.addEventListener('click', async e => {
   }
   if ('ligar' in b.dataset) return alternarLigado();
   if (b.dataset.chave) { S.ajustes.chave[b.dataset.chave] = !S.ajustes.chave[b.dataset.chave]; return desenhar(); }
-  if ('reset' in b.dataset) { S.ajustes = { pilha: {}, resistor: {}, chave: {} }; return desenhar(); }
+  if (b.dataset.gpio) { S.ajustes.pinos[b.dataset.gpio] = +b.dataset.nivel; return desenhar(); }   // o pino do cérebro em 0 ou 1
+  if (b.dataset.lux) { S.ajustes.lux[b.dataset.lux] = +b.dataset.valor; return desenhar(); }      // a luz no LDR (0 = escuro)
+  if (b.dataset.piezo) { S.ajustes.piezo[b.dataset.piezo] = !S.ajustes.piezo[b.dataset.piezo]; return desenhar(); }
+  if ('reset' in b.dataset) { S.ajustes = novosAjustes(); return desenhar(); }
   if (S.ligado && S.modo === 'seta' && b.dataset.alvo?.startsWith('peca:') && !motivoSemSimulacao(modeloVisto())) {   // ligado, clicar no botao e apertar
     const ref = b.dataset.alvo.slice(5), p = modeloVisto()?.pecas.find(q => q.ref === ref);
     if (p?.eletrica?.modelo === 'chave') { S.ajustes.chave[ref] = !S.ajustes.chave[ref]; return desenhar(); }
@@ -2129,7 +2524,8 @@ document.addEventListener('mousemove', e => {
   hud.hidden = false;
   hud.style.left = (e.clientX - r.left + 18) + 'px';
   hud.style.top = (e.clientY - r.top + 18) + 'px';
-  const simHud = S.ligado && m.simulacao?.pode ? simular(m, S.ajustes) : null;
+  let simHud = null;
+  if (S.ligado && m.simulacao?.pode) try { simHud = simLigado(m); } catch { /* número pendente: o painel já diz qual */ }
   hud.querySelector('.nome-hud').textContent = nomeDoAlvo(m, alvo || 'placa', simHud);
   hud.querySelector('.xy').textContent = `x ${mm(pt.x, 1)}  y ${mm(m.placa.h - pt.y, 1)} mm`;
 });

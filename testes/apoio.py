@@ -1,4 +1,5 @@
 """apoio dos testes: caminho da ferramenta, placa de teste numa pasta temporária, modelo de circuito à mão"""
+import os
 import shutil
 import sys
 import tempfile
@@ -8,13 +9,15 @@ RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ / "ferramenta"))
 
 import gerar  # noqa: E402
+import programa  # noqa: E402
 
 PLACAS = Path(__file__).resolve().parent / "placas"
 
 
 def copia(nome="lanterna", troca=None):
-    """copia a placa de teste pra uma pasta temporária; troca = {"texto velho": "texto novo"} no placa.txt"""
-    pasta = Path(tempfile.mkdtemp(prefix="sianvolt-teste-")) / nome
+    """copia a placa de teste (testes/placas/<nome>) pra uma pasta temporária, com o pid no nome (dá pra saber de que
+    rodada dos testes ela sobrou); troca = {"texto velho": "texto novo"} no placa.txt"""
+    pasta = Path(tempfile.mkdtemp(prefix=f"sianvolt-teste-{os.getpid()}-")) / nome
     shutil.copytree(PLACAS / nome, pasta)
     if troca:
         txt = (pasta / "placa.txt").read_text()
@@ -26,6 +29,9 @@ def copia(nome="lanterna", troca=None):
 
 
 def apagar(pasta):
+    """apaga a cópia e a vaga que o laboratório abriu pra ela (a etapa 8 roda o programa no build/ do laboratório,
+    numa pasta com o nome da cópia, que não volta)"""
+    programa.apagar_vaga(programa.nome_da_copia(pasta))
     shutil.rmtree(Path(pasta).parent, ignore_errors=True)
 
 

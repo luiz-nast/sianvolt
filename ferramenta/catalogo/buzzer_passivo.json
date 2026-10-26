@@ -477,14 +477,14 @@
     "Lead Pitch": "-",
     "Current Consumption": "-"
    },
-   "datasheet": "https://datasheet.lcsc.com/szlcsc/1912111437_Murata-Electronics-PKM13EPYH4002-B0_C128650.pdf",
+   "datasheet": "https://datasheet.lcsc.com/datasheet/pdf/9648c7b5e4cb65caaf63ae704bcb7115.pdf?productCode=C128650",
    "loja": "LCSC",
    "link": "https://lcsc.com/product-detail/Buzzers_Murata-Electronics-PKM13EPYH4002-B0_C128650.html",
    "preco": 0.4012,
    "moeda": "USD",
    "minimo": 1,
    "estoque": 9485,
-   "visto": "2026-10-24",
+   "visto": "2026-10-26",
    "situacao": "ok",
    "conferido": {
     "fonte": "catálogo Murata P37E 'Piezoelectric Sound Components' (Feb.5,2018), https://datasheet.lcsc.com/datasheet/pdf/9648c7b5e4cb65caaf63ae704bcb7115.pdf?productCode=C128650: p. 11 do PDF (9 impressa), tabela do PKM13EPYH4002-B0: 78 dB típico [±1,5 Vo-p, 4,0 kHz, onda quadrada, 10 cm]; tensão de operação ±15,0 Vo-p máx., sem tensão contínua (DC); capacitância 5,5 nF ±30% [1 kHz]; −40 a +85 °C. p. 17 do PDF (15 impressa), 'Notice (Driving)': ligado direto num CI, pôr 1 a 2 kΩ em série (protege o CI e o som fica estável); não deixar DC no piezo (a prata migra em umidade alta). Sem polaridade: na mesma tabela só o PKM17EPP-2002-B0 diz '[with polarity]'; o '+' do símbolo do EasyEDA é só desenho",

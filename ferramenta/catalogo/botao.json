@@ -543,12 +543,12 @@
     "With Lamp": "No",
     "Width": "6mm"
    },
-   "datasheet": "https://www.lcsc.com/datasheet/lcsc_datasheet_1912111437_SHOU-HAN-TS665CJ_C393938.pdf",
+   "datasheet": "https://datasheet.lcsc.com/datasheet/pdf/5504467bc27a7ce0c895781414357e69.pdf?productCode=C393938",
    "link": "https://www.lcsc.com/product-detail/tactile-switches_shou-han-ts665cj_C393938.html",
    "preco": 0.0194,
    "minimo": 1,
-   "estoque": 123320,
-   "visto": "2026-10-24",
+   "estoque": 181208,
+   "visto": "2026-10-26",
    "situacao": "ok",
    "conferido": {
     "fonte": "datasheet SHOU HAN TS665CJ (071108-01): SCHEMATIC liga A–B e C–D por dentro; no EasyEDA A,B,C,D são os pinos 1,2,3,4. Nosso lado A = pinos 1 e 2 (A e B do datasheet), lado B = 3 e 4 (C e D). 50 mA, 12 V",

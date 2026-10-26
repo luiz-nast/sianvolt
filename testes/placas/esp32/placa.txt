@@ -1,0 +1,34 @@
+# placa de teste do ESP32 (testes/placas/esp32): o DevKit com um LED, um botão, o olho de luz e o piezo.
+# Não é projeto do Luiz: é a placa que os testes do Sianvolt rodam nas 8 etapas, com o programa (codigo/).
+# U1 em (26,5, 36): a fileira de baixo (pinos 1 a 15) fica em y 23,3 e a de cima (16 a 30) em y 48,7. O pino n
+# de baixo fica em x 6,63 + (n − 1) × 2,54. Cada resistor tem uma ponta logo abaixo do pino dele (o R3, do 3V3,
+# fica em cima); a ponta da antena fica na borda da esquerda. Os resistores são o resistor_axial da biblioteca: os
+# da LCSC (130 Ω, 1 kΩ e 22 kΩ) não têm o desenho do EasyEDA no cache.
+placa 58 62
+furos cantos 3.2
+peca U1 devkit_esp32_30 26.5 36
+peca R1 resistor_axial 14.25 17 130
+peca D1 C779439 5.22 17
+peca LDR1 C10081 14.15 9
+peca R4 resistor_axial 32.03 7 1k
+peca BZ1 C128650 44.6 7
+peca R2 resistor_axial 37.11 18.5 1k
+peca SW1 C393938 48.5 18.5
+peca R3 resistor_axial 47.27 55 22k
+# LED: GPIO32 (pino 6) → 130 Ω → + do LED (pino 2 da peça); − no GND
+liga U1.6 R1.2
+liga R1.1 D1.2
+liga D1.1 GND
+# olho de luz: 3V3 (pino 16) → 22 kΩ → GPIO34 (pino 4) → LDR → GND
+liga U1.16 R3.1
+liga R3.2 U1.4
+liga U1.4 LDR1.1
+liga LDR1.2 GND
+# piezo: GPIO26 (pino 9) → 1 kΩ → piezo → GND
+liga U1.9 R4.1
+liga R4.2 BZ1.1
+liga BZ1.2 GND
+# botão: GPIO14 (pino 11) → 1 kΩ → lado A do botão; lado B no GND (o pull-up é o de dentro)
+liga U1.11 R2.1
+liga R2.2 SW1.1
+liga SW1.3 GND

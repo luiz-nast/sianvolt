@@ -1,0 +1,441 @@
+{
+ "nome": "LED vermelho 5 mm",
+ "bloco": "led",
+ "explica": "Só acende com a corrente no sentido certo: entra pelo + (a perna comprida) e sai pelo − (a perna curta; na placa é o pad quadrado). Sempre com um resistor na frente.",
+ "fonte": "desenho LED-TH_BD5.8-P2.54-L-RD do EasyEDA; ficha LCSC C779439; datasheet https://datasheet.lcsc.com/datasheet/pdf/038b8246d1c91a06321709d4facb8a88.pdf?productCode=C779439; conferido: datasheet TUOZHAN TZ-L2-05YYBR2RDJ30-004 (2020-08-11): IF máx 30 mA contínuo; VF 1,9 a 2,4 V a 20 mA; 200 a 350 mcd a 20 mA. Pino 2 = A (+), pino 1 = K (−, pad quadrado), pelo símbolo do EasyEDA. vf_min 1,9 V (a VF mínima a 20 mA) e a cor vermelha (623 a 628 nm): tabela da p. 4 de https://datasheet.lcsc.com/datasheet/pdf/038b8246d1c91a06321709d4facb8a88.pdf?productCode=C779439",
+ "corpo": [
+  5.72,
+  6.32
+ ],
+ "redondo": true,
+ "desenho": [
+  [
+   [
+    0.682,
+    1.138
+   ],
+   [
+    0.682,
+    1.9
+   ]
+  ],
+  [
+   [
+    1.066,
+    1.516
+   ],
+   [
+    0.266,
+    1.516
+   ]
+  ],
+  [
+   [
+    -2.858,
+    1.905
+   ],
+   [
+    -2.858,
+    -1.905
+   ]
+  ],
+  [
+   [
+    -2.857,
+    1.905
+   ],
+   [
+    -2.409,
+    2.389
+   ],
+   [
+    -1.87,
+    2.769
+   ],
+   [
+    -1.264,
+    3.031
+   ],
+   [
+    -0.617,
+    3.161
+   ],
+   [
+    0.042,
+    3.155
+   ],
+   [
+    0.687,
+    3.012
+   ],
+   [
+    1.287,
+    2.74
+   ],
+   [
+    1.819,
+    2.349
+   ],
+   [
+    2.258,
+    1.856
+   ],
+   [
+    2.586,
+    1.284
+   ],
+   [
+    2.789,
+    0.656
+   ],
+   [
+    2.858,
+    0.0
+   ],
+   [
+    2.789,
+    -0.656
+   ],
+   [
+    2.586,
+    -1.284
+   ],
+   [
+    2.258,
+    -1.856
+   ],
+   [
+    1.819,
+    -2.349
+   ],
+   [
+    1.287,
+    -2.74
+   ],
+   [
+    0.687,
+    -3.012
+   ],
+   [
+    0.042,
+    -3.155
+   ],
+   [
+    -0.617,
+    -3.161
+   ],
+   [
+    -1.264,
+    -3.031
+   ],
+   [
+    -1.87,
+    -2.769
+   ],
+   [
+    -2.409,
+    -2.389
+   ],
+   [
+    -2.857,
+    -1.905
+   ]
+  ],
+  [
+   [
+    2.222,
+    0.0
+   ],
+   [
+    2.201,
+    -0.332
+   ],
+   [
+    2.136,
+    -0.657
+   ],
+   [
+    2.029,
+    -0.972
+   ],
+   [
+    1.882,
+    -1.27
+   ],
+   [
+    1.698,
+    -1.546
+   ],
+   [
+    1.479,
+    -1.796
+   ],
+   [
+    1.229,
+    -2.015
+   ],
+   [
+    0.952,
+    -2.2
+   ],
+   [
+    0.655,
+    -2.347
+   ],
+   [
+    0.34,
+    -2.453
+   ],
+   [
+    0.014,
+    -2.518
+   ],
+   [
+    -0.318,
+    -2.54
+   ],
+   [
+    -0.649,
+    -2.518
+   ],
+   [
+    -0.975,
+    -2.453
+   ],
+   [
+    -1.29,
+    -2.347
+   ],
+   [
+    -1.588,
+    -2.2
+   ],
+   [
+    -1.864,
+    -2.015
+   ],
+   [
+    -2.114,
+    -1.796
+   ],
+   [
+    -2.333,
+    -1.546
+   ],
+   [
+    -2.517,
+    -1.27
+   ],
+   [
+    -2.664,
+    -0.972
+   ],
+   [
+    -2.771,
+    -0.657
+   ],
+   [
+    -2.836,
+    -0.332
+   ],
+   [
+    -2.858,
+    0.0
+   ],
+   [
+    -2.836,
+    0.332
+   ],
+   [
+    -2.771,
+    0.657
+   ],
+   [
+    -2.664,
+    0.972
+   ],
+   [
+    -2.517,
+    1.27
+   ],
+   [
+    -2.333,
+    1.546
+   ],
+   [
+    -2.114,
+    1.796
+   ],
+   [
+    -1.864,
+    2.015
+   ],
+   [
+    -1.588,
+    2.2
+   ],
+   [
+    -1.29,
+    2.347
+   ],
+   [
+    -0.975,
+    2.453
+   ],
+   [
+    -0.649,
+    2.518
+   ],
+   [
+    -0.318,
+    2.54
+   ],
+   [
+    0.014,
+    2.518
+   ],
+   [
+    0.34,
+    2.453
+   ],
+   [
+    0.655,
+    2.347
+   ],
+   [
+    0.952,
+    2.2
+   ],
+   [
+    1.229,
+    2.015
+   ],
+   [
+    1.479,
+    1.796
+   ],
+   [
+    1.698,
+    1.546
+   ],
+   [
+    1.882,
+    1.27
+   ],
+   [
+    2.029,
+    0.972
+   ],
+   [
+    2.136,
+    0.657
+   ],
+   [
+    2.201,
+    0.332
+   ],
+   [
+    2.222,
+    0.0
+   ]
+  ]
+ ],
+ "pinos": {
+  "1": {
+   "x": -1.588,
+   "y": 0.0,
+   "pad": {
+    "forma": "R",
+    "w": 1.6,
+    "h": 1.6
+   },
+   "furo": 1.0
+  },
+  "2": {
+   "x": 0.952,
+   "y": 0.0,
+   "pad": {
+    "forma": "C",
+    "d": 1.6
+   },
+   "furo": 1.0
+  }
+ },
+ "eletrica": {
+  "modelo": "led",
+  "mais": "2",
+  "menos": "1",
+  "vf": 1.97,
+  "vf_min": 1.9,
+  "vf_max": 2.4,
+  "i_teste": 0.02,
+  "i_max": 0.03,
+  "r_s": 3.5,
+  "brilho": [
+   [
+    0.001,
+    0
+   ],
+   [
+    0.005,
+    0.32
+   ],
+   [
+    0.01,
+    0.6
+   ],
+   [
+    0.015,
+    0.83
+   ],
+   [
+    0.02,
+    1.0
+   ],
+   [
+    0.025,
+    1.2
+   ],
+   [
+    0.03,
+    1.36
+   ]
+  ],
+  "cor": "vermelho"
+ },
+ "pendente": [],
+ "compra": "TUOZHAN TZ-L2-05YYBR2RDJ30-004 (LCSC C779439)",
+ "loja": {
+  "codigo": "C779439",
+  "modelo": "TZ-L2-05YYBR2RDJ30-004",
+  "marca": "TUOZHAN",
+  "pacote": "Plugin,D=5mm",
+  "preco": 0.0271,
+  "minimo": 1,
+  "estoque": 38741,
+  "datasheet": "https://datasheet.lcsc.com/datasheet/pdf/038b8246d1c91a06321709d4facb8a88.pdf?productCode=C779439",
+  "link": "https://www.lcsc.com/product-detail/led-indication-discrete_tuozhan-tz-l2-05yybr2rdj30-004_C779439.html",
+  "atributos": {
+   "Mounting Style": "-",
+   "Wavelength - Dominant": "623nm~628nm",
+   "Operating Temperature": "-40℃~+80℃",
+   "Color Temperature": "-",
+   "Test Current": "20mA",
+   "Viewing Angle": "30°",
+   "Lamp Holder Type": "5mm round lamp head",
+   "Luminous Intensity": "350mcd",
+   "Power(Watts)": "60mW",
+   "Diode Configuration": "Discrete Diode",
+   "Illumination Color": "Red",
+   "Lens Color": "Red Lens",
+   "Voltage - Forward(Vf)": "1.9V~2.4V",
+   "Peak Wavelength": "-"
+  },
+  "tamanho": "5 mm de diâmetro",
+  "quando": "2026-10-26"
+ },
+ "nomes": {
+  "1": "−",
+  "2": "+"
+ }
+}

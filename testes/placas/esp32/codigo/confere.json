@@ -1,0 +1,13 @@
+{
+ "_": "o que o roteiro do laboratório não sabe conferir (ferramenta/programa.py, conferir)",
+ "confere": [
+  {"tipo": "leds_da_serial", "regex": "LED (aceso|apagado)", "grupo": 1, "mapa": {"aceso": ["D1"], "apagado": []},
+   "_": "a serial diz o que o LED faz, e o LED faz"},
+  {"tipo": "pwm_freq", "pino": "GPIO26", "hz": 4000, "folga": 50, "depois_de": "GPIO32 sobe",
+   "_": "cada aperto apita em 4 kHz"},
+  {"tipo": "serial_menos_evento", "regex_ms": "segurou (\\d+) ms", "evento": "GPIO32 sobe", "folga_ms": 10,
+   "_": "o tempo que a serial diz é o tempo que o LED ficou aceso"},
+  {"tipo": "duty_entre", "pino": "GPIO26", "de_t": 0.6, "ate_t": 1.1, "min": 0.45, "max": 0.55,
+   "_": "o apito fica ligado o aperto inteiro"}
+ ]
+}

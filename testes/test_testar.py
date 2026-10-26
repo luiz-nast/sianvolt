@@ -1,17 +1,22 @@
 """a bateria de 7 etapas (testar.py) de ponta a ponta: a placa boa passa, e cada defeito para na etapa certa.
-No fim, as placas com o ESP32 (DevKit de 30 pinos), montadas pelo teste numa pasta temporária"""
+No fim, as placas com o ESP32 (DevKit de 30 pinos), montadas pelo teste numa pasta temporária, e a placa de teste
+testes/placas/esp32, que tem programa: a 8ª etapa roda ele no gêmeo do laboratório"""
 import json
+import os
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 import zipfile
 from pathlib import Path
 
-from apoio import RAIZ, apagar, copia
+from apoio import PLACAS, RAIZ, apagar, copia
 import catalogo
 import circuito
 import gerar
+import programa
 import testar
 
 
@@ -616,6 +621,389 @@ class SaidaDoTestar(unittest.TestCase):
         r = self.roda(BOA.replace("28 9 220", "28 9 22"))
         self.assertIn("✗ 4. Liga o circuito", r.stdout)
         self.assertEqual(r.returncode, 1)
+
+
+# ---------- a 8ª etapa: o programa da placa no gêmeo (testes/placas/esp32) ----------
+TEM_LAB = programa.tem_laboratorio()   # o laboratorio/ e o MicroPython do PC não vêm no clone limpo
+ESP32_OK = ["ok"] * 8
+
+
+def esp32(main=None, confere=None, roteiro=None, troca=None):
+    """cópia da placa de teste do ESP32; main = {"texto velho": "texto novo"} no main.py; confere/roteiro = o
+    json novo; troca = no placa.txt"""
+    pasta = copia("esp32", troca)
+    cod = pasta / "codigo"
+    if main:
+        txt = (cod / "main.py").read_text()
+        for velho, novo in main.items():
+            assert velho in txt, velho
+            txt = txt.replace(velho, novo)
+        (cod / "main.py").write_text(txt)
+    for nome, dado in (("confere.json", confere), ("roteiro.json", roteiro)):
+        if dado is not None:
+            (cod / nome).write_text(json.dumps(dado, ensure_ascii=False))
+    return pasta
+
+
+def rodar_esp32(**kw):
+    """as 8 etapas numa cópia: (estado, a 8ª etapa, fabrica.zip existe?)"""
+    pasta = esp32(**kw)
+    try:
+        estado = testar.rodar(pasta, "teste")
+        return estado, estado["etapas"][-1], (pasta / "saida" / "fabrica.zip").exists()
+    finally:
+        apagar(pasta)
+
+
+def so_a_8(**kw):
+    """só a etapa 8 (quando a 4 reprovaria antes): o detalhe ou a exceção, e o ctx"""
+    pasta = esp32(**kw)
+    ctx = {"pasta": pasta}
+    try:
+        return testar.roda_programa(ctx), ctx
+    except (testar.Falhou, testar.Pulou) as e:
+        return e, ctx
+    finally:
+        apagar(pasta)
+
+
+ROTEIRO = json.loads((PLACAS / "esp32" / "codigo" / "roteiro.json").read_text())
+
+
+class PlacaDeTesteDoEsp32(unittest.TestCase):
+    def test_so_tem_o_que_vai_pro_git(self):
+        """ela vai pro git: nada do que o testar e o programa geram (rodar nela de verdade sujaria o repositório)"""
+        pasta = PLACAS / "esp32"
+        arquivos = sorted(str(a.relative_to(pasta)) for a in pasta.rglob("*") if a.is_file())
+        self.assertEqual([a for a in arquivos if not a.startswith("pecas/")],
+                         ["codigo/confere.json", "codigo/gemeo.roteiro", "codigo/main.py", "codigo/roteiro.json",
+                          "placa.txt", "projeto.json", "requisitos.md"])
+        self.assertEqual([a for a in arquivos if a.startswith("pecas/")],
+                         ["pecas/C10081.json", "pecas/C128650.json", "pecas/C393938.json", "pecas/C779439.json"])
+
+    def test_a_copia_tem_o_pid_no_nome(self):
+        pasta = copia("esp32")
+        try:
+            self.assertIn(f"sianvolt-teste-{os.getpid()}-", pasta.parent.name)
+            self.assertEqual(testar.etapas_da(pasta)[0], testar.ETAPAS + [testar.ETAPA_PROGRAMA])
+        finally:
+            apagar(pasta)
+        self.assertEqual(testar.etapas_da(PLACAS / "lanterna")[0], testar.ETAPAS, "sem programa, 7 etapas")
+
+
+@unittest.skipUnless(TEM_LAB and _tem_gerbonara(), "sem o laboratório e o MicroPython do PC (ou sem o gerbonara)")
+class ProgramaNaEtapa8(unittest.TestCase):
+    def test_placa_de_teste_passa_nas_8(self):
+        pasta = esp32()
+        try:
+            estado = testar.rodar(pasta, "teste")
+            self.assertEqual([e["estado"] for e in estado["etapas"]], ESP32_OK,
+                             [(e["nome"], e["detalhe"]) for e in estado["etapas"]])
+            self.assertEqual(estado["etapas"][7]["nome"], "Roda o programa")
+            self.assertEqual(estado["etapas"][7]["detalhe"], "rodou 3 s de placa: D1 acendeu; 13 de 13 conferências ok")
+            self.assertEqual(estado["requisitos"], {"R1": "ok", "R2": "ok", "R3": "ok", "R4": "ok"})
+            self.assertEqual(json.loads((pasta / "testes.json").read_text())["requisitos"], estado["requisitos"])
+            self.assertTrue((pasta / "saida" / "fabrica.zip").exists())
+            prog = json.loads((pasta / "saida" / "programa.json").read_text())
+            self.assertEqual((prog["codigo"], prog["erro"], prog["conferencias"]["falhas"]), (0, None, []))
+            self.assertIn("sorteou", " ".join(t for _, t in prog["serial"]))
+            pinos = (pasta / "codigo" / "pinos.py").read_text()
+            for linha in ("BZ1 = 26", "D1 = 32", "LDR1 = 34", "SW1 = 14"):
+                self.assertIn(linha, pinos)
+            self.assertFalse(programa.ocupada(pasta), "a trava foi solta")
+            vaga = programa.LAB.parent / "build" / programa.LAB_PLACA / "gemeo" / programa.nome_da_copia(pasta)
+            self.assertFalse(vaga.exists(), "a cópia não deixa vaga no laboratorio/build/ (o nome dela não volta)")
+        finally:
+            apagar(pasta)
+
+    def test_erro_de_sintaxe_mostra_a_linha_do_main(self):
+        linhas = (PLACAS / "esp32" / "codigo" / "main.py").read_text().splitlines()
+        n = linhas.index('print("pronto")') + 2   # a linha nova vem logo depois
+        estado, e8, zip_ = rodar_esp32(main={'print("pronto")\n': 'print("pronto")\nx = = 1\n'})
+        self.assertEqual([e["estado"] for e in estado["etapas"]], ["ok"] * 7 + ["falhou"])
+        self.assertIn(f"erro na linha {n} do main.py, em 0,000 s: SyntaxError", e8["detalhe"])
+        self.assertEqual(e8["codigo"], "x = = 1")
+        self.assertEqual(e8["rotulos"]["U1"], "erro no programa")
+        self.assertFalse(zip_, "com falha não sai fabrica.zip")
+        self.assertEqual(estado["requisitos"], {"R1": "ok", "R2": "ok", "R3": "falha", "R4": "falha"})
+        self.assertEqual(e8["requisitos"], ["R3", "R4"], "erro no programa não põe o ESP32 em risco (o R1 fica de fora)")
+
+    def test_conferencia_impossivel_lista_a_falha(self):
+        impossivel = {"confere": [{"tipo": "pwm_freq", "pino": "GPIO26", "hz": 1000, "folga": 50, "depois_de": "GPIO32 sobe"}]}
+        estado, e8, zip_ = rodar_esp32(confere=impossivel)
+        self.assertEqual(e8["estado"], "falhou")
+        self.assertIn("a conferência falhou: GPIO26 em 1000 Hz (± 50) depois de cada 'GPIO32 sobe': em 0,504 s ligou em "
+                      "4000 Hz · rodou 3 s de placa: D1 acendeu; 9 de 10 conferências ok", e8["detalhe"])
+        self.assertEqual(e8["rotulos"], {"U1": "conferência", "BZ1": "conferência"},
+                         "o D1 do 'GPIO32 sobe' não tem defeito: só o pino da conferência")
+        self.assertFalse(zip_)
+        self.assertEqual(estado["requisitos"]["R3"], "falha")
+        self.assertEqual(estado["requisitos"]["R4"], "ok", "o LED acendeu mesmo assim")
+
+    def test_conferencia_do_roteiro_que_falha(self):
+        # código 4 do lab.py: o roteiro.json do laboratório confere um nível que não acontece
+        estado, e8, _ = rodar_esp32(roteiro={**ROTEIRO, "confere": [{"t": 0.8, "pino": "GPIO32", "valor": 0}]})
+        self.assertEqual(e8["detalhe"], "a conferência falhou: GPIO32 = 0 em 0,800 s: viu 1 · rodou 3 s de placa: D1 "
+                                        "acendeu; 4 de 5 conferências ok")
+        self.assertEqual(e8["rotulos"], {"U1": "conferência", "D1": "conferência"})
+        self.assertEqual(estado["requisitos"]["R3"], "falha")
+
+    def test_adc_fora_da_faixa_so_avisa(self):
+        escuro = {**ROTEIRO, "entradas": [{"t": 0, "luz": "LDR1", "lux": 0}]}   # 3,23 V, acima dos 2,45 V
+        estado, e8, zip_ = rodar_esp32(roteiro=escuro)
+        self.assertEqual([e["estado"] for e in estado["etapas"]], ESP32_OK)
+        self.assertIn("ADC no GPIO34 lê 3,23 V, fora da faixa boa", e8["aviso"])
+        self.assertIn(" · aviso: ADC no GPIO34 lê 3,23 V", e8["detalhe"])
+        self.assertEqual(e8["rotulos"], {"U1": "ADC fora da faixa", "LDR1": "ADC fora da faixa"})
+        self.assertTrue(zip_, "aviso não segura a fábrica")
+
+    def test_botao_flutuando_reprova(self):
+        estado, e8, _ = rodar_esp32(main={"Pin(SW1, Pin.IN, Pin.PULL_UP)": "Pin(SW1, Pin.IN)"})
+        self.assertEqual(e8["estado"], "falhou")
+        self.assertIn("GPIO14 está flutuando", e8["detalhe"])
+        self.assertEqual((e8["rotulos"]["U1"], e8["rotulos"]["SW1"]), ("flutuando", "flutuando"))
+        self.assertEqual(estado["requisitos"]["R4"], "falha", "sem o pull-up, o botão nunca lê apertado")
+
+    def test_programa_que_trava(self):
+        _, e8, _ = rodar_esp32(main={"    time.sleep_ms(5)\n": "    while agora == 0:\n        pass\n    time.sleep_ms(5)\n"})
+        self.assertEqual(e8["estado"], "falhou")
+        self.assertTrue(e8["detalhe"].startswith("o programa travou: ficou preso num laço que não espera nem mexe em "
+                                                 "nada (como while True: pass, sem sleep); na placa ele ficaria preso aí"),
+                        e8["detalhe"])
+        self.assertNotIn("qemu", e8["detalhe"], "o texto do lab fala de motores: o Luiz lê o nosso")
+        self.assertIn("conferências falharam (estão no saida/programa.json) · parou em 0,5", e8["detalhe"])
+        self.assertEqual(e8["rotulos"], {"U1": "travou"})
+
+    def test_reset_para_e_diz_por_que(self):
+        # o roteiro da placa confere 'estado tempo': o lab.py sai com 4, e a frase é a do reset (não a conferência crua)
+        sorteou = '            print("sorteou %d" % random.randint(1, 6))\n'
+        estado, e8, zip_ = rodar_esp32(main={sorteou: sorteou + "            import machine\n            machine.reset()\n"})
+        self.assertEqual(e8["estado"], "falhou")
+        self.assertTrue(e8["detalhe"].startswith("o programa reiniciou o ESP32 (machine.reset()): na placa ele recomeça "
+                                                 "do zero, e o gêmeo para aí · "), e8["detalhe"])
+        self.assertIn(" · parou em ", e8["detalhe"])
+        self.assertNotIn("estado tempo", e8["detalhe"])
+        self.assertEqual(e8["rotulos"], {"U1": "reiniciou"})
+        self.assertFalse(zip_)
+        self.assertEqual(estado["requisitos"]["R3"], "falha")
+
+    def test_wdt_sem_conferir_o_estado(self):
+        # sem 'estado' no roteiro, o lab.py sai com 3 e o motivo só está no aviso 'wdt'
+        sem_estado = {**ROTEIRO, "confere": [c for c in ROTEIRO["confere"] if "estado" not in c]}
+        _, e8, _ = rodar_esp32(roteiro=sem_estado, main={'print("pronto")\n': 'print("pronto")\nfrom machine import WDT\n'
+                                                                          'cao = WDT(timeout=1000)\n'})
+        self.assertTrue(e8["detalhe"].startswith("o cão de guarda (WDT) reiniciou o ESP32: o programa ficou 1000 ms "
+                                                 "sem chamar o feed() dele"), e8["detalhe"])
+        self.assertNotIn("não explicou", e8["detalhe"])
+        self.assertEqual(e8["rotulos"], {"U1": "reiniciou"})
+
+    def test_sys_exit_no_comeco(self):
+        _, e8, _ = rodar_esp32(main={'print("pronto")\n': 'print("pronto")\nimport sys\nsys.exit()\n'})
+        self.assertEqual(e8["estado"], "falhou")
+        self.assertIn("s de placa, antes dos 3 s do roteiro: o main.py chegou no fim (ou chamou sys.exit()), e o resto "
+                      "do roteiro não aconteceu · ", e8["detalhe"])
+        self.assertEqual(e8["rotulos"], {"U1": "acabou cedo"})
+
+    def test_pino_da_flash_reprova(self):
+        # a etapa 4 não vê: o pino 6 não está no circuito, só no programa. O gêmeo segue, o ESP32 de verdade trava
+        _, e8, zip_ = rodar_esp32(main={'print("pronto")\n': 'print("pronto")\nPin(6, Pin.OUT).on()\n'})
+        self.assertEqual(e8["estado"], "falhou")
+        self.assertIn("GPIO6 é da memória flash: mexer nele trava o ESP32 de verdade", e8["detalhe"])
+        self.assertEqual(e8["rotulos"], {"U1": "pino da memória flash"})
+        self.assertFalse(zip_)
+
+    def test_pino_da_serial_e_da_psram_avisam(self):
+        _, e8, zip_ = rodar_esp32(main={'print("pronto")\n': 'print("pronto")\nPin(1, Pin.OUT).on()\n'
+                                                               'Pin(17, Pin.OUT).on()\n'})
+        self.assertEqual(e8["estado"], "ok")
+        self.assertIn("GPIO1 é o TX da serial", e8["aviso"])
+        self.assertIn("GPIO17 é da PSRAM", e8["aviso"])
+        self.assertEqual(e8["rotulos"], {"U1": "pino da serial"}, "o ESP32 fica com o rótulo do primeiro aviso")
+        self.assertTrue(zip_, "aviso não segura a fábrica")
+
+    def test_roteiro_errado_nem_roda(self):
+        # código 2 do programa.py: falha (não pula), e o programa_acende fica em '?'
+        estado, e8, _ = rodar_esp32(roteiro={**ROTEIRO, "entradas": [{"t": 0, "luz": "SW1", "lux": 1}]})
+        self.assertEqual(e8["detalhe"], "o programa não rodou: SW1 não é um olho de luz ligado num GPIO do ESP32")
+        self.assertEqual(estado["requisitos"]["R4"], "?")
+        self.assertEqual(estado["objetivo"]["itens"][3]["motivo"], "o programa não rodou no gêmeo")
+
+    def test_led_queimando_e_pino_acima_da_forca(self):
+        # 10 Ω: a etapa 4 já reprovaria; aqui é a 8 sozinha, com o que o gêmeo avisa
+        r, ctx = so_a_8(troca={"peca R1 resistor_axial 14.25 17 130": "peca R1 resistor_axial 14.25 17 10"})
+        self.assertIsInstance(r, testar.Falhou, r)
+        self.assertIn("D1 QUEIMA: passa", r.detalhe)
+        self.assertIn("GPIO32 fornece", r.detalhe)
+        self.assertEqual(r.rotulos, {"D1": "queima", "U1": "corrente alta"})
+        self.assertEqual(ctx["programa"], {"ok": False, "acesos": ["D1"]})
+
+    def test_pino_de_boot_no_lugar_errado(self):
+        # o botão no GPIO12 com um 10k pro 3V3: o gêmeo vê o MTDI em 1 quando o ESP32 liga
+        troca = {"liga U1.11 R2.1": "liga U1.12 R2.1\npeca R9 resistor_axial 30 58 10k\nliga U1.16 R9.1\nliga R9.2 U1.12"}
+        r, _ = so_a_8(troca=troca, main={"from pinos import BZ1, D1, LDR1, SW1": "from pinos import BZ1, D1, LDR1\nSW1 = 12"})
+        self.assertIsInstance(r, testar.Falhou, r)
+        self.assertIn("GPIO12 é pino de boot", r.detalhe)
+        self.assertEqual(r.rotulos["U1"], "pino de boot")
+
+
+class Etapa8SemOLaboratorio(unittest.TestCase):
+    """o que não precisa do laboratório: pular, a trava e as checagens do programa"""
+
+    def trocar(self, **funcoes):
+        for nome, f in funcoes.items():
+            self.addCleanup(setattr, programa, nome, getattr(programa, nome))
+            setattr(programa, nome, f)
+
+    def test_sem_laboratorio_pula_e_gera_o_pinos(self):
+        self.trocar(tem_laboratorio=lambda: False)
+        pasta, ctx = esp32(), {}
+        try:
+            ctx["pasta"] = pasta
+            with self.assertRaises(testar.Pulou) as r:
+                testar.roda_programa(ctx)
+            self.assertIn("o laboratório não está nesta máquina", str(r.exception))
+            self.assertIn("SW1 = 14  # botão, U1 pino 11, D14, pelo R2", (pasta / "codigo" / "pinos.py").read_text())
+            self.assertNotIn("programa", ctx, "sem a etapa 8, programa_ok e programa_acende ficam em '?'")
+        finally:
+            apagar(pasta)
+
+    def test_codigo_5_pula(self):
+        def indisponivel(pasta, *a, **k):
+            prog = programa.normalizar([], pasta, programa.INDISPONIVEL)
+            prog["avisos"].append([0.0, "indisponivel", "falta o motor gemeo"])
+            return prog
+        self.trocar(tem_laboratorio=lambda: True, rodar=indisponivel)
+        r, ctx = so_a_8()
+        self.assertIsInstance(r, testar.Pulou)
+        self.assertEqual(str(r), "o programa não rodou no papel: falta o motor gemeo")
+
+    def test_codigo_de_falha_sem_explicacao_falha(self):
+        """só o código 0 passa e só o 5 pula: o 4 sem nenhuma conferência na lista falha do mesmo jeito"""
+        self.trocar(tem_laboratorio=lambda: True, rodar=lambda p, *a, **k: {**programa.normalizar([], p, 4),
+                                                                              "tempo_ms": 3000.0})
+        r, ctx = so_a_8()
+        self.assertIsInstance(r, testar.Falhou, r)
+        self.assertIn("o laboratório saiu com o código 4 sem dizer o que falhou", r.detalhe)
+        self.assertEqual(r.rotulos, {"U1": "não rodou"})
+        self.assertFalse(ctx["programa"]["ok"])
+
+    def test_espera_a_trava_da_placa(self):
+        """o app (ou um terminal) rodando o programa da placa: a etapa 8 espera ele acabar, não atropela"""
+        pasta, quando, segura = esp32(), [], threading.Event()
+
+        def rodar(p, *a, **k):
+            quando.append(time.monotonic())
+            return {**programa.normalizar([], p, 0), "tempo_ms": 3000.0}   # os 3 s do roteiro da placa
+
+        def outra_rodada():
+            with programa.trava(pasta):
+                segura.set()
+                time.sleep(0.6)
+        self.trocar(tem_laboratorio=lambda: True, rodar=rodar)
+        try:
+            outra = threading.Thread(target=outra_rodada)
+            outra.start()
+            segura.wait(5)
+            inicio = time.monotonic()
+            detalhe = testar.roda_programa({"pasta": pasta})
+            outra.join()
+        finally:
+            apagar(pasta)
+        self.assertGreater(quando[0] - inicio, 0.4, "esperou a outra rodada soltar a trava")
+        self.assertEqual(detalhe, "rodou 3 s de placa: nenhum LED no circuito; nenhuma conferência (o roteiro.json e "
+                                  "o confere.json não conferem nada)")
+
+    def test_acabou_cedo_com_codigo_0_so_avisa(self):
+        """o roteiro sem 'estado': o lab.py sai com 0 e a etapa passa, mas diz que o resto do roteiro não rodou"""
+        self.trocar(tem_laboratorio=lambda: True,
+                    rodar=lambda p, *a, **k: {**programa.normalizar([], p, 0), "tempo_ms": 1.0})
+        pasta = esp32()
+        ctx = {"pasta": pasta}
+        try:
+            detalhe = testar.roda_programa(ctx)
+        finally:
+            apagar(pasta)
+        self.assertIn("aviso: o programa acabou em 0,001 s de placa, antes dos 3 s do roteiro", detalhe)
+        self.assertEqual(ctx["aviso"]["rotulos"], {"U1": "acabou cedo"})
+        self.assertTrue(ctx["programa"]["ok"])
+
+    def test_travou_em_portugues_de_gente(self):
+        limite = "travou: o programa passou do limite de 60,0 s de PC sem chegar no fim do tempo de placa"
+        self.assertEqual(testar.travou_de_gente(limite), "o programa travou: passou de 60,0 s no PC sem chegar no "
+                                                         "fim do roteiro (um laço que não acaba ou uma conta lenta "
+                                                         "demais)")
+        self.assertEqual(testar.travou_de_gente("travou: outra coisa"), "o programa travou: outra coisa")
+
+    def test_requisitos_da_etapa_do_programa(self):
+        """o erro no programa marca o ESP32, mas o 'ESP32 aguenta' (ok) não entra: entram os que o programa derrubou"""
+        itens = [{"id": "R1", "pecas": ["U1", "D1"], "status": "ok", "verifica": [{"texto": "pino_seguro U1"}]},
+                 {"id": "R3", "pecas": ["U1"], "status": "falha", "verifica": [{"texto": "programa_ok"}]},
+                 {"id": "R4", "pecas": ["D1", "SW1"], "status": "falha", "verifica": [{"texto": "programa_acende D1"}]},
+                 {"id": "R5", "pecas": ["BZ1"], "status": "?", "verifica": [{"texto": "acende BZ1"}]}]
+        self.assertEqual(testar.requisitos_da({"nome": testar.ETAPA_PROGRAMA, "onde": ["U1"]}, itens), ["R3", "R4"])
+        self.assertEqual(testar.requisitos_da({"nome": testar.ETAPA_PROGRAMA, "onde": ["U1", "BZ1"]}, itens),
+                         ["R3", "R4", "R5"])
+        self.assertEqual(testar.requisitos_da({"nome": "Liga o circuito", "onde": ["U1"]}, itens), ["R1", "R3"],
+                         "nas outras etapas, os que citam a peça marcada")
+
+    def test_programa_acende_com_a_peca_errada_diz_por_que(self):
+        """erro de digitação no requisitos.md: o '?' diz a peça, e não 'o programa não rodou'"""
+        pasta = copia("esp32")
+        try:
+            (pasta / "requisitos.md").write_text("# Objetivo: x\n## R1 a\npecas: D1\nverifica: programa_acende D9\n"
+                                                 "## R2 b\npecas: SW1\nverifica: programa_acende SW1\n"
+                                                 "## R3 c\npecas: D1\nverifica: programa_acende D1\n")
+            m = {"pecas": [{"ref": "D1", "pinos": [], "eletrica": {"modelo": "led"}},
+                           {"ref": "SW1", "pinos": [], "eletrica": {"modelo": "chave"}}]}
+            rodou = testar.avaliar_requisitos(pasta, m, None, {"ok": True, "acesos": ["D1"]})
+            nao_rodou = testar.avaliar_requisitos(pasta, m, None, None)
+        finally:
+            apagar(pasta)
+        self.assertEqual([(i["status"], i["motivo"]) for i in rodou["itens"]],
+                         [("?", "D9 não está no placa.txt"),
+                          ("?", "SW1 não é LED: o programa_acende só confere LED"), ("ok", "ok")])
+        self.assertEqual(nao_rodou["itens"][2]["motivo"], "o programa não rodou no gêmeo")
+
+    def test_checagens_do_programa(self):
+        m = {"pecas": [{"ref": "D1", "pinos": [], "eletrica": {"modelo": "led"}},
+                       {"ref": "SW1", "pinos": [], "eletrica": {"modelo": "chave"}}]}
+        rodou = {"ok": True, "acesos": ["D1"]}
+        self.assertTrue(testar.checar("programa_ok", m, None, None, rodou))
+        self.assertFalse(testar.checar("programa_ok", m, None, None, {"ok": False, "acesos": []}))
+        self.assertIsNone(testar.checar("programa_ok", m, None, None, None), "sem a etapa 8: '?'")
+        self.assertTrue(testar.checar("programa_acende D1", m, None, None, rodou))
+        self.assertFalse(testar.checar("programa_acende D1", m, None, None, {"ok": True, "acesos": []}))
+        self.assertIsNone(testar.checar("programa_acende SW1", m, None, None, rodou), "SW1 não é LED")
+        self.assertIsNone(testar.checar("programa_acende D1", m, None, None, {"ok": False, "acesos": None}),
+                          "o programa nem rodou")
+        for linha, erro in (("programa_ok D1", "não leva valores"), ("programa_acende", "espera 1 valores")):
+            with self.assertRaises(gerar.ErroTxt) as e:
+                testar.ler_requisitos(f"# x\n## R1 a\nverifica: {linha}\n")
+            self.assertIn(erro, e.exception.msg)
+
+    def test_lanterna_com_checagem_do_programa_fica_em_interrogacao(self):
+        if not _tem_gerbonara():
+            self.skipTest("gerbonara só no .venv")
+        estado, _, _ = rodar(requisitos="# Objetivo: x\n## R1 o programa\npecas: D1\nverifica: programa_ok\n")
+        self.assertEqual(len(estado["etapas"]), 7)
+        self.assertEqual(estado["requisitos"], {"R1": "?"})
+        self.assertEqual(estado["objetivo"]["itens"][0]["motivo"], "o programa não rodou no gêmeo")
+
+    def test_sem_laboratorio_a_linha_de_comando_sai_com_0(self):
+        """o clone limpo: as 7 etapas passam, a 8ª pula, a fábrica sai e o testar.py sai com 0"""
+        if not _tem_gerbonara():
+            self.skipTest("gerbonara só no .venv")
+        pasta = copia("esp32")
+        try:
+            r = subprocess.run([sys.executable, str(RAIZ / "ferramenta" / "testar.py"), str(pasta)], capture_output=True,
+                               text=True, timeout=180, env={**os.environ, "LAB_FERRAMENTAS": str(pasta / "sem_ferramentas")})
+            self.assertIn("· 8. Roda o programa: o laboratório não está nesta máquina", r.stdout)
+            self.assertEqual(r.stdout.count("✓"), 7, r.stdout)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertTrue((pasta / "saida" / "fabrica.zip").exists())
+            self.assertIn("D1 = 32", (pasta / "codigo" / "pinos.py").read_text())
+        finally:
+            apagar(pasta)
 
 
 if __name__ == "__main__":

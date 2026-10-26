@@ -1,0 +1,20 @@
+{
+ "sobre": "Placa de teste: o botão apertado de 0,5 a 1,2 s e de 2 a 2,3 s (gemeo.roteiro); a luz começa com 100 lux e vai pra 1 lux em 1,5 s (o Sianvolt troca o lux pelos volts do divisor no GPIO34). LED no GPIO32, piezo no GPIO26, botão no GPIO14.",
+ "tempo": 3,
+ "precisa": ["pino_saida", "pino_entrada", "pwm", "adc", "serial"],
+ "entradas": [
+  {"t": 0, "luz": "LDR1", "lux": 100, "_": "quarto claro"},
+  {"t": 1.5, "luz": "LDR1", "lux": 1, "_": "apagaram a luz"}
+ ],
+ "confere": [
+  {"serial": "pronto", "ate": 0.1},
+  {"t": 0.4, "pino": "GPIO32", "valor": 0, "_": "solto: LED apagado"},
+  {"t": 0.8, "pino": "GPIO32", "valor": 1, "_": "apertado: LED aceso"},
+  {"t": 0.8, "pwm": "GPIO26", "duty": [0.45, 0.55], "_": "apertado: o piezo apita"},
+  {"t": 1.5, "pino": "GPIO32", "valor": 0, "_": "soltou: apaga"},
+  {"t": 1.5, "pwm": "GPIO26", "duty": [0, 0], "_": "soltou: cala"},
+  {"serial": "sorteou", "ate": 1.3},
+  {"trocas": "GPIO32", "min": 4, "max": 4, "_": "dois apertos: acende e apaga duas vezes"},
+  {"estado": "tempo"}
+ ]
+}

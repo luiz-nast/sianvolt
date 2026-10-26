@@ -381,14 +381,14 @@
     "Wavelength - Peak": "540nm",
     "Width": "4.3mm"
    },
-   "datasheet": "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_JCHL-Shenzhen-Jing-Chuang-He-Li-Tech-GL5528-10-20_C10081.pdf",
+   "datasheet": "https://datasheet.lcsc.com/datasheet/pdf/0ac3d43edf3703d98e2e4a16b4a936c8.pdf?productCode=C10081",
    "loja": "LCSC",
    "link": "https://www.lcsc.com/product-detail/photoresistors_jchl-shenzhen-jing-chuang-he-li-tech-gl5528-10-20_C10081.html",
    "preco": 0.046,
    "moeda": "USD",
    "minimo": 1,
-   "estoque": 29138,
-   "visto": "2026-10-24",
+   "estoque": 29082,
+   "visto": "2026-10-26",
    "situacao": "ok",
    "conferido": {
     "fonte": "datasheet JCHL GL55 (2 páginas), https://datasheet.lcsc.com/datasheet/pdf/0ac3d43edf3703d98e2e4a16b4a936c8.pdf?productCode=C10081: p. 1, tabela, linha GL5528: 150 V, 90 mW, −30 a 70 °C, 540 nm, 8–20 kΩ a 10 lux, 1 MΩ no escuro, γ 0,65, 30 ms; p. 2, 'Measuring Conditions': R10 medido a 10 lux de luz A (2854 K) depois de 2 h a 400–600 lux; escuro = 10 s depois de apagar os 10 lux; γ = lg(R10/R100) entre 10 e 100 lux, 'The error of γ is ± 0.1'; Vmax = a tensão no escuro que aguenta sem parar; Pmax a 25 °C. Sem polaridade (é um resistor). O ponto de 1 lux não é do JCHL: veio do gráfico da Senba C125626 (ponto_1lux)",

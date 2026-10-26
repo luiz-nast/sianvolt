@@ -1,0 +1,83 @@
+{
+ "objetivo": "Placa de teste com o ESP32",
+ "frase": "Aperta o botão: o LED acende e o piezo apita; o olho de luz diz se está claro ou escuro. É a placa que os testes do Sianvolt usam, não um projeto do Luiz.",
+ "perguntas": {
+  "brilho": {
+   "resposta": "media",
+   "quem": "sugestão do Claude"
+  },
+  "cor": {
+   "por_led": {
+    "D1": {
+     "resposta": "vermelho",
+     "quem": "sugestão do Claude"
+    }
+   }
+  }
+ },
+ "blocos": [
+  {
+   "ref": "U1",
+   "bloco": "cerebro",
+   "peca": "robocore:esp32-wifi-bluetooth",
+   "quem": "sugestão do Claude",
+   "quando": "2026-10-26 00:07"
+  },
+  {
+   "ref": "D1",
+   "bloco": "led",
+   "pino": "GPIO32",
+   "nome": "LED",
+   "peca": "C779439",
+   "quem": "sugestão do Claude",
+   "quando": "2026-10-26 00:07"
+  },
+  {
+   "ref": "R1",
+   "bloco": "resistor",
+   "led": "D1"
+  },
+  {
+   "ref": "SW1",
+   "bloco": "botao",
+   "pino": "GPIO14",
+   "nome": "botão",
+   "peca": "C393938",
+   "quem": "sugestão do Claude",
+   "quando": "2026-10-26 00:07"
+  },
+  {
+   "ref": "R2",
+   "bloco": "resistor",
+   "para": "SW1"
+  },
+  {
+   "ref": "LDR1",
+   "bloco": "ldr",
+   "pino": "GPIO34",
+   "nome": "olho de luz",
+   "peca": "C10081",
+   "quem": "sugestão do Claude",
+   "quando": "2026-10-26 00:07"
+  },
+  {
+   "ref": "R3",
+   "bloco": "resistor",
+   "para": "LDR1"
+  },
+  {
+   "ref": "BZ1",
+   "bloco": "buzzer",
+   "pino": "GPIO26",
+   "nome": "apito",
+   "peca": "C128650",
+   "quem": "sugestão do Claude",
+   "quando": "2026-10-26 00:07"
+  },
+  {
+   "ref": "R4",
+   "bloco": "resistor",
+   "para": "BZ1"
+  }
+ ]
+}
