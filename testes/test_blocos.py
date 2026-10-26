@@ -93,6 +93,22 @@ class NumerosDaLoja(unittest.TestCase):
         self.assertEqual(blocos.tamanho("-"), "")
 
 
+class PecaDaLoja(unittest.TestCase):
+    def test_led_importado_fica_com_o_menos_no_pad_quadrado(self):
+        """o EasyEDA de alguns LEDs traz os dois pads redondos; o app ensina 'o − é o pad quadrado', então o import
+        deixa o − (o K do símbolo) quadrado, do mesmo tamanho, e diz isso na fonte"""
+        d = {"codigo": "C1", "atributos": {"Illumination Color": "Yellow"}, "pacote": "Plugin,D=5mm", "marca": "X",
+             "modelo": "Y", "preco": 0.05, "minimo": 1, "estoque": 100, "datasheet": "https://x/ds.pdf", "link": "https://x"}
+        des = {"corpo": [5.8, 5.8], "silk": [], "pacote": "LED-TH_BD5.0", "simbolo": {"1": "K", "2": "A"},
+               "pads": [{"n": "1", "x": -1.27, "y": 0, "w": 1.8, "h": 1.8, "forma": "C", "furo": 1.0},
+                        {"n": "2", "x": 1.27, "y": 0, "w": 1.8, "h": 1.8, "forma": "C", "furo": 1.0}]}
+        tipo = blocos.tipo_da_loja("led", d, des)
+        self.assertEqual(tipo["nomes"], {"1": "−", "2": "+"})
+        self.assertEqual(tipo["pinos"]["1"]["pad"], {"forma": "R", "w": 1.8, "h": 1.8})
+        self.assertEqual(tipo["pinos"]["2"]["pad"], {"forma": "C", "d": 1.8}, "o + continua redondo")
+        self.assertIn("o − virou pad quadrado", tipo["fonte"])
+
+
 class ContaDoBrilho(unittest.TestCase):
     def test_curva_ida_e_volta(self):
         for fracao in (0.1, 0.25, 0.5, 0.75, 1.0, 1.3):

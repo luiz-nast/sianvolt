@@ -32,6 +32,7 @@ PLACAS = RAIZ / "placas"
 PORTA = 8765          # a de sempre; com outro programa nela, o app tenta as PORTAS seguintes
 PORTAS = 10           # da 8765 a 8774
 OCIOSO = 180          # sem nenhum pedido por 3 min (janela fechada), o app fecha
+AINDA_NAO = ("saida/modelo.json", "testes.json", "versoes/versoes.json", "fabrica.json")   # 204 enquanto não existem
 SERVIDO = ("/bancada/", "/placas/")                     # o resto do repositorio (.git, .claude...) nao sai daqui
 CODIGO_DE_LOJA = re.compile(r"[a-z]+:[a-z0-9-]+")   # peça de loja brasileira no catálogo (robocore:esp32-wifi-bluetooth)
 rodando = {}          # placa -> processo do testar.py ou do programa.py (um por placa)
@@ -143,12 +144,19 @@ class Bancada(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(corpo)
 
+    def translate_path(self, path):
+        """/placas/... sai do PLACAS (nos testes, as placas de teste), o resto da raiz do repositório"""
+        caminho, de_placas = super().translate_path(path), str(RAIZ / "placas")
+        if caminho == de_placas or caminho.startswith(de_placas + os.sep):
+            return str(PLACAS) + caminho[len(de_placas):]
+        return caminho
+
     def servido(self, url):
         """so bancada/ e placas/, ja resolvido (nada de /bancada/../.git)"""
         if not url.path.startswith(SERVIDO):
             return False
         alvo = Path(self.translate_path(url.path)).resolve()
-        return any(alvo == RAIZ / d or (RAIZ / d) in alvo.parents for d in ("bancada", "placas"))
+        return any(alvo == d or d in alvo.parents for d in ((RAIZ / "bancada").resolve(), PLACAS.resolve()))
 
     def do_HEAD(self):
         url = urlparse(self.path)
@@ -209,8 +217,10 @@ class Bancada(SimpleHTTPRequestHandler):
             return self.responder({"placas": nomes, "rodando": vivos, "raiz": str(RAIZ)})
         if not self.servido(url):
             return self.responder({"erro": "não existe"}, 404)
-        if url.path.endswith("/fabrica.json") and not Path(self.translate_path(url.path)).exists():
-            # só existe depois da cotação; a bancada pergunta de tempos em tempos, e cada 404 vira erro no console
+        arquivo = re.fullmatch(r"/placas/([^/]+)/(.+)", url.path)
+        if arquivo and arquivo[2] in AINDA_NAO and placa(arquivo[1]) and not Path(self.translate_path(url.path)).exists():
+            # a placa existe e o arquivo ainda não (placa nova, sem cotação): a bancada pergunta de tempos em tempos, e
+            # cada 404 vira erro no console
             self.send_response(204)
             self.end_headers()
             return

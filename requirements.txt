@@ -1,1 +1,1 @@
-gerbonara
+gerbonara==1.6.3   # a versão com que os testes passam (2026-10-26)

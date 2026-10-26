@@ -78,6 +78,15 @@ class App(Servidor):
                          (200, {"erro": "o programa desta placa ainda não rodou", "ainda_nao_rodou": True}))
         self.assertTrue(self.json("GET", "/api/programa?placa=lanterna")[1]["sem_programa"])
         self.assertEqual(self.pedir("GET", "/placas/esp32/fabrica.json")[0], 204, "sem cotação: 204, não 404")
+        # os arquivos da placa saem do PLACAS (aqui, as placas de teste); os que ainda não existem dão 204, e só da
+        # placa que existe e só esses: o resto continua 404
+        status, texto = self.pedir("GET", "/placas/esp32/placa.txt")
+        self.assertEqual(status, 200)
+        self.assertIn(b"devkit_esp32_30", texto)
+        for caminho, esperado in (("/placas/esp32/testes.json", 204), ("/placas/esp32/saida/modelo.json", 204),
+                                  ("/placas/esp32/versoes/versoes.json", 204), ("/placas/nao_existe/testes.json", 404),
+                                  ("/placas/esp32/qualquer.json", 404), ("/placas/esp32/../lanterna/fabrica.json", 404)):
+            self.assertEqual(self.pedir("GET", caminho)[0], esperado, caminho)
         self.assertFalse((PLACAS / "esp32" / "saida").exists())
 
     def test_nao_sai_da_bancada_e_das_placas(self):

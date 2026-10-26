@@ -305,7 +305,9 @@ def confere_ligacoes(ctx):
         _, a, b = curtos[0]
         raise Falhou(f"curto: {a} encosta em {b}" + (f" (e mais {len(curtos) - 1})" if len(curtos) > 1 else ""),
                      refs(a, b), "curto")
-    detalhe = f"{len(modelo['trilhas'])} ligações, nenhum pino solto, nenhum curto"
+    ligas, pedacos = len({(t["de"], t["ate"]) for t in modelo["trilhas"]}), len(modelo["trilhas"])   # igual ao app
+    detalhe = (f"{ligas} {'ligação' if ligas == 1 else 'ligações'}"
+               + (f" ({pedacos} pedaços de trilha)" if pedacos != ligas else "") + ", nenhum pino solto, nenhum curto")
     antena = na_antena(modelo)
     if antena:   # aviso, não falha: nenhum projeto liga o Wi-Fi, só piora o sinal
         nomes, u = [n for n, _ in antena], antena[0][1]
@@ -982,7 +984,7 @@ def rele_gerber(ctx):
         raise Falhou(f"{len(avisos)} aviso(s): {avisos[0].message}")
     ctx["pilha"] = pilha
     lidos = [f for f in saida.iterdir() if any(re.fullmatch(e, f.name) for e in MAPA_GERBER)]
-    return f"{len(lidos)} arquivos lidos pelo gerbonara, nenhum aviso"
+    return f"{len(lidos)} arquivos relidos do zero por outro leitor de Gerber (o gerbonara), nenhum aviso"
 
 
 def achar_chrome():

@@ -154,6 +154,15 @@ class Importar(unittest.TestCase):
         self.assertEqual((tipo["nome"], tipo["eletrica"]["modelo"]), ("Buzzer passivo 12.6mm, 4kHz", "piezo"))
         self.assertEqual(catalogo.ler()["pecas"]["C128650"]["categoria"], "buzzer_passivo")
 
+    def test_so_importa_pra_placa_que_existe(self):
+        antes = catalogo.ler()["pecas"].keys()
+        sem_placa = self.copia / "nao_e_placa"
+        with self.assertRaises(loja.SemLoja) as erro:
+            loja.importar("C900000002", "ldr", sem_placa)
+        self.assertIn("falta o placa.txt", str(erro.exception))
+        self.assertFalse(sem_placa.exists(), "não cria a pasta")
+        self.assertEqual(catalogo.ler()["pecas"].keys(), antes, "não grava no catálogo")
+
     def test_o_cerebro_nao_vem_da_lcsc(self):
         with self.assertRaises(loja.SemLoja) as erro:
             loja.importar("C10081", "cerebro", self.pasta)

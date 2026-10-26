@@ -33,7 +33,7 @@ Precisa ter:
 ```bash
 uv venv .venv && uv pip install -r requirements.txt   # o .venv tem o gerbonara
 .venv/bin/python ferramenta/testar.py placas/<nome>   # gera tudo e roda as etapas
-python3 ferramenta/app.py                             # o app (ou o atalho do menu)
+python3 ferramenta/app.py                             # o app (ou o atalho do menu); porta 8765 ou a próxima livre
 python3 ferramenta/instalar.py                        # põe o "Sianvolt" no menu de aplicativos
 .venv/bin/python testes/rodar.py                      # a bateria da própria ferramenta
 ```

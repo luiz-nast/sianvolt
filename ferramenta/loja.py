@@ -223,6 +223,8 @@ def importar(codigo, bloco, pasta):
     if blocos.BLOCOS[bloco].get("filtro", {}).get("tipo"):
         raise SemLoja(f"o bloco '{bloco}' não vem da LCSC: é uma placa pronta de loja brasileira com o tipo da biblioteca "
                       "(ex.: robocore:esp32-wifi-bluetooth), escolhida pelo catálogo")
+    if not (Path(pasta) / "placa.txt").is_file():   # antes de ir na loja: nada de criar placa nem gravar no catálogo
+        raise SemLoja(f"'{pasta}' não é uma placa (falta o placa.txt): importe pra uma placa que já existe")
     dados, des = ficha(codigo), desenho(codigo)
     try:
         pag = pagina(codigo)

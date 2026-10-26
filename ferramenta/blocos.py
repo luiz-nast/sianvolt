@@ -245,6 +245,13 @@ def tipo_da_loja(bloco, d, des):
     elif bloco == "led":
         tipo["nomes"] = {n: {"A": "+", "K": "−"}.get(nome, nome) for n, nome in des["simbolo"].items()}
         tipo["pendente"].append("o + e o −, a corrente máxima e a curva de brilho do LED")
+        menos = [n for n, nome in tipo["nomes"].items() if nome == "−"]
+        if len(menos) == 1 and tipo["pinos"][menos[0]]["pad"]["forma"] != "R":   # o app ensina: o − é o pad quadrado
+            velho = tipo["pinos"][menos[0]]["pad"]
+            lado = velho.get("d") or max(velho["w"], velho["h"])
+            tipo["pinos"][menos[0]]["pad"] = {"forma": "R", "w": lado, "h": lado}
+            tipo["fonte"] += ("; o − virou pad quadrado do mesmo tamanho (o EasyEDA traz os dois redondos), pra valer a "
+                              "regra que o app ensina: o − é o pad quadrado")
     elif bloco == "botao":
         tipo["pendente"].append("quais pinos do botão são o mesmo lado")
     elif bloco == "pilha":
