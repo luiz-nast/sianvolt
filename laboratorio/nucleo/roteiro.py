@@ -2,18 +2,23 @@
 
 {"tempo": 3, "precisa": ["pino_saida"],                      tempo em SEGUNDOS de placa
  "entradas": [{"t": 1.0, "pino": "BOTAO", "valor": 0},       pino por apelido ou nome físico
-              {"t": 0, "pino": "POT", "volts": 1.0}, {"t": 0.5, "serial": "liga\\n"}],
+              {"t": 0, "pino": "POT", "volts": 1.0}, {"t": 0.5, "serial": "liga\\n"},
+              {"t": 5, "luz": "LDR1", "lux": 1}],           a luz num LDR do --circuito (só o gemeo)
  "confere": [{"t": 1.25, "pino": "LED", "valor": 1},        nível no instante t
              {"t": 0.5, "pwm": "PWM", "duty": [0.2, 0.3]},   último duty até t
              {"serial": "olá", "ate": 1.5},                  alguma linha tx contém o texto (antes de 'ate')
+             {"serial": "oi", "desde": 1, "ate": 2},         ... e saiu DEPOIS de 'desde' (os dois são opcionais)
              {"trocas": "LED", "min": 4, "max": 7},          mudanças de nível vindas do firmware
              {"estado": "acabou"}]}                          sem isso, vale acabou ou tempo
 Chaves que começam com "_" são comentário; "sobre" (no topo) descreve o roteiro.
+luz: a ref de uma peça com modelo 'ldr' no placa.txt do --circuito e a luz em lux (0 = escuro). O motor põe o LDR
+no circuito com essa resistência (o LDR do meio) e o pino lê o divisor de verdade. Sem --circuito, é uso errado.
 trocas: o pino começa em 0; cada vez que o firmware muda o nível conta 1 (0 -> 1 -> 0 são 2 trocas; escrever
 o mesmo nível de novo não conta). Conferência num instante depois do fim da rodada: se o tempo acabou antes
 (estado tempo), ela falha com 'não deu pra ver'; se o programa acabou, travou ou deu erro, vale o último estado.
 """
 import json
+import math
 from pathlib import Path
 
 from .contrato import ESTADOS, RECURSOS
@@ -23,7 +28,7 @@ NUM = (int, float)
 
 
 def _numero(v, o_que, minimo=0.0):
-    if isinstance(v, bool) or not isinstance(v, NUM) or v < minimo:
+    if isinstance(v, bool) or not isinstance(v, NUM) or not math.isfinite(v) or v < minimo:
         raise ValueError("%s tem que ser um número >= %s, veio %r" % (o_que, minimo, v))
     return float(v)
 
@@ -49,11 +54,17 @@ def validar(dados):
         onde = "entrada %d" % n
         if not isinstance(e, dict):
             raise ValueError("%s tem que ser um objeto" % onde)
-        _chaves(e, {"t", "pino", "valor", "volts", "serial"}, onde)
+        _chaves(e, {"t", "pino", "valor", "volts", "serial", "luz", "lux"}, onde)
         _numero(e.get("t"), onde + ": t")
         if "serial" in e:
             if not isinstance(e["serial"], str) or "pino" in e:
                 raise ValueError("%s: serial é um texto, sem pino" % onde)
+        elif "luz" in e or "lux" in e:
+            if not (isinstance(e.get("luz"), str) and e["luz"].strip()) or "lux" not in e or \
+                    any(k in e for k in ("pino", "valor", "volts")):
+                raise ValueError('%s: a luz é {"t": 5, "luz": "LDR1", "lux": 1} (a ref do LDR no circuito e a luz '
+                                 'em lux), sem pino' % onde)
+            _numero(e["lux"], onde + ": lux")
         elif "pino" not in e or ("valor" in e) == ("volts" in e):
             raise ValueError("%s: precisa de pino e de valor (0/1) ou volts" % onde)
         elif "valor" in e and e["valor"] not in (0, 1):
@@ -77,9 +88,13 @@ def validar(dados):
             if c.get("valor") not in (0, 1):
                 raise ValueError("%s: valor é 0 ou 1" % onde)
         elif "serial" in c:
-            _chaves(c, {"serial", "ate"}, onde)
-            if "ate" in c:
-                _numero(c["ate"], onde + ": ate")
+            _chaves(c, {"serial", "desde", "ate"}, onde)
+            for k in ("desde", "ate"):
+                if k in c:
+                    _numero(c[k], onde + ": " + k)
+            if "desde" in c and "ate" in c and c["desde"] >= c["ate"]:
+                raise ValueError("%s: desde (%s s) tem que vir antes do ate (%s s)" % (onde, num(c["desde"], 3),
+                                                                                       num(c["ate"], 3)))
         elif "trocas" in c:
             _chaves(c, {"trocas", "min", "max"}, onde)
         elif "estado" in c:
@@ -123,6 +138,8 @@ def entradas(rot, placa):
         novo = {"t_ms": round(float(e["t"]) * 1000, 3)}
         if "serial" in e:
             novo["serial"] = e["serial"]
+        elif "luz" in e:   # a ref do LDR vai como está: quem acha a peça é o motor, no circuito
+            novo["luz"], novo["lux"] = e["luz"].strip(), float(e["lux"])
         else:
             novo["pino"] = placa.fisico(e["pino"])
             if "volts" in e:
@@ -142,14 +159,20 @@ def _nome(placa, apelido):
     return p if p == str(apelido).upper() else "%s (%s)" % (apelido, p), p
 
 
-def _depois_do_fim(t_ms, eventos):
-    """o instante t_ms ficou fora da rodada porque o tempo acabou antes? -> texto ou None. Se o programa acabou,
+def _depois_do_fim(t_ms, eventos, depois=False):
+    """o instante t_ms ficou fora da rodada porque o tempo acabou antes? -> texto ou None. depois: o que se quer ver
+    é DEPOIS de t_ms (o 'desde' da serial), então t_ms no fim da rodada também fica fora. Se o programa acabou,
     travou ou deu erro, a placa fica parada com os pinos como estavam: aí o último estado vale"""
     fim = eventos[-1] if eventos and eventos[-1]["tipo"] == "fim" else None
-    if fim is None or fim["estado"] != "tempo" or t_ms <= fim["t_ms"] + 0.0005:
+    if fim is None or fim["estado"] != "tempo":
         return None
-    return "não deu pra ver: a rodada parou em %s (estado %s), antes desse instante; aumente o --tempo" % (
-        fmt_t(fim["t_ms"]), fim["estado"])
+    if t_ms > fim["t_ms"] + 0.0005:
+        return "não deu pra ver: a rodada parou em %s (estado %s), antes desse instante; aumente o --tempo" % (
+            fmt_t(fim["t_ms"]), fim["estado"])
+    if depois and t_ms + 0.0005 >= fim["t_ms"]:
+        return "não deu pra ver: a rodada parou em %s (estado %s), bem nesse instante, e não sobrou tempo de placa " \
+               "depois dele; aumente o --tempo" % (fmt_t(fim["t_ms"]), fim["estado"])
+    return None
 
 
 def _confere(c, eventos, placa):
@@ -177,21 +200,31 @@ def _confere(c, eventos, placa):
             return False, quer + ": nunca mexeu"
         return antes[-1]["valor"] == c["valor"], quer + ": viu %d" % antes[-1]["valor"]
     if "serial" in c:
-        ate = c.get("ate")
-        quer = "serial com '%s'%s" % (c["serial"], " até %s" % fmt_t(ate * 1000) if ate is not None else "")
+        desde, ate = c.get("desde"), c.get("ate")
+        quer = "serial com '%s'%s%s" % (c["serial"], " depois de %s" % fmt_t(desde * 1000) if desde is not None else "",
+                                       " até %s" % fmt_t(ate * 1000) if ate is not None else "")
         tx = [e for e in eventos if e["tipo"] == "serial" and e["dir"] == "tx"]
+        desde_ms = None if desde is None else desde * 1000
         ate_ms = None if ate is None else ate * 1000
-        achou = [e for e in tx if c["serial"] in e["texto"] and (ate_ms is None or e["t_ms"] <= ate_ms + 0.0005)]
+        depois = [e for e in tx if desde_ms is None or e["t_ms"] > desde_ms + 0.0005]   # DEPOIS de 'desde'
+        janela = [e for e in depois if ate_ms is None or e["t_ms"] <= ate_ms + 0.0005]  # o que saiu até 'ate'
+        achou = [e for e in janela if c["serial"] in e["texto"]]
         if achou:
             return True, quer + ": viu '%s' em %s" % (achou[0]["texto"], fmt_t(achou[0]["t_ms"]))
-        ate_t = [e for e in tx if ate_ms is None or e["t_ms"] <= ate_ms + 0.0005]   # o que saiu até 'ate'
-        fora = _depois_do_fim(ate_ms, eventos) if ate_ms is not None else None
+        fora = (_depois_do_fim(ate_ms, eventos) if ate_ms is not None else None) or \
+            (_depois_do_fim(desde_ms, eventos, depois=True) if desde_ms is not None else None)
         if fora:
             return False, quer + ": " + fora
-        if not ate_t:
-            return False, quer + (": a placa não escreveu nada" if not tx else
-                                  ": nada até %s (a primeira linha saiu em %s)" % (fmt_t(ate_ms), fmt_t(tx[0]["t_ms"])))
-        return False, quer + ": última linha até lá '%s' (em %s)" % (ate_t[-1]["texto"], fmt_t(ate_t[-1]["t_ms"]))
+        if not janela:
+            if not tx:
+                return False, quer + ": a placa não escreveu nada"
+            if not depois:
+                return False, quer + ": nada depois de %s (a última linha saiu em %s)" % (fmt_t(desde_ms),
+                                                                                            fmt_t(tx[-1]["t_ms"]))
+            return False, quer + ": nada até %s (a primeira linha %ssaiu em %s)" % (
+                fmt_t(ate_ms), "depois de %s " % fmt_t(desde_ms) if desde_ms is not None else "",
+                fmt_t(depois[0]["t_ms"]))
+        return False, quer + ": última linha até lá '%s' (em %s)" % (janela[-1]["texto"], fmt_t(janela[-1]["t_ms"]))
     if "trocas" in c:
         nome, p = _nome(placa, c["trocas"])
         n, antes = 0, 0   # o pino começa em 0: só mudança de nível conta

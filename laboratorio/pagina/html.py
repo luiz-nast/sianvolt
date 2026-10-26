@@ -3,8 +3,9 @@
 
     python3 laboratorio/pagina/html.py eventos.jsonl -o saida.html [--titulo "pisca no ESP32"]
 
-Uma onda por pino (nível, PWM, tensão), a serial até o instante escolhido, avisos e erros, e uma régua
-de tempo (arrastar, setas, botão tocar). Sem internet: tudo vai dentro do arquivo."""
+Uma onda por pino (nível, PWM, tensão), por LED (a luz, do evento 'led') e por LDR (a luz do roteiro, em lux), a
+serial até o instante escolhido, avisos e erros, e uma régua de tempo (arrastar, setas, botão tocar). Sem internet:
+tudo vai dentro do arquivo."""
 import argparse
 import json
 import sys
@@ -33,12 +34,12 @@ MODELO = r"""<!doctype html>
 <title>__TITULO__</title>
 <style>
 :root{--fundo:#f7f6f2;--painel:#fff;--texto:#1d1f23;--fraco:#6b6f76;--linha:#e2e0d9;--onda:#1f6feb;
---entrada:#b35900;--pwm:#7c3aed;--adc:#0f8a5f;--cursor:#d1242f;--aviso:#9a6700;--erro:#cf222e;--ok:#1a7f37;--grade:#efede6}
+--entrada:#b35900;--pwm:#7c3aed;--led:#bf8700;--lux:#0e7c86;--adc:#0f8a5f;--cursor:#d1242f;--aviso:#9a6700;--erro:#cf222e;--ok:#1a7f37;--grade:#efede6}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--fundo:#14161a;--painel:#1c1f24;--texto:#e6e6e3;
 --fraco:#9aa0a6;--linha:#30343b;--onda:#58a6ff;--entrada:#f0a050;--pwm:#b392f0;--adc:#3fb950;--cursor:#ff6b6b;
---aviso:#d29922;--erro:#ff7b72;--ok:#3fb950;--grade:#23262c}}
+--led:#e3b341;--lux:#39c5cf;--aviso:#d29922;--erro:#ff7b72;--ok:#3fb950;--grade:#23262c}}
 :root[data-theme="dark"]{--fundo:#14161a;--painel:#1c1f24;--texto:#e6e6e3;--fraco:#9aa0a6;--linha:#30343b;--onda:#58a6ff;
---entrada:#f0a050;--pwm:#b392f0;--adc:#3fb950;--cursor:#ff6b6b;--aviso:#d29922;--erro:#ff7b72;--ok:#3fb950;--grade:#23262c}
+--led:#e3b341;--lux:#39c5cf;--entrada:#f0a050;--pwm:#b392f0;--adc:#3fb950;--cursor:#ff6b6b;--aviso:#d29922;--erro:#ff7b72;--ok:#3fb950;--grade:#23262c}
 *{box-sizing:border-box}
 body{margin:0;background:var(--fundo);color:var(--texto);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{max-width:1100px;margin:0 auto;padding:16px}
@@ -62,6 +63,7 @@ h2{font-size:.95rem;margin:0 0 8px}
 #serial .rx{color:var(--entrada)}
 #serial .ultima{background:var(--grade)}
 .t{color:var(--fraco)}
+#serial .t{display:inline-block;min-width:10.5ch}
 ul{list-style:none;margin:0;padding:0;font-size:.88rem}
 li{padding:3px 0;border-bottom:1px solid var(--grade)}
 li.futuro{opacity:.4}
@@ -76,7 +78,7 @@ li.futuro{opacity:.4}
 <span id="agora" class="mono">0,000 s</span>
 <span class="dica">Arraste a régua ou as ondas. Setas: um passo; Shift + setas: pula pro evento anterior/seguinte; espaço: tocar.</span>
 </div>
-<div class="caixa"><svg id="ondas" role="img" aria-label="ondas dos pinos"></svg></div>
+<div class="caixa"><svg id="ondas" role="img" aria-label="ondas dos pinos, dos LEDs e da luz"></svg></div>
 <div class="grade">
 <div class="caixa"><h2>Serial até o instante</h2><pre id="serial" class="mono"></pre></div>
 <div class="caixa"><h2>Avisos, erros e conferências</h2><ul id="avisos"></ul></div>
@@ -91,16 +93,20 @@ const FIM = EV.reduce((m, e) => e.t_ms != null && e.t_ms > m ? e.t_ms : m, Math.
 const fmt = ms => (ms / 1000).toFixed(3).replace(".", ",") + " s";
 const MEIO = 0.5;   // meio milissegundo (t_ms): o que aparece como 0,000 s já vale em 0,000 s
 const $ = id => document.getElementById(id);
-// uma linha por pino: [t, tipo, valor, origem]
+// uma linha por pino, por LED (a luz, fração do anúncio) e por LDR (a luz do roteiro, em lux): [t, tipo, valor, origem]
+// (no LED, um 5º item: aceso, a regra do texto; o LED de 35 µA de um pull-up tem luz, mas está apagado)
 const pinos = new Map();
 for (const e of EV) {
-  if (!["pino", "pwm", "adc"].includes(e.tipo)) continue;
-  if (!pinos.has(e.pino)) pinos.set(e.pino, {pino: e.pino, nome: e.nome, pts: [], vmax: 0});
-  const p = pinos.get(e.pino);
-  if (e.nome) p.nome = e.nome;
-  const v = e.tipo === "pino" ? e.valor : e.tipo === "pwm" ? e.duty : e.volts;
+  if (!["pino", "pwm", "adc", "led", "luz"].includes(e.tipo)) continue;
+  const chave = e.tipo === "led" || e.tipo === "luz" ? e.tipo + " " + e.ref : e.pino;
+  if (!pinos.has(chave)) pinos.set(chave, e.tipo === "led" ? {pino: "LED", nome: e.ref, tipo: "led", pts: [], vmax: 0}
+    : e.tipo === "luz" ? {pino: "luz", nome: e.ref, tipo: "luz", pts: [], vmax: 0, lmax: 1} : {pino: e.pino, nome: e.nome, pts: [], vmax: 0});
+  const p = pinos.get(chave);
+  if (e.nome && !p.tipo) p.nome = e.nome;
+  const v = e.tipo === "pino" ? e.valor : e.tipo === "pwm" ? e.duty : e.tipo === "led" ? e.luz : e.tipo === "luz" ? e.lux : e.volts;
   if (e.tipo === "adc") p.vmax = Math.max(p.vmax, v);
-  p.pts.push([e.t_ms, e.tipo, v, e.origem || ""]);
+  if (e.tipo === "luz") p.lmax = Math.max(p.lmax, v);
+  p.pts.push(e.tipo === "led" ? [e.t_ms, e.tipo, v, "", e.aceso !== false] : [e.t_ms, e.tipo, v, e.origem || ""]);
 }
 const linhas = [...pinos.values()];
 const tempos = [...new Set(EV.filter(e => e.t_ms != null && e.tipo !== "fim").map(e => e.t_ms))];
@@ -121,6 +127,8 @@ function valorEm(p, t) {   // último ponto até t (busca binária)
 function rotulo(pt) {
   if (!pt) return "—";
   if (pt[1] === "pwm") return "PWM " + Math.round(pt[2] * 100) + "%";
+  if (pt[1] === "led") return pt[4] && pt[2] > 0 ? "luz " + Math.round(pt[2] * 100) + "% do anúncio" : "apagado";
+  if (pt[1] === "luz") return String(pt[2]).replace(".", ",") + " lux";
   if (pt[1] === "adc") return pt[2].toFixed(2).replace(".", ",") + " V";
   return pt[2] ? "1 alto" : "0 baixo";
 }
@@ -128,7 +136,7 @@ function medias(p, n) {   // nível médio (0 a 1) em cada uma das n colunas, pe
   const r = new Array(n).fill(0), dt = FIM / n;
   p.pts.forEach((q, k) => {
     const a = q[0], b = k + 1 < p.pts.length ? p.pts[k + 1][0] : FIM;
-    if (q[2]) for (let c = Math.floor(a / dt); c < n && c * dt < b; c++) r[c] += (Math.min(b, (c + 1) * dt) - Math.max(a, c * dt)) / dt * q[2];
+    if (q[2]) for (let c = Math.floor(a / dt); c < n && c * dt < b; c++) r[c] += (Math.min(b, (c + 1) * dt) - Math.max(a, c * dt)) / dt * Math.min(1, q[2]);
   });
   return r;
 }
@@ -150,11 +158,13 @@ function desenhar() {
     const nome = el("text", {x: 0, y: y0 + 17, "font-weight": 600}, svg);
     nome.textContent = p.nome || p.pino;
     if (p.nome && esq > 100) el("tspan", {class: "fraco mono", "font-weight": 400}, nome).textContent = " " + p.pino;
-    el("title", {}, nome).textContent = (p.nome ? p.nome + " = " : "") + p.pino;
+    el("title", {}, nome).textContent = p.tipo === "led" ? p.nome + ": a luz do LED (fração do anúncio)" :
+      p.tipo === "luz" ? p.nome + ": a luz que o roteiro põe no LDR (lux)" : (p.nome ? p.nome + " = " : "") + p.pino;
     el("line", {x1: esq, x2: larg - 8, y1: base, y2: base, stroke: "var(--linha)"}, svg);
     let d = "", dpwm = "", prev = null, med = null;
     const ent = p.pts.length && p.pts.every(q => q[3] === "roteiro" || q[1] === "adc");
-    const yv = q => q[1] === "adc" ? base - h * q[2] / (p.vmax || 1) : base - h * q[2];
+    const yv = q => q[1] === "adc" ? base - h * q[2] / (p.vmax || 1) : q[1] === "luz" ? base - h * Math.log10(1 + q[2]) / Math.log10(1 + p.lmax)
+      : base - h * Math.min(1, q[2]);   // o LED acima do anúncio fica no topo; o lux, numa escala de log
     const ncol = Math.floor((larg - esq - 8) / 2);
     if (p.pts.length > ncol / 2 && !p.vmax) {   // troca rápido demais pra ver (PWM pelo pino): a média de cada coluna
       med = medias(p, ncol);
@@ -163,11 +173,12 @@ function desenhar() {
       const q = p.pts[k], t1 = k + 1 < p.pts.length ? p.pts[k + 1][0] : FIM;
       const y = yv(q), xa = x(q[0]), xb = x(t1);
       d += (prev === null ? "M" + xa + " " + y : "L" + xa + " " + prev + "L" + xa + " " + y) + "L" + xb + " " + y;
-      if (q[1] === "pwm") dpwm += "M" + xa + " " + base + "H" + xb + "V" + y + "H" + xa + "Z";
+      if (q[1] === "pwm" || q[1] === "led") dpwm += "M" + xa + " " + base + "H" + xb + "V" + y + "H" + xa + "Z";
       prev = y;
     }
-    if (dpwm) el("path", {d: dpwm, fill: "var(--pwm)", opacity: med ? .6 : .25}, svg);
-    const cor = p.pts.some(q => q[1] === "pwm") ? "var(--pwm)" : p.vmax ? "var(--adc)" : ent ? "var(--entrada)" : "var(--onda)";
+    const cor = p.tipo === "led" ? "var(--led)" : p.tipo === "luz" ? "var(--lux)" : p.pts.some(q => q[1] === "pwm") ? "var(--pwm)"
+      : p.vmax ? "var(--adc)" : ent ? "var(--entrada)" : "var(--onda)";
+    if (dpwm) el("path", {d: dpwm, fill: p.tipo === "led" ? cor : "var(--pwm)", opacity: med ? .6 : .25}, svg);
     if (d) el("path", {d, fill: "none", stroke: cor, "stroke-width": 2, "stroke-linejoin": "round"}, svg);
     const estado = el("text", {x: 0, y: y0 + 34, class: "mono"}, svg);
     return {p, estado, ponto: el("circle", {r: 4, fill: "var(--cursor)"}, svg), yv, med, base, h};
@@ -181,7 +192,7 @@ function mover(t) {
   const c = $("cur"); if (c) { c.setAttribute("x1", x(cursor)); c.setAttribute("x2", x(cursor)); }
   for (const m of marcas) {
     const pt = valorEm(m.p, cursor), md = m.med && m.med[Math.min(m.med.length - 1, Math.floor(cursor / FIM * m.med.length))];
-    m.estado.textContent = m.med ? "≈ " + Math.round(md * 100) + "% ligado" : rotulo(pt);
+    m.estado.textContent = m.med ? "≈ " + Math.round(md * 100) + (m.p.tipo === "led" ? "% de luz" : "% ligado") : rotulo(pt);
     m.ponto.setAttribute("cx", x(cursor)); m.ponto.setAttribute("cy", m.med ? m.base - m.h * md : pt ? m.yv(pt) : -10);
   }
   const ser = EV.filter(e => e.tipo === "serial" && e.t_ms <= cursor + MEIO);

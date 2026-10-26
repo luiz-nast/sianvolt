@@ -28,6 +28,7 @@ SILK = 0.15        # linha (>= 0,15 mm)
 LETRA = 1.2        # altura da letra (>= 1,0 mm)
 LETRA_LINHA = 0.2  # traco da letra (proporcao 1:6 da altura)
 SILK_PAD = 0.15    # distancia minima entre serigrafia e pad
+NOME_LONGE = 0.5   # o nome da peça fica a 0,5 mm dela (em cima: do corpo; dos lados: do corpo ou do pino mais pra fora)
 COMANDOS = {"placa": (2, 2), "furos": (2, 2), "peca": (4, 5), "liga": (2, 2)}   # comando -> (mínimo, máximo) de valores
 DO_TIPO = ("serigrafia", "cuidados", "zonas", "confira", "acompanha")   # vão do tipo pra peça, quando o tipo tem (o DevKit)
 PROIBIDAS = ("antena",)   # zonas onde o roteador não passa trilha nem via, nas duas camadas
@@ -147,6 +148,14 @@ def zona(peca, nome):
     if not z:
         return None
     return (r(peca["x"] + z["x"][0]), r(peca["y"] + z["y"][0]), r(peca["x"] + z["x"][1]), r(peca["y"] + z["y"][1]))
+
+
+def corpo_na_placa(peca):
+    """o corpo da peça na placa, no formato do geometria.sobrepoe: ("ret", x0, y0, x1, y1) ou, redondo, ("circ", x, y, raio)"""
+    c = peca["corpo"]
+    if c["redondo"]:
+        return ("circ", peca["x"], peca["y"], min(c["w"], c["h"]) / 2)
+    return ("ret", peca["x"] - c["w"] / 2, peca["y"] - c["h"] / 2, peca["x"] + c["w"] / 2, peca["y"] + c["h"] / 2)
 
 
 def montar(lido, bib=BIBLIOTECA):
@@ -286,11 +295,13 @@ def montar(lido, bib=BIBLIOTECA):
     sem_valor = [p["ref"] for p in pecas if p["eletrica"] and p["eletrica"]["modelo"] == "resistor" and p["valor"] is None]
     # o chip (modelo "mcu", o DevKit) tem 30 pinos e quase todos ficam sem net: pino dele sem nada não é pino solto
     soltos = [p["ref"] for p in pecas if p["eletrica"] and p["eletrica"]["modelo"] != "mcu" and any(q["net"] is None for q in p["pinos"])]
-    return {"placa": lido["placa"], "pecas": pecas, "trilhas": trilhas, "vias": vias, "furos": furos,
-            "fabrica": {"pronta": not exemplo and not pendente, "falta_datasheet": exemplo, "falta_conferir": pendente},
-            "simulacao": {"pode": not falta and not sem_valor and not soltos, "falta_modelo": falta,
-                          "sem_valor": sem_valor, "soltos": soltos},
-            "compras": compras, "linhas": lido["linhas"]}
+    modelo = {"placa": lido["placa"], "pecas": pecas, "trilhas": trilhas, "vias": vias, "furos": furos,
+              "fabrica": {"pronta": not exemplo and not pendente, "falta_datasheet": exemplo, "falta_conferir": pendente},
+              "simulacao": {"pode": not falta and not sem_valor and not soltos, "falta_modelo": falta,
+                            "sem_valor": sem_valor, "soltos": soltos},
+              "compras": compras, "linhas": lido["linhas"]}
+    posicionar_nomes(modelo)   # depois do roteador: o nome também foge das vias
+    return modelo
 
 
 # 3b. roteador: o caminho de cada trilha
@@ -604,9 +615,77 @@ def textos_da_peca(peca, placa=None):
     return textos
 
 
+# o nome de cada peça na serigrafia: em cima, embaixo, à direita ou à esquerda, o primeiro lado livre
+def largura_do_nome(ref):
+    """mm que o nome ocupa escrito com LETRA (a conta do letras.tracos: cada letra anda LETRA, a última sem o espaço)"""
+    return len(ref) * LETRA - LETRA / 3
+
+
+def lugares_do_nome(peca):
+    """[(lado, x, y)] na ordem em que o gerar tenta, com (x, y) o meio da base do texto. Em cima é onde o nome sempre
+    ficou; embaixo, o mesmo do outro lado do corpo; dos lados, no meio da altura, depois do pino mais pra fora (o
+    resistor e o botão têm pino pra fora do corpo)"""
+    x, y, cw, ch = peca["x"], peca["y"], peca["corpo"]["w"] / 2, peca["corpo"]["h"] / 2
+    pads = [geometria.caixa(*geometria.do_pad(q["x"], q["y"], q["pad"])) for q in peca["pinos"]]
+    direita = max([x + cw] + [c[2] for c in pads])
+    esquerda = min([x - cw] + [c[0] for c in pads])
+    meio = largura_do_nome(peca["ref"]) / 2
+    return [("cima", x, y + ch + NOME_LONGE), ("baixo", x, y - ch - NOME_LONGE - LETRA),
+            ("direita", direita + NOME_LONGE + meio, y - LETRA / 2), ("esquerda", esquerda - NOME_LONGE - meio, y - LETRA / 2)]
+
+
+def caixa_do_nome(pos):
+    """(x0, y0, x1, y1) que as letras do nome ocupam, com a grossura do traço; pos = o nome_pos da peça"""
+    m = LETRA_LINHA / 2
+    return (pos["x"] - pos["largura"] / 2 - m, pos["y"] - m, pos["x"] + pos["largura"] / 2 + m, pos["y"] + pos["altura"] + m)
+
+
+def o_que_o_nome_cobre(modelo, peca, pos, outros=()):
+    """o que fica embaixo das letras do nome da peça em pos: [(o que, quem)], vazio = lugar livre. o que = 'fora' (sai
+    da placa), 'corpo' (de outra peça), 'zona' (a antena e o USB do DevKit), 'pad', 'furo' (de fixação), 'via' ou 'nome'
+    (outros = [(ref, pos)] dos nomes já postos). Mesmas folgas da serigrafia: SILK_PAD do pad, furo e via (senão o
+    recorte come a letra) e meia linha do contorno das outras peças (as letras não encostam nele)"""
+    x0, y0, x1, y1 = caixa = caixa_do_nome(pos)
+    w, h = modelo["placa"]["w"], modelo["placa"]["h"]
+    ret, perto = ("ret", *caixa), -SILK / 2
+    achados = [] if 0 <= x0 and 0 <= y0 and x1 <= w and y1 <= h else [("fora", "")]
+    for p in modelo["pecas"]:
+        if p is not peca and geometria.sobrepoe(corpo_na_placa(p), ret, perto):
+            achados.append(("corpo", p["ref"]))
+        for nome in p.get("zonas") or {}:
+            if geometria.sobrepoe(("ret", *zona(p, nome)), ret, perto):
+                achados.append(("zona", f"{so_letras(nome)} do {p['ref']}"))
+    for p in modelo["pecas"]:
+        for q in p["pinos"]:
+            if geometria.distancia((ret, 0), geometria.do_pad(q["x"], q["y"], q["pad"])) < SILK_PAD:
+                achados.append(("pad", f"{p['ref']}.{q['n']}"))
+    buracos = [("furo", "", f) for f in modelo["furos"]] + [("via", f"{v['de']} → {v['ate']}", v) for v in modelo.get("vias", [])]
+    for oque, quem, f in buracos:
+        if geometria.distancia((ret, 0), (("seg", (f["x"], f["y"]), (f["x"], f["y"])), f["d"] / 2)) < SILK_PAD:
+            achados.append((oque, quem))
+    for ref, outra in outros:
+        if geometria.sobrepoe(("ret", *caixa_do_nome(outra)), ret, perto):
+            achados.append(("nome", ref))
+    return achados
+
+
+def posicionar_nomes(modelo):
+    """grava em cada peça o nome_pos {x, y, lado, altura, largura}: o meio da base do texto em mm (y pra cima, como os
+    pinos), o lado escolhido, a altura e o comprimento das letras. É o primeiro lado (cima, baixo, direita, esquerda)
+    em que o nome não cobre nada (o_que_o_nome_cobre, contando os nomes das peças de antes); sem nenhum, fica em cima
+    e a etapa 5 avisa. O Gerber, a folha 1:1 e a bancada desenham o nome daqui"""
+    postos = []
+    for peca in modelo["pecas"]:
+        lugares = [{"x": r(x), "y": r(y), "lado": lado, "altura": LETRA, "largura": r(largura_do_nome(peca["ref"]))}
+                   for lado, x, y in lugares_do_nome(peca)]
+        peca["nome_pos"] = next((pos for pos in lugares if not o_que_o_nome_cobre(modelo, peca, pos, postos)), lugares[0])
+        postos.append((peca["ref"], peca["nome_pos"]))
+
+
 def tracos_da_serigrafia(modelo):
     """[(largura, a, b)]: os pedaços de linha da serigrafia, já recortados longe dos pads e dentro da placa.
-    Contorno de cada peça e o nome dela em cima; nas peças com zonas (o DevKit), o retângulo e os textos de cada zona"""
+    Contorno de cada peça e o nome dela no lado que o posicionar_nomes escolheu; nas peças com zonas (o DevKit), o
+    retângulo e os textos de cada zona"""
     w, h = modelo["placa"]["w"], modelo["placa"]["h"]
     obstaculos = [(p["x"], p["y"], p["pad"]) for p in pads(modelo, "cima")]
     obstaculos += [(f["x"], f["y"], {"forma": "C", "d": f["d"]}) for f in modelo["furos"] + modelo.get("vias", [])]
@@ -620,13 +699,14 @@ def tracos_da_serigrafia(modelo):
                     saida.append((largura, *dentro))
 
     for peca in modelo["pecas"]:
-        ch, x, y = peca["corpo"]["h"], peca["x"], peca["y"]
+        x, y = peca["x"], peca["y"]
         if peca.get("desenho"):   # peca da loja: o contorno oficial dela (EasyEDA)
             for traco in peca["desenho"]:
                 linha(SILK, [(x + dx, y + dy) for dx, dy in traco])
         else:
             linha(SILK, borda(peca))
-        for pontos in tracos(peca["ref"], x, y + ch / 2 + 0.5, LETRA):
+        pos = peca.get("nome_pos") or dict(zip(("lado", "x", "y"), lugares_do_nome(peca)[0]))   # modelo feito à mão: em cima
+        for pontos in tracos(peca["ref"], pos["x"], pos["y"], LETRA):
             linha(LETRA_LINHA, pontos)
         for nome in peca.get("zonas") or {}:
             x0, y0, x1, y1 = zona(peca, nome)
@@ -647,7 +727,7 @@ def borda(peca):
 
 
 def serigrafia(modelo):
-    """contorno de cada peca e o nome dela em cima, sem encostar nos pads nem sair da placa"""
+    """contorno de cada peca e o nome dela no lado livre (nome_pos), sem encostar nos pads nem sair da placa"""
     g = Gerber("Legend,Top")
     for largura, a, b in tracos_da_serigrafia(modelo):
         g.risca(largura, [a, b])

@@ -35,7 +35,11 @@ def linha(ev):
         f = ev.get("freq_hz")
         return "%s PWM %s%%%s" % (_pino(ev), num(ev["duty"] * 100, 1), " a %s Hz" % num(f, 1) if f else "")
     if t == "adc":
-        return "%s = %s V  (roteiro)" % (_pino(ev), num(ev["volts"]))
+        return "%s = %s V  (%s)" % (_pino(ev), num(ev["volts"]), ev["origem"])
+    if t == "led":   # o texto de sempre ('D1 aceso, 5,9 mA, luz 59% do anúncio'); os números vão no --json
+        return ev["texto"]
+    if t == "luz":
+        return "%s com %s lux  (%s)" % (ev["ref"], num(ev["lux"], 3), ev["origem"])
     if t == "aviso":
         return "aviso: " + ev["texto"]
     if t == "erro":
@@ -56,7 +60,14 @@ def fim(ev):
 def relatorio(eventos, resultados, titulo="", todos=False):
     """linha do tempo + conferências + linha final"""
     out = [titulo] if titulo else []
-    corpo = [e for e in eventos[:-1] if linha(e) is not None]
+    corpo, led = [], {}
+    for e in eventos[:-1]:
+        if e["tipo"] == "led":   # o LED que mudou tão pouco que o texto ficou igual não ganha outra linha
+            if led.get(e["ref"]) == e["texto"]:
+                continue
+            led[e["ref"]] = e["texto"]
+        if linha(e) is not None:
+            corpo.append(e)
     if not todos and len(corpo) > MAX_LINHAS:   # corta o meio, mas os avisos e erros do meio aparecem
         miolo = corpo[MAX_LINHAS - 40:-39]
         importantes = [e for e in miolo if e["tipo"] in ("aviso", "erro")][:20]

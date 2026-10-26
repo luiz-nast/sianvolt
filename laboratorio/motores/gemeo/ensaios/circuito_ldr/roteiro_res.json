@@ -1,0 +1,10 @@
+{
+  "sobre": "o ensaio luz/ (main.py e gemeo.roteiro: 1 lux em 1 s, 100 lux em 2 s) no placa_ldr_res.txt, com o R9 de 1 kΩ entre o GPIO34 e o LDR. Pelo divisor (LDR do meio + 1 kΩ contra 22 kΩ): 100 lux = 490 mV, 1 lux = 2387 mV",
+  "tempo": 2.5,
+  "entradas": [{"t": 0, "luz": "LDR1", "lux": 100}],
+  "confere": [
+    {"serial": "mv 490", "ate": 0.05},
+    {"serial": "mv 2387", "desde": 1, "ate": 1.2},
+    {"serial": "mv 490", "desde": 2, "ate": 2.2}
+  ]
+}

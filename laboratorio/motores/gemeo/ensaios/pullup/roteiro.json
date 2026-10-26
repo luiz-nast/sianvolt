@@ -1,0 +1,5 @@
+{
+  "sobre": "o LED do circuito_ldr/placa_ldr.txt aceso só pelo pull-up de dentro: apagado, com os números do fiozinho de corrente",
+  "tempo": 1.5,
+  "confere": [{"serial": "fim", "desde": 0.9, "ate": 1.1}]
+}

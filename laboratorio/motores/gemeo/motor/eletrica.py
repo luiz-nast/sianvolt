@@ -10,6 +10,8 @@ Um pino do ESP32 é exatamente isso:
   - PWM: resolve com o pino em 1 e em 0 e faz a média pesada pelo duty (o LED pisca rápido demais pro olho:
          a luz média é duty × luz ligada; a média da TENSÃO não serve, porque o LED não é linear)
   - os pinos 3V3 e VIN do DevKit: fontes de 3,3 V e 5 V; os GND são o terra
+  - um LDR (modelo 'ldr'): a resistência dele com a luz do roteiro (circuito.ohms_do_ldr, o LDR do meio) vai
+    nos ajustes do circuito.resolver; sem luz no roteiro, fica na do resolver (10 lux, o LUX_PADRAO)
 Então o gêmeo monta, a cada mudança, umas "pilhas de mentira" no lugar do chip e chama circuito.resolver.
 O chip vem do circuito: a peça esp32_devkit (pinagem do DevKit de 30 pinos, só com o chip esp32) ou qualquer
 peça com pinos chamados GPIOn/IOn.
@@ -81,17 +83,38 @@ class Eletrica:
             else:
                 self.alim[f] = q["net"]
         self.gnd = sorted(gnds)[0] if gnds else "GND"
+        self.energia = gnds | set(self.alim.values())
         self.pecas = [p for p in self.modelo["pecas"] if p.get("eletrica")]
         self.leds = [p for p in self.pecas if p["eletrica"]["modelo"] == "led"]
         self.chaves = [p["ref"] for p in self.pecas if p["eletrica"]["modelo"] == "chave"]
+        self.ldrs = {p["ref"]: p for p in self.pecas if p["eletrica"]["modelo"] == "ldr"}
         self.ignoradas = [p["ref"] for p in self.modelo["pecas"] if not p.get("eletrica") and p is not self.mcu]
         self._cache = {}
         self.resolucoes = 0
 
+    def ohms(self, ref, lux):
+        """a resistência do LDR com essa luz: a conta do Sianvolt (circuito.ohms_do_ldr), o LDR do meio"""
+        return self.circuito.ohms_do_ldr(self.ldrs[ref]["eletrica"], lux, "meio", ref)
+
+    def gpios_do_ldr(self, ref):
+        """os GPIOs ligados num dos lados do LDR (no divisor, o pino do ADC): os ligados direto; sem nenhum, os
+        ligados por um resistor (GPIO34 -> R9 -> LDR1). O lado que é energia (3V3, GND) não leva adiante"""
+        nets = {q["net"] for q in self.ldrs[ref]["pinos"] if q["net"]} - self.energia
+        direto = sorted(g for g, net in self.gpio_net.items() if net in nets)
+        if direto:
+            return direto
+        perto = set()
+        for p in self.pecas:
+            lados = {q["net"] for q in p["pinos"] if q["net"]}
+            if p["eletrica"]["modelo"] == "resistor" and lados & nets:
+                perto |= lados - nets - self.energia
+        return sorted(g for g, net in self.gpio_net.items() if net in perto)
+
     # --- uma resolução: o ESP32 vira pilhas de mentira ---
-    def _resolver_um(self, fixos, chaves):
-        """fixos: {gpio: (volts, ohms)}; devolve o resultado do circuito.resolver"""
-        chave = (tuple(sorted(fixos.items())), tuple(sorted(chaves.items())))
+    def _resolver_um(self, fixos, chaves, luz=None):
+        """fixos: {gpio: (volts, ohms)}; luz: {ref do LDR: lux}; devolve o resultado do circuito.resolver"""
+        luz = luz or {}
+        chave = (tuple(sorted(fixos.items())), tuple(sorted(chaves.items())), tuple(sorted(luz.items())))
         if chave in self._cache:
             return self._cache[chave]
         chip = self.chip
@@ -103,7 +126,8 @@ class Eletrica:
         for gpio, (volts, ohms) in fixos.items():
             if gpio in self.gpio_net:
                 virt.append(_fonte("~GPIO%d" % gpio, self.gpio_net[gpio], self.gnd, volts, ohms))
-        ajustes = {"chave": {ref: bool(v) for ref, v in chaves.items()}}
+        ajustes = {"chave": {ref: bool(v) for ref, v in chaves.items()},
+                   "ldr": {ref: self.ohms(ref, lux) for ref, lux in luz.items()}}
         r = self.circuito.resolver({"pecas": virt + self.modelo["pecas"]}, ajustes)
         self.resolucoes += 1
         if len(self._cache) > 5000:
@@ -127,12 +151,13 @@ class Eletrica:
             combos = novo
         return combos
 
-    def foto(self, estado, chaves):
-        """o circuito agora: tensão de cada net (média), cada LED (corrente média, luz) e a corrente de cada pino"""
+    def foto(self, estado, chaves, luz=None):
+        """o circuito agora: tensão de cada net (média), cada LED (corrente média, luz) e a corrente de cada pino.
+        luz: {ref do LDR: lux} (o LDR sem luz no roteiro fica no padrão do circuito.resolver)"""
         combos = self._combinacoes(estado)
         nets, leds, pinos = {}, {}, {}
         for peso, fixos in combos:
-            r = self._resolver_um(fixos, chaves)
+            r = self._resolver_um(fixos, chaves, luz)
             for net, v in r["nets"].items():
                 nets[net] = nets.get(net, 0.0) + peso * v
             for p in self.leds:
@@ -154,13 +179,13 @@ class Eletrica:
                         pinos[gpio] = i
         return {"nets": nets, "leds": leds, "pinos": pinos, "pwm": len(combos) > 1}
 
-    def tensao(self, gpio, estado, chaves):
+    def tensao(self, gpio, estado, chaves, luz=None):
         """tensão média da net do pino; None se o pino não está ligado em nada"""
         if gpio not in self.gpio_net:
             return None
-        return self.foto(estado, chaves)["nets"].get(self.gpio_net[gpio], 0.0)
+        return self.foto(estado, chaves, luz)["nets"].get(self.gpio_net[gpio], 0.0)
 
-    def tensao_entrada(self, gpio, estado, chaves):
+    def tensao_entrada(self, gpio, estado, chaves, luz=None):
         """(volts, flutuando): puxa a entrada de leve (10 MΩ) pra cima e pra baixo; se a tensão muda muito,
         ninguém está segurando a net e a leitura do chip de verdade seria imprevisível"""
         chip = self.chip
@@ -168,9 +193,9 @@ class Eletrica:
             return None, True
         net = self.gpio_net[gpio]
         base = {g: e for g, e in estado.items() if g != gpio}
-        cima = self.foto({**base, gpio: ("v", chip.VDD, R_TESTE)}, chaves)["nets"].get(net, 0.0)
-        baixo = self.foto({**base, gpio: ("v", 0.0, R_TESTE)}, chaves)["nets"].get(net, 0.0)
+        cima = self.foto({**base, gpio: ("v", chip.VDD, R_TESTE)}, chaves, luz)["nets"].get(net, 0.0)
+        baixo = self.foto({**base, gpio: ("v", 0.0, R_TESTE)}, chaves, luz)["nets"].get(net, 0.0)
         if gpio in estado:   # o pull do próprio pino conta
-            v = self.foto(estado, chaves)["nets"].get(net, 0.0)
+            v = self.foto(estado, chaves, luz)["nets"].get(net, 0.0)
             return v, False
         return (cima + baixo) / 2, abs(cima - baixo) > 1.0

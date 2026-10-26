@@ -549,6 +549,134 @@ class ComODevKit(unittest.TestCase):
             shutil.rmtree(saida, ignore_errors=True)
 
 
+def letras_no_gerber(silk, pos, ref):
+    """quantos traços das letras do nome, desenhadas em pos (o meio da base), estão no Gerber da serigrafia"""
+    tem = riscos(silk)
+    linhas = tracos(ref, pos["x"], pos["y"], gerar.LETRA)
+    return sum(no_gerber(a, b) in tem for pontos in linhas for a, b in zip(pontos, pontos[1:]))
+
+
+def tracos_do_nome(ref):
+    """quantos traços as letras do nome têm (o nome inteiro no Gerber = letras_no_gerber igual a isto)"""
+    return sum(len(pontos) - 1 for pontos in tracos(ref, 0, 0, 1))
+
+
+def no_lugar(peca, i):
+    """o nome da peça no i-ésimo lugar que o gerar tenta (0 = em cima, 1 = embaixo, 2 = direita, 3 = esquerda)"""
+    lado, x, y = gerar.lugares_do_nome(peca)[i]
+    return dict(peca["nome_pos"], lado=lado, x=round(x, 4), y=round(y, 4))
+
+
+# a escada de resistores do dado: uma fileira a cada 2,95 mm, cada uma 1,25 mm mais pra direita que a de cima
+ESCADA = """placa 40 30
+peca R2 resistor_axial 20 20 130
+peca R4 resistor_axial 21.25 17.05 130
+peca R1 resistor_axial 22.5 14.1 130
+"""
+# três resistores um em cima do outro numa placa estreita: o do meio não tem lado livre (os lados saem da placa)
+APERTADO = """placa 14 30
+peca R1 resistor_axial 7 20 130
+peca R2 resistor_axial 7 17.05 130
+peca R3 resistor_axial 7 14.1 130
+"""
+
+
+class NomeDaPeca(unittest.TestCase):
+    """o nome na serigrafia: em cima, embaixo, à direita ou à esquerda, o primeiro lado livre (nome_pos no modelo)"""
+
+    def test_lanterna_fica_em_cima_como_sempre(self):
+        m = modelo(LANTERNA)
+        for p in m["pecas"]:
+            self.assertEqual(p["nome_pos"], {"x": p["x"], "y": round(p["y"] + p["corpo"]["h"] / 2 + 0.5, 4), "lado": "cima",
+                                             "altura": gerar.LETRA, "largura": round(gerar.largura_do_nome(p["ref"]), 4)}, p["ref"])
+        silk = gerar.serigrafia(m)
+        for p in m["pecas"]:   # as letras no mesmo lugar de antes: y + h/2 + 0,5, centrado no x da peça
+            antes = {"x": p["x"], "y": p["y"] + p["corpo"]["h"] / 2 + 0.5}
+            self.assertEqual(letras_no_gerber(silk, antes, p["ref"]), tracos_do_nome(p["ref"]), p["ref"])
+
+    def test_escada_como_a_do_dado(self):
+        m = modelo(ESCADA)
+        lados = {p["ref"]: p["nome_pos"]["lado"] for p in m["pecas"]}
+        # R4: em cima cai no corpo do R2 e embaixo no do R1; vai pra direita, depois do pino 2. R1: embaixo está livre
+        self.assertEqual(lados, {"R2": "cima", "R4": "direita", "R1": "baixo"})
+        r4 = m["pecas"][1]
+        self.assertEqual(gerar.o_que_o_nome_cobre(m, r4, no_lugar(r4, 0)), [("corpo", "R2")], "em cima, embaixo do R2")
+        self.assertEqual(gerar.o_que_o_nome_cobre(m, r4, no_lugar(r4, 1)), [("corpo", "R1")], "embaixo, embaixo do R1")
+        pino2 = next(q for q in r4["pinos"] if q["n"] == "2")
+        self.assertGreater(gerar.caixa_do_nome(r4["nome_pos"])[0], pino2["x"] + 0.8, "à direita, depois do pad")
+        self.assertAlmostEqual(r4["nome_pos"]["y"] + gerar.LETRA / 2, r4["y"], places=4, msg="no meio da altura da peça")
+        postos, silk = [], gerar.serigrafia(m)
+        for p in m["pecas"]:
+            self.assertEqual(gerar.o_que_o_nome_cobre(m, p, p["nome_pos"], postos), [], p["ref"])
+            postos.append((p["ref"], p["nome_pos"]))
+            self.assertEqual(letras_no_gerber(silk, p["nome_pos"], p["ref"]), tracos_do_nome(p["ref"]),
+                             f"o Gerber desenha o nome do {p['ref']} onde o nome_pos diz, inteiro")
+
+    def test_dois_empilhados_o_de_baixo_vai_pra_baixo(self):
+        m = modelo("\n".join(ESCADA.splitlines()[:3]))
+        self.assertEqual([p["nome_pos"]["lado"] for p in m["pecas"]], ["cima", "baixo"])
+
+    def test_nome_foge_do_nome_de_antes(self):
+        # o R1 encosta na borda de cima: o nome dele vai pra baixo, no vão até o R2. Em cima do R2 só tem o nome do R1
+        # (o corpo do R1 fica a 0,2 mm), e mesmo assim o do R2 vai pra baixo
+        m = modelo("placa 14 30\npeca R1 resistor_axial 7 28 130\npeca R2 resistor_axial 7 23.6 130\n")
+        r1, r2 = m["pecas"]
+        self.assertEqual([r1["nome_pos"]["lado"], r2["nome_pos"]["lado"]], ["baixo", "baixo"])
+        self.assertEqual(gerar.o_que_o_nome_cobre(m, r2, no_lugar(r2, 0)), [], "sem contar o nome do R1, em cima estaria livre")
+        self.assertEqual(gerar.o_que_o_nome_cobre(m, r2, no_lugar(r2, 0), [("R1", r1["nome_pos"])]), [("nome", "R1")])
+
+    def test_modelo_json_tem_nome_pos_de_cada_peca(self):
+        saida = Path(tempfile.mkdtemp(prefix="sianvolt-nome-"))
+        try:
+            m = modelo(ESCADA)
+            gerar.escrever(m, saida)
+            lido = json.loads((saida / "modelo.json").read_text())
+            for p, q in zip(lido["pecas"], m["pecas"]):
+                self.assertEqual(set(p["nome_pos"]), {"x", "y", "lado", "altura", "largura"}, p["ref"])
+                self.assertEqual(p["nome_pos"], q["nome_pos"])
+                self.assertEqual(p["nome_pos"]["altura"], gerar.LETRA)
+        finally:
+            shutil.rmtree(saida, ignore_errors=True)
+
+    def test_sem_lado_livre_fica_em_cima(self):
+        m = modelo(APERTADO)
+        r1, r2, r3 = m["pecas"]
+        self.assertEqual([p["nome_pos"]["lado"] for p in m["pecas"]], ["cima", "cima", "baixo"])
+        self.assertEqual(r2["nome_pos"]["y"], round(r2["y"] + 1.25 + 0.5, 4), "o de sempre: em cima")
+        self.assertEqual(gerar.o_que_o_nome_cobre(m, r2, r2["nome_pos"], [("R1", r1["nome_pos"])]), [("corpo", "R1")])
+        cobre = [gerar.o_que_o_nome_cobre(m, r2, no_lugar(r2, i)) for i in range(4)]
+        self.assertEqual(cobre, [[("corpo", "R1")], [("corpo", "R3")], [("fora", "")], [("fora", "")]])
+
+    def test_o_que_o_nome_cobre(self):
+        m = modelo(DEVKIT)
+        r1 = m["pecas"][1]
+
+        def em(x, y, outros=()):
+            return gerar.o_que_o_nome_cobre(m, r1, {"x": x, "y": y, "altura": gerar.LETRA, "largura": 2.0}, outros)
+
+        q = next(q for q in r1["pinos"] if q["n"] == "1")
+        self.assertIn(("pad", "R1.1"), em(q["x"], q["y"] - 0.6), "o próprio pad também conta")
+        self.assertEqual(em(3.5, 40), [("furo", "")], "o furo de fixação do canto (3,5; 41,5)")
+        self.assertEqual(em(0.9, 20), [("fora", "")])
+        self.assertEqual(em(37, 30), [("corpo", "U1")])
+        self.assertIn(("zona", "USB do U1"), em(37 + 26.6, 24), "o USB passa 1,4 mm do corpo do DevKit")
+        self.assertEqual(em(5, 20), [], "lugar livre: à esquerda do DevKit")
+        outro = {"x": 5, "y": 20, "altura": gerar.LETRA, "largura": 2.0}
+        self.assertEqual(em(5.5, 20.5, [("D1", outro)]), [("nome", "D1")])
+        m["vias"].append({"x": 5, "y": 26, "d": 0.8, "furo": 0.4, "net": "N9", "de": "R1.1", "ate": "D1.1"})
+        self.assertEqual(em(5, 25.5), [("via", "R1.1 → D1.1")])
+
+    def test_modelo_sem_nome_pos_escreve_em_cima(self):
+        m = modelo(ESCADA)
+        com = gerar.serigrafia(m)
+        for p in m["pecas"]:
+            del p["nome_pos"]
+        sem = gerar.serigrafia(m)
+        r2 = m["pecas"][0]
+        self.assertEqual(letras_no_gerber(sem, {"x": r2["x"], "y": r2["y"] + 1.75}, "R2"), tracos_do_nome("R2"))
+        self.assertNotEqual(com, sem, "sem o nome_pos, o R4 e o R1 voltam pra cima")
+
+
 class Assinaturas(unittest.TestCase):
     """o laboratório importa ler, montar e biblioteca: nem a assinatura nem o formato da volta mudam"""
 
@@ -565,7 +693,7 @@ class Assinaturas(unittest.TestCase):
         m = gerar.montar(lido, gerar.biblioteca())
         self.assertEqual(set(m), {"placa", "pecas", "trilhas", "vias", "furos", "fabrica", "simulacao", "compras", "linhas"})
         antes = {"ref", "tipo", "x", "y", "valor", "valor_txt", "linha", "nome", "explica", "exemplo", "pendente", "bloco",
-                 "corpo", "desenho", "juntos", "eletrica", "compra", "loja", "pinos"}
+                 "corpo", "desenho", "juntos", "eletrica", "compra", "loja", "pinos", "nome_pos"}   # nome_pos: toda peça
         self.assertEqual(set(m["pecas"][1]), antes, "peça sem campo novo no tipo fica igual")
         self.assertEqual(set(m["pecas"][0]) - antes, set(gerar.DO_TIPO), "o DevKit só ganha os campos do tipo")
         self.assertEqual(gerar.biblioteca(), BIBLIOTECA)

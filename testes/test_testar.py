@@ -15,6 +15,7 @@ from pathlib import Path
 from apoio import PLACAS, RAIZ, apagar, copia
 import catalogo
 import circuito
+import geometria
 import gerar
 import programa
 import testar
@@ -90,8 +91,13 @@ class CadaDefeitoNaSuaEtapa(unittest.TestCase):
         self.confere(3, "em cima de", {"D1 led_5mm 43 7": "D1 led_5mm 43 15"}, rotulo="uma em cima da outra")
 
     def test_pinos_de_pecas_diferentes_encostados_dao_curto_na_3(self):
-        # o LED do lado do resistor, sem os corpos se tocarem, mas o pino − do LED em cima do lado 2 do resistor
-        self.confere(3, "curto", {"D1 led_5mm 43 7": "D1 led_5mm 49.3 15"})
+        # dois resistores ponta com ponta: os corpos longe, nenhum pad embaixo de corpo, mas o R1.2 em cima do R2.1.
+        # (o pad do LED fica dentro do corpo dele: LED com pino encostado em outro pino já cai no 'furo coberto')
+        estado, _ = rodar_placa("placa 40 20\npeca R1 resistor_axial 10 10 100\npeca R2 resistor_axial 20.5 10 100\n"
+                                "liga R1.1 R2.1\nliga R1.2 R2.2\n")
+        n, falha = parou(estado)
+        self.assertEqual(n, 3, [(e["nome"], e["detalhe"]) for e in estado["etapas"]])
+        self.assertTrue(falha["detalhe"].startswith("curto: R1.2 encosta em R2.1"), falha["detalhe"])
 
     def test_peca_fora_da_placa_para_na_3(self):
         self.confere(3, "sai da placa", {"R1 resistor_axial 43 15": "R1 resistor_axial 47.7 15"}, rotulo="fora da placa")
@@ -587,6 +593,150 @@ class AntenaNaEtapa3(unittest.TestCase):
         pino = next(q for q in next(p for p in m["pecas"] if p["ref"] == "R1")["pinos"] if q["n"] == "1")
         pino.update(x=17, y=32)   # só o pad, sem trilha nem via
         self.assertEqual(testar.na_antena(m), [("R1.1", "U1")])
+
+
+# o R3 do lado direito do DevKit: o corpo fica fora, mas o furo do lado 1 fica embaixo da borda dele (longe da antena)
+FURO_NO_DEVKIT = BOA + """peca R3 resistor_axial 69.2 22 1k
+peca D3 led_5mm 72 30
+liga U1.13 R3.1
+liga R3.2 D3.1
+liga D3.2 GND
+"""
+
+
+def pino_de(m, nome):
+    ref, n = nome.split(".")
+    return next(q for p in m["pecas"] if p["ref"] == ref for q in p["pinos"] if q["n"] == n)
+
+
+class FuroEmbaixoDeOutraPeca(unittest.TestCase):
+    def test_furo_do_resistor_embaixo_do_led_para_na_3(self):
+        # o LED da lanterninha logo embaixo do lado 2 do resistor: a aba do LED cobre o furo, sem corpo com corpo
+        troca = {"D1 led_5mm 43 7": "D1 led_5mm 48.5 11.5"}
+        m = gerar.montar(gerar.ler((PLACAS / "lanterna" / "placa.txt").read_text().replace(*next(iter(troca.items())))))
+        self.assertEqual(testar.corpos_encostados(m), [], "os corpos não se encostam")
+        self.assertEqual(testar.pads_embaixo(m), [("R1.2", "D1")])
+        estado, _, zip_ = rodar(troca)
+        n, falha = parou(estado)
+        self.assertEqual(n, 3, [(e["nome"], e["detalhe"]) for e in estado["etapas"]])
+        self.assertEqual(falha["detalhe"], "o furo do R1.2 fica embaixo do LED D1: não dá pra soldar")
+        self.assertEqual(falha["rotulos"], {"R1": "furo coberto", "D1": "em cima de um furo"})
+        self.assertIsNone(zip_)
+
+    def test_o_mesmo_furo_embaixo_do_devkit_passa(self):
+        if not _tem_gerbonara():
+            self.skipTest("gerbonara só no .venv")
+        estado, zip_ = rodar_placa(FURO_NO_DEVKIT)
+        self.assertEqual([e["estado"] for e in estado["etapas"]], ["ok"] * 7, [(e["nome"], e["detalhe"]) for e in estado["etapas"]])
+        self.assertNotIn("aviso", estado["etapas"][2], "fora da antena: nem aviso")
+        self.assertTrue(zip_)
+        # o furo está mesmo embaixo do corpo do DevKit: é a barra fêmea (no alto) que deixa passar
+        m = gerar.montar(gerar.ler(FURO_NO_DEVKIT))
+        u1, furo = m["pecas"][0], pino_de(m, "R3.1")
+        self.assertTrue(testar.no_alto(u1))
+        self.assertTrue(testar.entra_no_corpo(geometria.do_pad(furo["x"], furo["y"], furo["pad"]), gerar.corpo_na_placa(u1), 0.05))
+        self.assertEqual(testar.pads_embaixo(m), [])
+        u1["eletrica"] = None   # o mesmo corpo deitado na placa: aí pega
+        self.assertEqual(testar.pads_embaixo(m), [("R3.1", "U1")])
+
+    def test_a_folga_e_a_mesma_do_corpo_com_corpo(self):
+        # o LED descendo em cima do lado 2 do resistor (48,08; 15): a aba do LED tem raio 2,9 e o pad, 0,8
+        lanterna = (PLACAS / "lanterna" / "placa.txt").read_text()
+        for y, cobre in ((11.1, []), (11.33, []), (11.4, [("R1.2", "D1")])):   # 0,2 mm longe, 0,03 e 0,1 mm dentro
+            m = gerar.montar(gerar.ler(lanterna.replace("D1 led_5mm 43 7", f"D1 led_5mm 48.08 {y}")))
+            self.assertEqual(testar.pads_embaixo(m), cobre, y)
+
+    def test_placas_de_teste_nao_tem_furo_coberto(self):
+        for texto in ((PLACAS / "lanterna" / "placa.txt").read_text(), BOA, LDR, ANTENA):
+            pasta = placa_temp(texto, ["C10081"])
+            try:
+                self.assertEqual(testar.pads_embaixo(gerar.montar(gerar.ler(texto), gerar.biblioteca(pasta))), [], texto)
+            finally:
+                apagar(pasta)
+
+    def test_quanto_o_pad_entra_no_corpo(self):
+        circ, ret = ("circ", 0, 0, 2.9), ("ret", -3, -1, 3, 1)
+        redondo = {"forma": "C", "d": 1.6}
+        entra = testar.entra_no_corpo
+        self.assertTrue(entra(geometria.do_pad(3.6, 0, redondo), circ, 0.05), "entra 0,1 mm na aba do LED")
+        self.assertFalse(entra(geometria.do_pad(3.66, 0, redondo), circ, 0.05), "0,04 mm: dentro da folga")
+        self.assertTrue(entra(geometria.do_pad(3.7, 0, redondo), ret, 0.05))
+        self.assertFalse(entra(geometria.do_pad(3.76, 0, redondo), ret, 0.05))
+        self.assertTrue(entra(geometria.do_pad(0, 0, redondo), ret, 0.05), "inteiro embaixo do corpo")
+        quadrado = {"forma": "R", "w": 1.6, "h": 1.6}
+        self.assertTrue(entra(geometria.do_pad(3.7, 0, quadrado), ret, 0.05))
+        self.assertFalse(entra(geometria.do_pad(3.76, 0, quadrado), ret, 0.05))
+        self.assertTrue(entra(geometria.do_pad(3.6, 0, quadrado), circ, 0.05))
+        oblongo = {"forma": "O", "w": 2.4, "h": 1.6}   # o meio de 3,7 a 4,5 com raio 0,8
+        self.assertTrue(entra(geometria.do_pad(4.1, 0, oblongo), ret, 0.05))
+        self.assertFalse(entra(geometria.do_pad(4.16, 0, oblongo), ret, 0.05))
+        self.assertTrue(entra(geometria.do_pad(4.0, 0, oblongo), circ, 0.05))
+
+
+# três resistores um em cima do outro numa placa estreita: o nome do R2 não tem lado livre
+APERTADO = "placa 14 30\npeca R1 resistor_axial 7 20 130\npeca R2 resistor_axial 7 17.05 130\npeca R3 resistor_axial 7 14.1 130\n"
+
+
+class NomeSemLugarNaEtapa5(unittest.TestCase):
+    def test_sem_lado_livre_avisa(self):
+        ctx = {"modelo": gerar.montar(gerar.ler(APERTADO))}
+        detalhe = testar.regras_fabrica(ctx)
+        self.assertEqual(ctx["aviso"]["rotulos"], {"R2": "nome escondido"})
+        self.assertEqual(ctx["aviso"]["texto"], "o nome do R2 fica embaixo do R1 (nenhum lado em volta da peça ficou livre: "
+                                                "afaste o que está perto pra ler o nome)")
+        self.assertEqual(detalhe, "trilha, espaço, furo, anel, borda, máscara e serigrafia (JLCPCB) · aviso: " + ctx["aviso"]["texto"])
+
+    def test_de_ponta_a_ponta_o_aviso_fica_na_5(self):
+        # o R2 cercado: o R1 em cima, o R3 embaixo e, dos lados, os pads do Ra e do Rb. Só resistores: a 4 pula
+        if not _tem_gerbonara():
+            self.skipTest("gerbonara só no .venv")
+        texto = """placa 60 40
+peca Ra resistor_axial 17.42 20 130
+peca R2 resistor_axial 30 20 130
+peca Rb resistor_axial 42.58 20 130
+peca R1 resistor_axial 30 22.95 130
+peca R3 resistor_axial 30 17.05 130
+liga Ra.2 R2.1
+liga R2.2 Rb.1
+liga Rb.2 R1.2
+liga R1.1 R3.1
+liga R3.2 Ra.1
+"""
+        estado, zip_ = rodar_placa(texto)
+        self.assertEqual([e["estado"] for e in estado["etapas"]], ["ok", "ok", "ok", "pulou", "ok", "ok", "ok"],
+                         [(e["nome"], e["detalhe"]) for e in estado["etapas"]])
+        e5 = estado["etapas"][4]
+        self.assertTrue(e5["aviso"].startswith("o nome do R2 fica embaixo do R1 ("), e5["aviso"])
+        self.assertEqual(e5["rotulos"], {"R2": "nome escondido"})
+        self.assertTrue(zip_, "aviso não segura a fábrica")
+
+    def test_com_lado_livre_nao_avisa(self):
+        # a escada do dado: o nome do R4 e do R1 saem de cima e acham lugar
+        escada = "placa 40 30\npeca R2 resistor_axial 20 20 130\npeca R4 resistor_axial 21.25 17.05 130\npeca R1 resistor_axial 22.5 14.1 130\n"
+        for texto in (escada, (PLACAS / "lanterna" / "placa.txt").read_text(), BOA):
+            ctx = {"modelo": gerar.montar(gerar.ler(texto))}
+            testar.regras_fabrica(ctx)
+            self.assertNotIn("aviso", ctx, texto)
+
+    def test_nome_em_cima_do_nome_de_outra_peca(self):
+        # o R1 encosta na borda de cima e o nome dele vai pra baixo, no vão até o R2; o R2 não tem lado livre (o R3
+        # embaixo, os lados fora da placa) e o nome dele fica em cima, no mesmo vão
+        texto = APERTADO.replace("7 20 130", "7 28 130").replace("7 17.05 130", "7 23.6 130").replace("7 14.1 130", "7 20.65 130")
+        ctx = {"modelo": gerar.montar(gerar.ler(texto))}
+        testar.regras_fabrica(ctx)
+        self.assertEqual(ctx["aviso"]["rotulos"], {"R2": "nome escondido"})
+        self.assertTrue(ctx["aviso"]["texto"].startswith("o nome do R2 fica em cima do nome do R1 ("), ctx["aviso"]["texto"])
+
+    def test_frase_de_cada_coisa_que_o_nome_cobre(self):
+        m = gerar.montar(gerar.ler(BOA))
+        r1 = m["pecas"][1]
+        pad = pino_de(m, "R1.1")
+        r1["nome_pos"] = dict(r1["nome_pos"], x=pad["x"], y=pad["y"])
+        self.assertEqual(testar.nomes_sem_lugar(m), [("R1", "nome cortado", "o nome do R1 passa em cima do pad R1.1")])
+        r1["nome_pos"] = dict(r1["nome_pos"], x=0.5, y=30)
+        self.assertEqual(testar.nomes_sem_lugar(m), [("R1", "nome cortado", "o nome do R1 sai da placa")])
+        r1["nome_pos"] = dict(r1["nome_pos"], x=40, y=30)
+        self.assertEqual(testar.nomes_sem_lugar(m), [("R1", "nome escondido", "o nome do R1 fica embaixo do U1")])
 
 
 class BrilhoDeCadaLed(unittest.TestCase):

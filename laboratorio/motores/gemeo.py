@@ -5,7 +5,9 @@ O que roda: o MicroPython 1.29.0 do PC (port unix, em .ferramentas/micropython-u
 compila) quando existe; senão o próprio CPython, com um aviso. LAB_GEMEO=cpython ou =micropython força um modo.
 A pasta motores/gemeo/ tem o resto: motor/ (núcleo, periféricos, elétrica, roteiro, os dois jeitos de rodar),
 firmware/ (machine.py, time.py, network.py que o programa importa), chips/ (esp32, c3, s3, c6) e ensaios/.
-Extra opcional na pasta do programa: gemeo.roteiro (aparelhos I2C, wifi falha, aperta SW1; ver motor/roteiro.py).
+Extra opcional na pasta do programa: gemeo.roteiro (aparelhos I2C, wifi falha, aperta SW1, LDR1 = 1 lux; ver
+motor/roteiro.py). Com o circuito, cada LED vira um evento 'led' (o brilho em número) e a luz do roteiro entra no
+LDR (o pino lê o divisor de verdade); sem circuito, luz no roteiro é erro.
 """
 import importlib
 import os
@@ -22,13 +24,14 @@ __path__ = [str(Path(__file__).with_suffix(""))]   # motores/gemeo/ vira o pacot
 NOME = "gemeo"
 DESCRICAO = "gêmeo digital: seu main.py no MicroPython 1.29 do PC, chip de mentira com as regras do datasheet"
 FIEL = ("de verdade: a linguagem (o MicroPython 1.29.0, compilado pro PC), as regras de pino de cada chip "
-        "(datasheet: só-entrada, boot, ADC1/ADC2) e, com --circuito, a corrente e a tensão do circuito.py; "
+        "(datasheet: só-entrada, boot, ADC1/ADC2) e, com --circuito, a corrente e a tensão do circuito.py (com o "
+        "LDR na luz do roteiro, o do meio); "
         "de mentira: o tempo (relógio virtual: só as chamadas de hardware custam), o Wi-Fi (faz de conta, nada sai "
         "pela rede), o ADC (sem ruído), a memória (o heap é o do PC) e as interrupções (chegam no próximo sleep)")
 PLACAS = {"esp32": "esp32", "c3": "c3", "s3": "s3", "c6": "c6"}
 LINGUAGENS = {"micropython"}
 RECURSOS = {"serial", "serial_entrada", "pino_saida", "pino_entrada", "pwm", "adc", "i2c", "timer", "rede",
-            "eletrica"}
+            "eletrica", "luz"}
 
 MP_GIT = "https://github.com/micropython/micropython.git"
 MP_TAG, MP_COMMIT = "v1.29.0", "0fd6c573ea815774668bbb16b8e197c8822368b2"   # git ls-remote ... v1.29.0^{}
@@ -138,6 +141,35 @@ def instalar(fe, diga=print):
         time.monotonic() - inicio, destino, fer.tamanho(fer.du(destino)), fer.tamanho(apagado)))
 
 
+def _num(x):
+    return ("%g" % x).replace(".", ",")
+
+
+def _ohms(r):
+    return ("%.1f kΩ" % (r / 1000)).replace(".", ",") if r < 1e6 else ("%.2f MΩ" % (r / 1e6)).replace(".", ",")
+
+
+def _conferir_luzes(rot, el, circuito):
+    """a luz do roteiro (roteiro.json ou gemeo.roteiro) só vale num LDR do circuito, e o LDR tem que ter os números
+    da conta (r10, gama, escuro) -> ValueError numa frase. Devolve os avisos do LDR que começa sem luz no roteiro"""
+    for t, ref, lux in rot.luzes():
+        quando = ("%.3f s" % (t / 1e6)).replace(".", ",")
+        if el is None:
+            raise ValueError("o roteiro põe luz no %s em %s, mas a luz entra num LDR do circuito e %s" % (
+                ref, quando, "o circuito não ligou (veja o aviso acima)" if circuito else
+                "a rodada está sem circuito: rode com --circuito placa.txt"))
+        if ref not in el.ldrs:
+            raise ValueError("o roteiro põe luz no %s em %s, mas %s não é um LDR do circuito (%s)" % (
+                ref, quando, ref, "os LDRs: " + ", ".join(sorted(el.ldrs)) if el.ldrs else "ele não tem LDR"))
+        el.ohms(ref, lux)   # o LDR com número pendente diz agora, e não no meio do programa
+    if el is None:
+        return []
+    com_luz, lux = {ref for t, ref, _ in rot.luzes() if t == 0}, el.circuito.LUX_PADRAO
+    return [contrato.aviso(0, '%s começa com %s lux (o LDR do meio: %s); o roteiro muda a luz com {"t": 5, "luz": '
+                              '"%s", "lux": 1}' % (ref, _num(lux), _ohms(el.ohms(ref, lux)), ref), "luz")
+            for ref in sorted(set(el.ldrs) - com_luz)]   # sem luz no roteiro, fica no padrão do circuito.resolver
+
+
 def rodar(pedido):
     inicio = time.monotonic()
     chip = _sub("chips." + pedido.alvo)
@@ -148,14 +180,6 @@ def rodar(pedido):
                                 "gêmeo do %s; heap de %s como a placa (%s)" % (
                                     chip.NOME, fer.tamanho(chip.HEAP_LIVRE), chip.HEAP_FONTE), "gemeo_micropython")]
     extra = pedido.pasta / "gemeo.roteiro"
-    try:
-        rot = roteiro.Roteiro(pedido.tempo_ms * 1000, pedido.entradas,
-                              extra.read_text(encoding="utf-8") if extra.is_file() else "")
-    except ValueError as e:
-        yield from avisos
-        yield {"t_ms": 0, "tipo": "erro", "texto": str(e)}
-        yield contrato.fim("erro", NOME, pedido.placa.id, pedido.alvo, 0, time.monotonic() - inicio)
-        return
     el = None
     if pedido.circuito:
         try:
@@ -165,6 +189,15 @@ def rodar(pedido):
         except Exception as e:   # circuito ruim não derruba a rodada: vira aviso e o gêmeo segue sem ele
             avisos.append(contrato.aviso(0, "não deu pra ligar o circuito %s: %s" % (Path(pedido.circuito).name, e),
                                          "circuito"))
+    try:
+        rot = roteiro.Roteiro(pedido.tempo_ms * 1000, pedido.entradas,
+                              extra.read_text(encoding="utf-8") if extra.is_file() else "")
+        avisos += _conferir_luzes(rot, el, pedido.circuito)
+    except ValueError as e:
+        yield from avisos
+        yield {"t_ms": 0, "tipo": "erro", "texto": str(e)}
+        yield contrato.fim("erro", NOME, pedido.placa.id, pedido.alvo, 0, time.monotonic() - inicio)
+        return
     n = miolo.Nucleo(rot, chip, el, pedido.placa)
     if qual == "micropython":
         info = rodar_.micropython(pedido.principal, n, binario, pedido.limite_pc_s, fer.ambiente(),

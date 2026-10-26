@@ -115,13 +115,37 @@ def pares_perto(modelo, limite):
 
 def corpos_encostados(modelo, folga=0.05):
     """pares de peças cujos corpos se sobrepõem (uma em cima da outra na placa); corpo redondo é círculo"""
-    def corpo(p):
-        c = p["corpo"]
-        if c["redondo"]:
-            return ("circ", p["x"], p["y"], min(c["w"], c["h"]) / 2)
-        return ("ret", p["x"] - c["w"] / 2, p["y"] - c["h"] / 2, p["x"] + c["w"] / 2, p["y"] + c["h"] / 2)
     ps = modelo["pecas"]
-    return [(a["ref"], b["ref"]) for i, a in enumerate(ps) for b in ps[i + 1:] if geometria.sobrepoe(corpo(a), corpo(b), folga)]
+    return [(a["ref"], b["ref"]) for i, a in enumerate(ps) for b in ps[i + 1:]
+            if geometria.sobrepoe(gerar.corpo_na_placa(a), gerar.corpo_na_placa(b), folga)]
+
+
+def no_alto(peca):
+    """a peça fica no alto, encaixada na barra fêmea: o DevKit (modelo 'mcu'), 8,5 ± 0,15 mm acima da placa na barra
+    hanxia C41417327 (datasheet p. 1, no catálogo conector_header_femea.json). O que fica embaixo dela não encosta nela"""
+    return modelo_de(peca) == "mcu"
+
+
+def entra_no_corpo(pad, corpo, folga):
+    """o pad (miolo, raio) entra mais que a folga no corpo (o formato do gerar.corpo_na_placa)?"""
+    miolo, raio = pad
+    if miolo[0] == "ret":   # pad quadrado: retângulo com retângulo ou círculo, como corpo com corpo
+        return geometria.sobrepoe(corpo, miolo, folga)
+    if corpo[0] == "circ":   # pad redondo ou oblongo (segmento + raio) no corpo redondo
+        return corpo[3] + raio - dist_ponto_seg(corpo[1:3], miolo[1], miolo[2]) > folga
+    return raio - max(0, distancia((miolo, 0), (corpo, 0))) > folga
+
+
+def pads_embaixo(modelo, folga=0.05):
+    """[(pino, ref)]: pad de uma peça que entra no corpo de OUTRA peça deitada na placa (a perna não chega no furo e o
+    ferro não chega no pad), com a mesma folga do corpos_encostados. A peça no alto (no_alto) não conta"""
+    deitadas = [(p["ref"], gerar.corpo_na_placa(p)) for p in modelo["pecas"] if not no_alto(p)]
+    return [(f"{peca['ref']}.{q['n']}", ref) for peca in modelo["pecas"] for q in peca["pinos"] for ref, corpo in deitadas
+            if ref != peca["ref"] and entra_no_corpo(geometria.do_pad(q["x"], q["y"], q["pad"]), corpo, folga)]
+
+
+QUE_PECA = {"led": "LED", "resistor": "resistor", "chave": "botão", "pilha": "suporte da pilha", "ldr": "LDR",
+            "piezo": "piezo", "capacitor": "capacitor"}   # 'o furo do R2.1 fica embaixo do LED D2'
 
 
 def refs(*nomes):
@@ -242,6 +266,18 @@ def confere_ligacoes(ctx):
         a, b = encostados[0]
         mais = f" (e mais {len(encostados) - 1})" if len(encostados) > 1 else ""
         raise Falhou(f"{a} está em cima de {b}: os corpos das peças se encostam{mais}", [a, b], "uma em cima da outra")
+    cobertos = pads_embaixo(modelo)   # o furo de uma peça embaixo do corpo de outra (o DevKit, no alto, não conta)
+    if cobertos:
+        pecas = {p["ref"]: p for p in modelo["pecas"]}
+        furo = {f"{p['ref']}.{q['n']}": "furo" if q["furo"] else "pad" for p in modelo["pecas"] for q in p["pinos"]}
+        rotulos = {}
+        for pino, ref in cobertos:   # as duas peças de cada par: a do furo e a que fica em cima dele
+            rotulos.setdefault(refs(pino)[0], f"{furo[pino]} coberto")
+            rotulos.setdefault(ref, f"em cima de um {furo[pino]}")
+        pino, ref = cobertos[0]
+        quem = f"{QUE_PECA[modelo_de(pecas[ref])]} {ref}" if modelo_de(pecas[ref]) in QUE_PECA else ref
+        mais = f" (e mais {len(cobertos) - 1})" if len(cobertos) > 1 else ""
+        raise Falhou(f"o {furo[pino]} do {pino} fica embaixo do {quem}: não dá pra soldar{mais}", rotulos=rotulos)
     for peca in modelo["pecas"]:   # resistor, LED, pilha: os dois pinos na mesma net = a peca esta em curto
         if len(peca["pinos"]) == 2 and peca["pinos"][0]["net"] and peca["pinos"][0]["net"] == peca["pinos"][1]["net"]:
             raise Falhou(f"{peca['ref']} em curto: os dois pinos estão na net {peca['pinos'][0]['net']}", [peca["ref"]], "curto")
@@ -879,7 +915,39 @@ def regras_fabrica(ctx):
             for ref in onde:
                 rotulos.setdefault(ref, rotulo)
         raise Falhou(problemas[0][0] + mais, rotulos=rotulos)
-    return "trilha, espaço, furo, anel, borda, máscara e serigrafia (JLCPCB)"
+    detalhe = "trilha, espaço, furo, anel, borda, máscara e serigrafia (JLCPCB)"
+    sem_lugar = nomes_sem_lugar(modelo)
+    if sem_lugar:   # aviso, não falha: a placa funciona, só o nome não dá pra ler
+        frases = [frase for _, _, frase in sem_lugar]
+        mais = f" e mais {len(frases) - 3}" if len(frases) > 3 else ""
+        texto = (f"{'; '.join(frases[:3])}{mais} (nenhum lado em volta da peça ficou livre: afaste o que está perto pra "
+                 "ler o nome)")
+        ctx["aviso"] = {"texto": texto, "rotulos": {ref: rotulo for ref, rotulo, _ in sem_lugar}}
+        detalhe += " · aviso: " + texto
+    return detalhe
+
+
+# o nome da peça que não achou lado livre (o gerar.posicionar_nomes deixou em cima): o que ele cobre, em português
+COBRE = {"fora": "sai da placa", "corpo": "fica embaixo do {}", "zona": "fica em cima da zona {}",
+         "pad": "passa em cima do pad {}", "furo": "passa em cima do furo de fixação", "via": "passa em cima da via {}",
+         "nome": "fica em cima do nome do {}"}
+
+
+def nomes_sem_lugar(modelo):
+    """[(ref, rótulo, frase)]: cada nome que cobre alguma coisa (corpo de outra peça, pad, furo, via, outro nome) ou sai
+    da placa, com a primeira coisa que ele cobre. Conta os nomes de antes, como o gerar quando escolheu o lado"""
+    achados, postos = [], []
+    for peca in modelo["pecas"]:
+        pos = peca.get("nome_pos")
+        if not pos:
+            continue
+        cobre = gerar.o_que_o_nome_cobre(modelo, peca, pos, postos)
+        if cobre:
+            oque, quem = cobre[0]
+            rotulo = "nome escondido" if oque in ("corpo", "zona", "nome") else "nome cortado"
+            achados.append((peca["ref"], rotulo, f"o nome do {peca['ref']} {COBRE[oque].format(quem)}"))
+        postos.append((peca["ref"], pos))
+    return achados
 
 
 MAPA_GERBER = {r".*-F_Cu\.gbr": "top copper", r".*-B_Cu\.gbr": "bottom copper",

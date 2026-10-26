@@ -1,0 +1,14 @@
+{
+  "sobre": "a luz em lux no LDR1 do circuito (só com --circuito circuito_ldr/placa_ldr.txt): 100 lux aqui, 1 lux em 1 s e 100 lux em 2 s no gemeo.roteiro. Pelo divisor: 100 lux = 376 mV, 1 lux = 2375 mV (o LDR do meio)",
+  "tempo": 3,
+  "precisa": ["adc", "pino_saida", "serial", "luz"],
+  "entradas": [{"t": 0, "luz": "LDR1", "lux": 100}],
+  "confere": [
+    {"serial": "mv 376", "ate": 0.05},
+    {"t": 0.5, "pino": "GPIO23", "valor": 0},
+    {"serial": "mv 2375", "desde": 1, "ate": 1.2, "_": "escureceu: a linha tem que sair depois de 1 s"},
+    {"t": 1.5, "pino": "GPIO23", "valor": 1},
+    {"serial": "mv 376", "desde": 2, "ate": 2.2, "_": "o mesmo texto do começo: só vale o que saiu depois de 2 s"},
+    {"t": 2.5, "pino": "GPIO23", "valor": 0}
+  ]
+}

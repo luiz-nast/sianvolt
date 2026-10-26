@@ -212,16 +212,17 @@ O `roteiro.json` da pasta (ou `--roteiro`). Tempo em segundos de placa; pino pel
  "confere": [{"t": 1.25, "pino": "LED", "valor": 1},
              {"t": 0.5, "pwm": "PWM", "duty": [0.2, 0.3]},
              {"serial": "apertou", "ate": 1.25},
+             {"serial": "soltou", "desde": 1.5, "ate": 2},
              {"trocas": "LED", "min": 4, "max": 7},
              {"estado": "acabou"}]}
 ```
 
 Os recursos do `precisa`: `serial` (a placa escreve), `serial_entrada` (o roteiro manda texto pra placa:
 `sys.stdin`, `input()`, `select.poll`, `Serial.read()`), `pino_saida`, `pino_entrada`, `pwm`, `adc`, `i2c`,
-`timer`, `rede`, `eletrica`. Hoje todos os motores têm `serial_entrada`. No `testar`, o motor que não tem
-algum deles é **pulado** (e aparece como pulado). No `rodar`, sem `--motor` o laboratório escolhe um motor
-da placa que tenha tudo; com `--motor`, ou se nenhum motor da placa tiver, ele **roda assim mesmo e avisa**
-("o motor X não tem Y: essas conferências podem falhar").
+`timer`, `rede`, `eletrica`, `luz` (a luz num LDR do circuito, abaixo; só o `gemeo`). Hoje todos os motores
+têm `serial_entrada`. No `testar`, o motor que não tem algum deles é **pulado** (e aparece como pulado). No
+`rodar`, sem `--motor` o laboratório escolhe um motor da placa que tenha tudo; com `--motor`, ou se nenhum motor
+da placa tiver, ele **roda assim mesmo e avisa** ("o motor X não tem Y: essas conferências podem falhar").
 
 Como as conferências contam:
 
@@ -234,12 +235,37 @@ Como as conferências contam:
 - `trocas`: o pino começa em 0 e cada mudança de nível vinda do programa conta 1. Um LED que só acendeu (0 → 1)
   tem 1 troca; piscando 3 vezes (0 → 1 → 0, três vezes) são 6. Escrever o mesmo nível de novo não conta.
 - `serial` com `ate`: alguma linha até aquele instante contém o texto; quando falha, mostra a última linha
-  que saiu **até lá**.
+  que saiu **até lá**. Com `desde`, a linha tem que sair **depois** daquele instante (no mesmo instante não
+  vale): `{"serial": "clareou", "desde": 15, "ate": 15.5}` só passa com um "clareou" novo, e não com um que já
+  tinha saído antes de 15 s. Os dois são opcionais, e o `desde` tem que vir antes do `ate`. Um `desde` no fim
+  da rodada ou depois dele, com o tempo acabando antes (estado `tempo`), falha com "não deu pra ver": não sobrou
+  tempo de placa pra linha sair.
 
 O laboratório também avisa, em todo motor, quando o roteiro faz algo que na placa daria problema: forçar um
 pino que o programa usa como saída (na placa é um curto, e cada motor resolve de um jeito) e pôr num pino mais
 tensão do que ele aguenta (ESP: VDD + 0,3 V, [datasheet do ESP32](https://documentation.espressif.com/esp32_datasheet_en.pdf)
 Tabela 5-3; Nano: VCC + 0,5 V, datasheet do ATmega328P, "Absolute Maximum Ratings").
+
+**Luz num LDR do circuito** (só o `gemeo`, só com `--circuito`): `{"t": 5, "luz": "LDR1", "lux": 1}` nas
+`entradas` põe 1 lux no LDR1 do `placa.txt` a partir de 5 s (0 lux = escuro). O LDR1 tem que ser uma peça com
+modelo elétrico `ldr` no circuito. O gêmeo põe a resistência do LDR do meio nessa luz (`circuito.ohms_do_ldr` do
+Sianvolt, com o r10 e o gama do datasheet) no circuito, e o pino ligado nele lê o divisor de verdade: um LDR
+ligado do lado errado lê o contrário. A linha do tempo mostra a luz (`LDR1 com 1 lux (roteiro)`) e a tensão que
+o circuito põe no pino (`GPIO34 = 2,38 V (circuito)`, um evento `adc` com origem `circuito`) do GPIO ligado no
+LDR, direto ou, sem nenhum direto, por um resistor (GPIO34 → 1 kΩ → LDR). Sem `--circuito`, é uso errado
+(código 2); um LDR que o circuito não tem é erro (código 1). O LDR sem luz no roteiro fica em 10 lux, e um aviso
+diz isso. No `gemeo.roteiro` vale `em 5 s LDR1 = 1 lux` (o `em` é opcional), e na linha do tempo ela aparece
+com a origem dela (`LDR1 com 1 lux (gemeo.roteiro)`). O `ensaios/luz` (com `ensaios/circuito_ldr/placa_ldr.txt`,
+ou o `placa_ldr_res.txt`, com o resistor no meio) é o exemplo.
+
+**O brilho de cada LED** (só o `gemeo`, com `--circuito`): a cada mudança no circuito, o LED que mudou vira um
+evento `led` com os números: `ref`, `i_med` e `i_max` (em A: a corrente média e a de quando liga, que no PWM são
+diferentes), `luz` (a fração do brilho do anúncio, pela curva do datasheet da peça, a mesma conta do
+`blocos.brilho_da_corrente`; sem curva, corrente ÷ corrente de teste), `aceso` e `queima` (true/false), mais o
+`texto` de sempre ("D1 aceso, 5,9 mA, luz 59% do anúncio"). O `aceso` é a regra do texto: com menos de 1% da luz
+e sem nunca passar 1 mA, o LED está apagado, mesmo com números acima de 0 (o pino do LED que ficou como entrada
+com pull-up passa uns 35 µA: `ensaios/pullup`). Quem decide se um LED acendeu usa o `aceso`, e não a luz > 0. No
+terminal sai o texto, uma linha por texto novo; no `--json` saem todos; no `--html`, uma onda por LED.
 
 **Serial que chega na placa**: no `gemeo`, o texto do roteiro chega no `sys.stdin` na hora de placa certa;
 `input()`, `sys.stdin.read()`/`readline()` e `select.poll().poll(ms)` esperam andando o relógio da placa até o
@@ -257,8 +283,8 @@ python3 laboratorio/lab.py testar --placa nano --motor simavr --exemplo pwm
 python3 laboratorio/lab.py rodar esp32 exemplos/botao --lingua arduino --html laboratorio/build/botao.html
 ```
 
-O `--html` gera uma página sozinha (abre sem internet): uma onda por pino, a serial e uma régua de tempo pra
-arrastar, ir e voltar (setas, Home/End, espaço toca).
+O `--html` gera uma página sozinha (abre sem internet): uma onda por pino, por LED (a luz) e por LDR (o lux do
+roteiro), a serial e uma régua de tempo pra arrastar, ir e voltar (setas, Home/End, espaço toca).
 
 ### Pro Claude: onde mexer
 
@@ -275,11 +301,12 @@ arrastar, ir e voltar (setas, Home/End, espaço toca).
   O que pesa é a RAM: um qemu do ESP32 usa ~260 MB, então não abra muitos de uma vez.
 - Regras: `make -j2`, nada em `/tmp`, todo caminho relativo ao arquivo.
 
-## 4. Depois: ligar no Sianvolt
+## 4. Ligado no Sianvolt
 
-Ainda não existe. A ideia: o firmware de uma placa do Sianvolt mora junto dela, em `placas/<nome>/codigo/`
-(`main.py` ou `.ino`, mais um `roteiro.json`; todas com o mesmo nome `codigo`, o que as vagas de `build/`
-aguentam), e o laboratório roda com o circuito de verdade:
-`lab.py rodar esp32 placas/<nome>/codigo --circuito placas/<nome>/placa.txt`. Hoje o `--circuito` já funciona
-no `gemeo` com uma placa de teste (avisa LED sem resistor e mostra a corrente); o que falta é o app
-(`bancada/`) mostrar a linha do tempo e cada placa ganhar a sua pasta `codigo/`.
+O firmware de uma placa do Sianvolt mora junto dela, em `placas/<nome>/codigo/` (`main.py`, `roteiro.json`,
+`gemeo.roteiro` e o `confere.json` do Sianvolt). Quem roda é o `ferramenta/programa.py` (a etapa 8 do `testar.py`
+e o ▶ Programa do app): ele copia o `codigo/` pra `saida/programa/`, roda
+`lab.py rodar esp32 <cópia> --motor gemeo --circuito placas/<nome>/placa.txt --json` e transforma a linha do
+tempo no `saida/programa.json`. Ele olha o que este laboratório sabe antes de rodar: com a luz em lux (acima),
+manda a luz do quarto como `{"luz": "LDR1", "lux": ...}`; num laboratório antigo, troca pelos volts do divisor.
+O brilho dos LEDs vem do evento `led` (num laboratório antigo, do texto do aviso).

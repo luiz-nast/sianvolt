@@ -1,0 +1,364 @@
+{
+ "nome": "LDR (fotorresistor) 8kΩ~20kΩ",
+ "bloco": "ldr",
+ "explica": "Um resistor que muda com a luz: no claro fica com poucos ohms, no escuro com muitos. Junto com um resistor fixo, vira uma tensão que o pino do cérebro lê. Não tem lado certo.",
+ "fonte": "desenho RES-TH_L5.1-W4.3-P3.40-D0.5 do EasyEDA; ficha LCSC C10081; datasheet https://datasheet.lcsc.com/datasheet/pdf/0ac3d43edf3703d98e2e4a16b4a936c8.pdf?productCode=C10081; conferido: datasheet JCHL GL55 (2 páginas), https://datasheet.lcsc.com/datasheet/pdf/0ac3d43edf3703d98e2e4a16b4a936c8.pdf?productCode=C10081: p. 1, tabela, linha GL5528: 150 V, 90 mW, −30 a 70 °C, 540 nm, 8–20 kΩ a 10 lux, 1 MΩ no escuro, γ 0,65, 30 ms; p. 2, 'Measuring Conditions': R10 medido a 10 lux de luz A (2854 K) depois de 2 h a 400–600 lux; escuro = 10 s depois de apagar os 10 lux; γ = lg(R10/R100) entre 10 e 100 lux, 'The error of γ is ± 0.1'; Vmax = a tensão no escuro que aguenta sem parar; Pmax a 25 °C. Sem polaridade (é um resistor). O ponto de 1 lux não é do JCHL: veio do gráfico da Senba C125626 (ponto_1lux)",
+ "corpo": [
+  4.4,
+  5.4
+ ],
+ "redondo": false,
+ "desenho": [
+  [
+   [
+    2.2,
+    -1.301
+   ],
+   [
+    2.2,
+    1.199
+   ]
+  ],
+  [
+   [
+    -2.2,
+    -1.101
+   ],
+   [
+    -2.2,
+    1.199
+   ]
+  ],
+  [
+   [
+    -2.2,
+    0.699
+   ],
+   [
+    -1.5,
+    0.699
+   ],
+   [
+    -1.5,
+    -0.801
+   ],
+   [
+    -0.9,
+    -0.801
+   ],
+   [
+    -0.9,
+    0.699
+   ],
+   [
+    -0.2,
+    0.699
+   ],
+   [
+    -0.2,
+    -0.801
+   ]
+  ],
+  [
+   [
+    0.4,
+    -0.801
+   ],
+   [
+    0.4,
+    0.699
+   ],
+   [
+    0.9,
+    0.699
+   ],
+   [
+    0.9,
+    -0.901
+   ],
+   [
+    1.4,
+    -0.901
+   ],
+   [
+    1.4,
+    0.699
+   ],
+   [
+    2.2,
+    0.699
+   ]
+  ],
+  [
+   [
+    -2.201,
+    -1.1
+   ],
+   [
+    -2.114,
+    -1.319
+   ],
+   [
+    -2.005,
+    -1.529
+   ],
+   [
+    -1.876,
+    -1.727
+   ],
+   [
+    -1.728,
+    -1.91
+   ],
+   [
+    -1.563,
+    -2.078
+   ],
+   [
+    -1.381,
+    -2.229
+   ],
+   [
+    -1.186,
+    -2.361
+   ],
+   [
+    -0.978,
+    -2.473
+   ],
+   [
+    -0.76,
+    -2.564
+   ],
+   [
+    -0.535,
+    -2.633
+   ],
+   [
+    -0.303,
+    -2.678
+   ],
+   [
+    -0.068,
+    -2.701
+   ],
+   [
+    0.168,
+    -2.7
+   ],
+   [
+    0.402,
+    -2.675
+   ],
+   [
+    0.633,
+    -2.628
+   ],
+   [
+    0.858,
+    -2.557
+   ],
+   [
+    1.075,
+    -2.464
+   ],
+   [
+    1.282,
+    -2.351
+   ],
+   [
+    1.476,
+    -2.217
+   ],
+   [
+    1.657,
+    -2.065
+   ],
+   [
+    1.821,
+    -1.895
+   ],
+   [
+    1.967,
+    -1.71
+   ],
+   [
+    2.094,
+    -1.511
+   ],
+   [
+    2.201,
+    -1.301
+   ]
+  ],
+  [
+   [
+    2.201,
+    1.198
+   ],
+   [
+    2.104,
+    1.414
+   ],
+   [
+    1.986,
+    1.618
+   ],
+   [
+    1.849,
+    1.809
+   ],
+   [
+    1.693,
+    1.986
+   ],
+   [
+    1.52,
+    2.147
+   ],
+   [
+    1.332,
+    2.289
+   ],
+   [
+    1.131,
+    2.412
+   ],
+   [
+    0.919,
+    2.515
+   ],
+   [
+    0.697,
+    2.596
+   ],
+   [
+    0.469,
+    2.654
+   ],
+   [
+    0.236,
+    2.689
+   ],
+   [
+    0.0,
+    2.701
+   ],
+   [
+    -0.236,
+    2.689
+   ],
+   [
+    -0.469,
+    2.654
+   ],
+   [
+    -0.697,
+    2.596
+   ],
+   [
+    -0.919,
+    2.515
+   ],
+   [
+    -1.131,
+    2.412
+   ],
+   [
+    -1.332,
+    2.289
+   ],
+   [
+    -1.52,
+    2.147
+   ],
+   [
+    -1.693,
+    1.986
+   ],
+   [
+    -1.849,
+    1.809
+   ],
+   [
+    -1.986,
+    1.618
+   ],
+   [
+    -2.104,
+    1.414
+   ],
+   [
+    -2.201,
+    1.198
+   ]
+  ]
+ ],
+ "pinos": {
+  "2": {
+   "x": 0.1,
+   "y": -1.701,
+   "pad": {
+    "forma": "C",
+    "d": 1.524
+   },
+   "furo": 0.762
+  },
+  "1": {
+   "x": 0.1,
+   "y": 1.699,
+   "pad": {
+    "forma": "C",
+    "d": 1.524
+   },
+   "furo": 0.762
+  }
+ },
+ "eletrica": {
+  "modelo": "ldr",
+  "r10_min": 8000.0,
+  "r10_max": 20000.0,
+  "gama": 0.65,
+  "gama_tol": 0.1,
+  "r_escuro": 1000000.0,
+  "p_max": 0.09,
+  "v_max": 150.0,
+  "ponto_1lux": {
+   "lux": 1,
+   "r_min": 32000.0,
+   "r_max": 121000.0,
+   "fonte": "Senba C125626: gráfico da Fig. 3 (o do GL5528, pela tabela da p. 3), p. 5 de https://datasheet.lcsc.com/datasheet/pdf/a285a603ad489ef9f5d41e8abae5e9cb.pdf?productCode=C125626, lido por pixel. Não é o gráfico do JCHL (os rótulos dele parecem trocados)"
+  }
+ },
+ "pendente": [],
+ "compra": "JCHL(Shenzhen Jing Chuang He Li Tech) GL5528(10-20) (LCSC C10081)",
+ "loja": {
+  "codigo": "C10081",
+  "modelo": "GL5528(10-20)",
+  "marca": "JCHL(Shenzhen Jing Chuang He Li Tech)",
+  "pacote": "Plugin,P=3.4mm",
+  "preco": 0.046,
+  "minimo": 1,
+  "estoque": 29082,
+  "datasheet": "https://datasheet.lcsc.com/datasheet/pdf/0ac3d43edf3703d98e2e4a16b4a936c8.pdf?productCode=C10081",
+  "link": "https://www.lcsc.com/product-detail/photoresistors_jchl-shenzhen-jing-chuang-he-li-tech-gl5528-10-20_C10081.html",
+  "atributos": {
+   "Cell Resistance @ Illuminance": "8kΩ~20kΩ",
+   "Operating Temperature": "-30℃~+70℃",
+   "Voltage - Max": "150V",
+   "Length": "5.1mm",
+   "γ Value": "0.65",
+   "Pitch": "3.4mm",
+   "Dark Resistance": "1MΩ",
+   "Height": "2.4mm",
+   "Wavelength - Peak": "540nm",
+   "Width": "4.3mm"
+  },
+  "tamanho": "4,4 × 5,4 mm",
+  "quando": "2026-10-26"
+ },
+ "nomes": {
+  "1": "lado 1",
+  "2": "lado 2"
+ }
+}

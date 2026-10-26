@@ -29,6 +29,7 @@ class Nucleo(Perifericos):
         self.pinos = {}          # gpio -> dict(modo, valor, pull, drive, duty, freq, atten, irq)
         self.externo = {}        # gpio -> ("nivel", 0/1) | ("volts", v)
         self.chaves = {}         # ref -> True (apertada)
+        self.luz = {}            # ref do LDR -> lux (sem luz no roteiro, o LDR fica no padrão do circuito.resolver)
         self.eventos = []        # a linha do tempo, nos eventos do contrato
         self.avisados = set()
         self.boot_visto = set()  # pinos de boot que o roteiro (no instante 0) ou o circuito já conferiram
@@ -162,9 +163,9 @@ class Nucleo(Perifericos):
             if quer is None or g not in self.el.gpio_net:
                 continue
             if pull is None:
-                v, solto = self.el.tensao_entrada(g, {}, {})
+                v, solto = self.el.tensao_entrada(g, {}, {}, self.luz)
             else:
-                v, solto = self.el.tensao(g, {g: ("v", c.VDD if pull else 0.0, c.R_PULL)}, {}), False
+                v, solto = self.el.tensao(g, {g: ("v", c.VDD if pull else 0.0, c.R_PULL)}, {}, self.luz), False
             nivel = None if solto else 1 if v >= c.VIH else 0 if v <= c.VIL else None
             if nivel != quer:
                 onde = "solto (nada segura a tensão)" if solto else "em %s" % v_txt(v)
@@ -335,6 +336,14 @@ class Nucleo(Perifericos):
             else:
                 self.externo[a["gpio"]] = a["sinal"]
             self._observar()
+        elif tipo == "luz":   # o LDR muda de resistência; o pino ligado nele lê o divisor de verdade
+            if a.get("origem"):   # a do gemeo.roteiro (a do roteiro.json o lab.py põe na linha do tempo)
+                self.ev("luz", ref=a["ref"], lux=a["lux"], origem=a["origem"])
+            self.luz[a["ref"]] = a["lux"]
+            self._observar()
+            for g in self.el.gpios_do_ldr(a["ref"]):
+                v = self.el.tensao(g, self._estado_eletrico(), self.chaves, self.luz)
+                self.ev("adc", pino="GPIO%d" % g, volts=round(v, 4), origem="circuito")
         elif tipo == "serial":
             self.entrada(a["texto"])
         elif tipo == "i2c":

@@ -58,18 +58,24 @@ class Perifericos:
         self.versao += 1
         self._cache_nivel = {}
         if self.el:
-            f = self.el.foto(self._estado_eletrico(), self.chaves)
+            f = self.el.foto(self._estado_eletrico(), self.chaves, self.luz)
             for ref, d in f["leds"].items():
-                if d["luz"] < 0.01 and d["tempo_aceso"] == 0:
+                aceso = d["luz"] >= 0.01 or d["tempo_aceso"] > 0   # abaixo de 1% e nunca com 1 mA: apagado
+                if not aceso:
                     txt = "%s apagado" % ref
                 else:
                     meia = f["pwm"] and d["tempo_aceso"] < 0.999
                     txt = "%s %s, %s mA%s, luz %d%% do anúncio" % (
                         ref, "meia luz" if meia else "aceso", ma(d["i_med"]),
                         " na média (%s mA quando liga)" % ma(d["i_max"]) if meia else "", round(d["luz"] * 100))
-                if self.leds.get(ref) != txt:   # cada mudança do LED vira um aviso informativo
-                    self.leds[ref] = txt
-                    self.ev("aviso", texto=txt, codigo="led")
+                # o brilho como número (A e fração do anúncio): cada mudança do LED vira um evento 'led'. O
+                # arredondamento (1 µA, 0,01% da luz) só tira as mudanças que nenhum número mostraria. 'aceso' é a
+                # regra do texto: o LED de 35 µA (aceso só pelo pull-up) tem números, mas é 'apagado' pra todo mundo
+                led = {"ref": ref, "i_med": round(max(d["i_med"], 0.0), 6), "i_max": round(d["i_max"], 6),
+                       "luz": round(max(d["luz"], 0.0), 4), "aceso": aceso, "queima": bool(d["queima"]), "texto": txt}
+                if self.leds.get(ref) != led:
+                    self.leds[ref] = led
+                    self.ev("led", **led)
                 if d["queima"]:
                     self.aviso("%s QUEIMA: passa %s mA, acima do máximo do datasheet" % (ref, ma(d["i_max"])), "queima")
             for g, i in f["pinos"].items():
@@ -109,7 +115,7 @@ class Perifericos:
         if p.get("modo") == "saida":
             return p["valor"]
         if self.el and g in self.el.gpio_net:
-            v, flutua = self.el.tensao_entrada(g, self._estado_eletrico(), self.chaves)
+            v, flutua = self.el.tensao_entrada(g, self._estado_eletrico(), self.chaves, self.luz)
             if flutua:
                 av.append("GPIO%d está flutuando (nada segura a tensão: falta pull-up/pull-down ou o botão está solto"
                           " sem resistor): no %s de verdade a leitura sai aleatória; o gêmeo lê 0" % (g, c.CURTO))
@@ -135,7 +141,7 @@ class Perifericos:
             s = self.externo[g]
             return s[1] if s[0] == "volts" else self.chip.VDD * s[1]
         if self.el and g in self.el.gpio_net:
-            return self.el.tensao(g, self._estado_eletrico(), self.chaves)
+            return self.el.tensao(g, self._estado_eletrico(), self.chaves, self.luz)
         self.aviso("ADC no GPIO%d sem circuito e sem tensão no roteiro: lê 0 V" % g, "adc")
         return 0.0
 

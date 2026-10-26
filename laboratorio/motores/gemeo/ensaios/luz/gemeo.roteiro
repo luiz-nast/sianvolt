@@ -1,0 +1,3 @@
+# a luz no LDR1 do circuito: o 'em' é opcional, e o lux aceita espaço ou não
+em 1 s LDR1 = 1 lux
+2 s LDR1 = 100lux

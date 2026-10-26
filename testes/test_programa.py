@@ -2,12 +2,14 @@
 import fcntl
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from apoio import apagar
 import catalogo
@@ -49,6 +51,41 @@ liga U1.11 R2.1
 liga R2.2 SW1.1
 liga SW1.3 GND
 """
+# o mesmo divisor do LDR com um LED no GPIO25 (pino 8) pelo R3 de 130 Ω: uma luz noturna pequena
+LUZ = LDR + """peca R3 resistor_axial 12 54 130
+peca D1 led_5mm 4 44
+liga U1.8 R3.1
+liga R3.2 D1.1
+liga D1.2 GND
+"""
+# o LDR ligado do lado errado: 3V3 → LDR → GPIO34 → 22 kΩ → GND (no claro a tensão SOBE)
+LUZ_TROCADA = LUZ.replace("liga U1.16 R1.1\nliga R1.2 U1.4\nliga U1.4 LDR1.1\nliga LDR1.2 GND\n",
+                          "liga U1.16 LDR1.2\nliga LDR1.1 U1.4\nliga U1.4 R1.2\nliga R1.1 GND\n")
+# a luz noturna em 3 s: acende devagar quando escurece e apaga quando clareia (os limites do placas/luz_noturna)
+MINI_LUZ = """from machine import ADC, PWM, Pin
+import time
+from pinos import D1, LDR1
+olho = ADC(Pin(LDR1), atten=ADC.ATTN_11DB)
+luz = PWM(Pin(D1), freq=1000, duty_u16=0)
+escuro, brilho = False, 0.0
+for i in range(150):
+    mv = olho.read_uv() // 1000
+    if not escuro and mv > 1205:
+        escuro = True
+        print("escureceu", mv)
+    elif escuro and mv < 827:
+        escuro = False
+        print("clareou", mv)
+    alvo = 0.6 if escuro else 0.0
+    brilho = min(alvo, brilho + 0.06) if brilho < alvo else max(alvo, brilho - 0.06)
+    luz.duty_u16(int(brilho * brilho * 65535))
+    time.sleep_ms(20)
+"""
+ROTEIRO_LUZ = {"tempo": 3, "entradas": [{"t": 0, "luz": "LDR1", "lux": 100}, {"t": 1, "luz": "LDR1", "lux": 1},
+                                        {"t": 2, "luz": "LDR1", "lux": 100}],
+               "confere": [{"t": 0.9, "pwm": "GPIO25", "duty": [0, 0]}, {"serial": "escureceu", "desde": 1, "ate": 1.1},
+                           {"t": 1.9, "pwm": "GPIO25", "duty": [0.35, 0.37]},
+                           {"serial": "clareou", "desde": 2, "ate": 2.1}, {"t": 2.9, "pwm": "GPIO25", "duty": [0, 0]}]}
 # pisca o D1 (no pino que o pinos.py disser) e escreve na serial
 PISCA = """from machine import Pin
 import time
@@ -152,14 +189,73 @@ class Normalizar(Temporarias):
         self.assertEqual([x[3] for x in p["leds"]["D1"]], [False, True, False, True, False])
         self.assertIn([1, "queima", "D1 QUEIMA: passa 35,2 mA, acima do máximo do datasheet"], p["avisos"])
 
-    def test_campos_numericos_valem_mais_que_o_texto(self):
+    def test_evento_led_com_os_numeros(self):
+        """o laboratório novo manda o brilho como número (o evento 'led'): ele vale, sem o arredondamento do texto"""
         pasta = self.placa((DADOS / "pisca.txt").read_text())
-        linhas = [self.evento(5, "aviso", texto="qualquer coisa", codigo="led", ref="D1", luz=0.42, i_med=0.0071,
-                              i_max=0.0071, queima=False),
-                  self.evento(6, "aviso", texto="D1 brilha de um jeito novo", codigo="led")]
+        led = dict(ref="D1", i_med=0.005926, i_max=0.005926, luz=0.5926, aceso=True, queima=False,
+                   texto="D1 aceso, 5,9 mA, luz 59% do anúncio")
+        linhas = [self.evento(0, "led", **dict(led, i_med=0.0, i_max=0.0, luz=0.0, aceso=False, texto="D1 apagado")),
+                  self.evento(5, "led", **led), self.evento(6, "led", **dict(led, i_med=0.035, queima=True)),
+                  self.evento(7, "aviso", texto="D1 aceso, 5,9 mA, luz 59% do anúncio", codigo="led"),
+                  self.evento(8, "led", ref="D1", texto="D1 brilha de um jeito novo")]
         p = programa.normalizar(linhas, pasta)
-        self.assertEqual(p["leds"]["D1"], [[5, 0.42, 7.1, False]])
-        self.assertIn([6, "led", "D1 brilha de um jeito novo"], p["avisos"])  # texto que não entendo não some
+        self.assertEqual(p["leds"]["D1"], [[0, 0.0, 0.0, False], [5, 0.5926, 5.926, False], [6, 0.5926, 35.0, True]])
+        self.assertEqual(p["avisos"], [[8, "led", "D1 brilha de um jeito novo"]])   # sem os números, o texto não some
+        self.assertNotIn([7, "led", "D1 aceso, 5,9 mA, luz 59% do anúncio"], p["avisos"])   # com os números, o texto sobra
+
+    def test_led_apagado_com_numeros(self):
+        """o LED aceso só pelo pull-up (35 µA, 0,35% da luz): o gêmeo diz apagado (aceso False), então ele entra com
+        0 e 0, como no texto, e ninguém conta como aceso. Sem o aceso (um laboratório de outro formato), vale o texto"""
+        pasta = self.placa((DADOS / "pisca.txt").read_text())
+        fio = dict(ref="D1", i_med=3.5e-05, i_max=3.5e-05, luz=0.0035, aceso=False, queima=False, texto="D1 apagado")
+        p = programa.normalizar([self.evento(0.005, "led", **fio)], pasta)
+        self.assertEqual(p["leds"]["D1"], [[0.005, 0.0, 0.0, False]])
+        self.assertFalse(programa.aceso(p, "D1", 1000))
+        sem = {k: v for k, v in fio.items() if k != "aceso"}
+        p = programa.normalizar([self.evento(1, "led", **sem), self.evento(2, "led", **dict(
+            sem, i_med=0.005926, luz=0.5926, texto="D1 aceso, 5,9 mA, luz 59% do anúncio"))], pasta)
+        self.assertEqual((p["leds"]["D1"], p["avisos"]), ([[1, 0.0, 0.0, False], [2, 0.59, 5.9, False]], []))
+
+    def test_aviso_de_texto_que_nao_entendo_nao_some(self):
+        pasta = self.placa((DADOS / "pisca.txt").read_text())
+        p = programa.normalizar([self.evento(6, "aviso", texto="D1 brilha de um jeito novo", codigo="led")], pasta)
+        self.assertEqual((p["leds"], p["avisos"]), ({}, [[6, "led", "D1 brilha de um jeito novo"]]))
+
+    def test_luz_em_lux_pega_os_volts_do_gemeo(self):
+        """a luz que foi em lux: os volts de entradas.luz são os que o gêmeo pôs no pino do LDR naquela hora"""
+        pasta = self.placa(LDR, pecas=["C10081"])
+        entradas = {"apertos": [], "luz": [{"ref": "LDR1", "t": 0.0, "lux": 100, "volts": None, "origem": "roteiro"},
+                                           {"ref": "LDR1", "t": 1500.0, "lux": 1, "volts": None, "origem": "app"}]}
+        linhas = [self.evento(0, "luz", ref="LDR1", lux=100.0, origem="roteiro"),
+                  self.evento(0, "adc", pino="GPIO34", volts=0.3763, origem="circuito"),
+                  self.evento(1500, "luz", ref="LDR1", lux=1.0, origem="roteiro"),
+                  self.evento(1500, "adc", pino="GPIO34", volts=2.3751, origem="circuito", nome="POT")]
+        p = programa.normalizar(linhas, pasta, entradas=entradas)
+        self.assertEqual([x["volts"] for x in p["entradas"]["luz"]], [0.3763, 2.3751])
+        self.assertEqual(p["pinos"]["GPIO34"]["volts"], [[0, 0.3763], [1500, 2.3751]])
+        self.assertTrue(any("entra em lux no LDR" in x for x in p["pendentes"]))
+        antigo = programa.normalizar([], pasta, entradas={"apertos": [], "luz": [dict(entradas["luz"][0], volts=0.3763)]})
+        self.assertTrue(any("entra como volts no pino do LDR" in x for x in antigo["pendentes"]))
+        # a luz foi em lux, mas a rodada parou antes de ela mudar: o pendente continua o do lux, e os volts ficam None
+        quebrou = programa.normalizar([self.evento(0, "erro", texto="ValueError: quebrei")], pasta, entradas={
+            "apertos": [], "luz": [dict(x) for x in entradas["luz"]]})
+        self.assertEqual([x["volts"] for x in quebrou["entradas"]["luz"]], [None, None])
+        self.assertTrue(any("entra em lux no LDR" in x for x in quebrou["pendentes"]))
+        self.assertFalse(any("entra como volts" in x for x in quebrou["pendentes"]))
+
+    def test_aviso_do_ldr_sem_luz_em_texto_de_gente(self):
+        """o laboratório avisa o LDR que começa sem luz com a dica do roteiro dele (um JSON): no programa.json vira
+        texto pro Luiz, com o nome do bloco e o lugar onde a luz muda (o app no livre, o roteiro.json no teste)"""
+        pasta = self.placa(LDR, pecas=["C10081"])
+        lab = ('LDR1 começa com 10 lux (o LDR do meio: 12,6 kΩ); o roteiro muda a luz com {"t": 5, "luz": "LDR1", '
+               '"lux": 1}')
+        livre = programa.normalizar([self.evento(0, "aviso", texto=lab, codigo="luz")], pasta, livre=True)
+        self.assertEqual(livre["avisos"], [[0, "luz", "LDR1 (olho de luz) começa com 10 lux (o LDR do meio: 12,6 kΩ) "
+                                                      "e fica assim até o app mudar a luz dele"]])
+        teste = programa.normalizar([self.evento(0, "aviso", texto=lab, codigo="luz")], pasta)
+        self.assertTrue(teste["avisos"][0][2].endswith("até uma luz do codigo/roteiro.json mudar"))
+        outro = programa.normalizar([self.evento(0, "aviso", texto="um aviso de luz novo", codigo="luz")], pasta)
+        self.assertEqual(outro["avisos"], [[0, "luz", "um aviso de luz novo"]])   # o que não entendo vai como veio
 
     def test_erro_com_a_linha_do_main(self):
         pasta = self.placa((DADOS / "pisca.txt").read_text())
@@ -186,6 +282,16 @@ class Normalizar(Temporarias):
                                                    "trocas de GPIO2 entre 4 e ∞", "estado tempo"])
         self.assertEqual(p["codigo"], 4)   # sem o código do lab.py: o que ele daria
         self.assertEqual(programa.normalizar([conf], pasta)["codigo"], 3)   # sem o 'fim', o laboratório diz 'travou'
+
+    def test_conferencia_da_serial_com_desde(self):
+        """o 'desde' da conferência 'serial' (a linha tem que sair depois dele) entra no texto, como o laboratório escreve"""
+        pasta = self.placa((DADOS / "pisca.txt").read_text())
+        confere = [{"serial": "clareou", "desde": 15, "ate": 15.5}, {"serial": "x", "desde": 1}, {"serial": "y", "ate": 2}]
+        conf = self.evento(2000, "conferencias", ok=2, falhas=["serial com 'x' depois de 1,000 s: nada depois de 1,000 s "
+                                                               "(a última linha saiu em 0,500 s)"])
+        p = programa.normalizar([conf], pasta, confere=confere)
+        self.assertEqual(p["conferencias"]["ok"], ["serial com 'clareou' depois de 15,000 s até 15,500 s",
+                                                   "serial com 'y' até 2,000 s"])
 
     def test_conferencias_que_nao_casam_ficam_na_conta(self):
         pasta = self.placa((DADOS / "pisca.txt").read_text())
@@ -241,10 +347,12 @@ class Preparar(Temporarias):
             arquivos["codigo/gemeo.roteiro"] = gemeo
         return self.placa(LDR, pecas=["C10081"], arquivos=arquivos, **k)
 
-    def test_luz_vira_volts_e_nunca_linha_de_lux(self):
+    def test_luz_vira_volts_no_laboratorio_antigo(self):
+        """o laboratório que não conhece a luz (lux=False): ela vira a tensão do divisor no GPIO do LDR, pela nossa
+        conta, e nunca uma linha de lux"""
         pasta = self.ldr({"tempo": 3, "entradas": [{"t": 0, "luz": "LDR1", "lux": 100, "_": "quarto aceso"}],
                           "confere": [{"serial": "oi"}]}, gemeo="# só comentário\n")
-        copia, usadas = programa.preparar(pasta, {"luz": [{"ref": "LDR1", "t": 2, "lux": 1}]}, livre=True)
+        copia, usadas = programa.preparar(pasta, {"luz": [{"ref": "LDR1", "t": 2, "lux": 1}]}, lux=False)
         rot = json.loads((copia / "roteiro.json").read_text())
         e = catalogo.conferido("C10081")["eletrica"]
         um, cem = (circuito.divisor_do_ldr(e, 22000, 3.3, lux) for lux in (1, 100))
@@ -252,7 +360,7 @@ class Preparar(Temporarias):
         self.assertEqual((v100["t"], v100["pino"], v1["t"], v1["pino"]), (0, "GPIO34", 2, "GPIO34"))
         self.assertAlmostEqual(v1["volts"], um, delta=1e-3)
         self.assertAlmostEqual(v100["volts"], cem, delta=1e-3)
-        self.assertNotIn("confere", rot)                                    # o livre roda sem conferências
+        self.assertEqual(rot["confere"], [{"serial": "oi"}])
         self.assertNotIn("lux", (copia / "gemeo.roteiro").read_text().lower())
         self.assertNotIn("lux", json.dumps([{k: v for k, v in x.items() if k != "_"} for x in rot["entradas"]]))
         self.assertEqual(usadas["luz"], [{"ref": "LDR1", "t": 0.0, "lux": 100, "volts": v100["volts"], "origem": "roteiro"},
@@ -260,6 +368,53 @@ class Preparar(Temporarias):
         self.assertEqual(sorted(a.name for a in copia.iterdir()), ["gemeo.roteiro", "main.py", "outro.py", "roteiro.json"])
         self.assertEqual(copia.parent, pasta.resolve() / "saida" / "programa")
         self.assertRegex(copia.name, r"^sianvolt_esp32_[0-9a-f]{8}$")
+
+    def test_luz_vai_em_lux_no_laboratorio_novo(self):
+        """o laboratório que conhece a luz (lux=True): ela vai em lux pro roteiro.json, e os volts ficam pro gêmeo"""
+        pasta = self.ldr({"tempo": 3, "entradas": [{"t": 0, "luz": "LDR1", "lux": 100, "_": "quarto aceso"},
+                                                   {"t": 0.5, "serial": "oi\n"}]})
+        copia, usadas = programa.preparar(pasta, {"luz": [{"ref": "LDR1", "t": 2, "lux": 1}]}, lux=True)
+        rot = json.loads((copia / "roteiro.json").read_text())
+        self.assertEqual([{k: v for k, v in x.items() if k != "_"} for x in rot["entradas"]],
+                         [{"t": 0.5, "serial": "oi\n"}, {"t": 0.0, "luz": "LDR1", "lux": 100},
+                          {"t": 2.0, "luz": "LDR1", "lux": 1}])
+        self.assertFalse(any("volts" in x for x in rot["entradas"]))
+        self.assertEqual(usadas["luz"], [{"ref": "LDR1", "t": 0.0, "lux": 100, "volts": None, "origem": "roteiro"},
+                                         {"ref": "LDR1", "t": 2000.0, "lux": 1, "volts": None, "origem": "app"}])
+        pasta = self.ldr({"entradas": [{"t": 1, "luz": "SW1", "lux": 1}]})
+        with self.assertRaisesRegex(ValueError, "^SW1 não é um olho de luz ligado num GPIO do ESP32$"):
+            programa.preparar(pasta, lux=True)
+        solto = self.placa(LDR.replace("liga U1.4 LDR1.1\n", ""), "solto", pecas=["C10081"],
+                           arquivos={"codigo/main.py": "print('oi')\n"})   # o LDR que não liga no ESP32
+        with self.assertRaisesRegex(ValueError, "LDR1 não é um olho de luz ligado num GPIO"):
+            programa.preparar(solto, {"luz": [{"ref": "LDR1", "t": 1, "lux": 1}]}, lux=True)
+
+    def test_livre_so_com_o_que_veio_do_app(self):
+        """no livre (o ▶ do app) só valem as entradas do app: os apertos do gemeo.roteiro e as entradas do roteiro.json
+        da placa ficam de fora (o I2C e o wifi, que são o mundo em volta, ficam); sem nada do app, a placa roda sozinha"""
+        gemeo = ("# os apertos do roteiro de teste\n1 s aperta SW1\n1,2 s solta SW1\nde 2 s a 2,5 s aperta SW1\n"
+                 "em 3 s GPIO14 = 0\ni2c 0x48 0x00 = 0x19\n4 s i2c 0x48 0x00 = 0x1E\nwifi falha\n")
+        pasta = self.ldr({"tempo": 6, "entradas": [{"t": 0, "luz": "LDR1", "lux": 100}, {"t": 1, "serial": "oi\n"},
+                                                   {"t": 2, "pino": "GPIO14", "valor": 0}],
+                          "confere": [{"serial": "oi"}]}, gemeo=gemeo)
+        for lux in (True, False):
+            with self.subTest(lux=lux):
+                copia, usadas = programa.preparar(pasta, livre=True, lux=lux)
+                self.assertEqual(json.loads((copia / "roteiro.json").read_text()), {"tempo": 6, "entradas": []})
+                ambiente = (copia / "gemeo.roteiro").read_text()
+                self.assertEqual(ambiente, "# os apertos do roteiro de teste\ni2c 0x48 0x00 = 0x19\n"
+                                           "4 s i2c 0x48 0x00 = 0x1E\nwifi falha\n")
+                self.assertEqual(usadas, {"apertos": [], "luz": []})
+                copia, usadas = programa.preparar(pasta, {"apertos": [{"ref": "SW1", "de": 0.5, "ate": 0.7}]},
+                                                  livre=True, lux=lux)
+                self.assertEqual(usadas, {"apertos": [{"ref": "SW1", "de": 500.0, "ate": 700.0, "origem": "app"}],
+                                          "luz": []})
+                self.assertEqual([x for x in (copia / "gemeo.roteiro").read_text().splitlines() if "aperta" in x],
+                                 ["de 0,5 s a 0,7 s aperta SW1   # do app"])
+        copia, usadas = programa.preparar(pasta, lux=True)   # fora do livre, o roteiro de teste continua inteiro
+        self.assertEqual([a["de"] for a in usadas["apertos"]], [1000.0, 2000.0])
+        self.assertEqual(len(json.loads((copia / "roteiro.json").read_text())["entradas"]), 3)
+        self.assertIn("em 3 s GPIO14 = 0", (copia / "gemeo.roteiro").read_text())
 
     def test_apertos_do_app_no_fim_do_gemeo_roteiro(self):
         pasta = self.ldr({"tempo": 3, "confere": [{"serial": "oi"}]}, gemeo="de 0,5 s a 1 s aperta SW1\n")
@@ -421,6 +576,79 @@ class Conferir(unittest.TestCase):
             with self.subTest(dados), self.assertRaisesRegex(ValueError, r'o confere.json é \{"confere"'):
                 programa.conferir(prog_de_ensaio(), dados)
         self.assertEqual(programa.conferir(prog_de_ensaio(), {"_": "comentário", "confere": []}), {"ok": [], "falhas": []})
+
+
+LAB_ANTIGO = {   # o que um laboratório sem L1 e L2 tem (o de antes da rodada 6), só o que o recursos_do_lab lê
+    "lab.py": "",
+    "nucleo/__init__.py": "",
+    "nucleo/contrato.py": "TIPOS = {'pino': {}, 'aviso': {}, 'fim': {}}\n",
+    "nucleo/roteiro.py": ("from .contrato import TIPOS\n\n\ndef validar(dados):\n    for e in dados.get('entradas', []):\n"
+                          "        if set(e) - {'t', 'pino', 'valor', 'volts', 'serial'}:\n"
+                          "            raise ValueError('não conheço')\n    return dados\n"),
+    "motores/gemeo/motor/roteiro.py": ("class Roteiro:\n    def __init__(self, fim_us, entradas=(), extra=''):\n"
+                                       "        self.eventos = [(e['t_ms'], {'tipo': 'externo', 'gpio': e['pino']}) "
+                                       "for e in entradas]\n")}
+
+
+class RecursosDoLab(Temporarias):
+    """o programa.py pergunta pro laboratório o que ele sabe (sem supor): o brilho em número e a luz em lux"""
+
+    def lab(self, arquivos):
+        pasta = Path(tempfile.mkdtemp(prefix="sianvolt-teste-")) / "laboratorio"
+        self.addCleanup(apagar, pasta.parent)
+        for nome, texto in arquivos.items():
+            (pasta / nome).parent.mkdir(parents=True, exist_ok=True)
+            (pasta / nome).write_text(texto)
+        return pasta / "lab.py"
+
+    def com_lab(self, lab):
+        with mock.patch.object(programa, "LAB", lab):
+            return programa.recursos_do_lab()
+
+    def test_laboratorio_antigo_e_nenhum(self):
+        antigo = self.lab(LAB_ANTIGO)
+        self.assertEqual(self.com_lab(antigo), frozenset())
+        self.assertFalse(list(antigo.parent.rglob("*.pyc")))   # e nada de .pyc escrito no laboratório
+        self.assertEqual(self.com_lab(Path(self.lab({})).parent / "nao_tem" / "lab.py"), frozenset())
+        meio = dict(LAB_ANTIGO, **{"nucleo/contrato.py": "TIPOS = {'pino': {}, 'led': {}}\n"})   # só o L1
+        self.assertEqual(self.com_lab(self.lab(meio)), frozenset({"led"}))
+        quebrado = dict(LAB_ANTIGO, **{"nucleo/roteiro.py": "isto não é python ("})
+        self.assertEqual(self.com_lab(self.lab(quebrado)), frozenset())
+
+    def test_le_de_novo_quando_o_laboratorio_muda(self):
+        lab = self.lab(LAB_ANTIGO)
+        self.assertEqual(self.com_lab(lab), frozenset())
+        contrato = lab.parent / "nucleo" / "contrato.py"
+        contrato.write_text("TIPOS = {'led': {}}\n")
+        os.utime(contrato, ns=(contrato.stat().st_atime_ns, contrato.stat().st_mtime_ns + 10**9))
+        self.assertEqual(self.com_lab(lab), frozenset({"led"}))
+
+    def test_varias_threads_ao_mesmo_tempo(self):
+        """o app é um ThreadingHTTPServer: perguntas juntas recebem a mesma resposta, o sys.dont_write_bytecode volta
+        como estava e nada de .pyc no laboratório (o sys.modules e o dont_write_bytecode são do processo inteiro)"""
+        lab = self.lab(dict(LAB_ANTIGO, **{"nucleo/contrato.py": "TIPOS = {'pino': {}, 'led': {}}\n"}))   # só o L1
+        self.addCleanup(programa._RECURSOS.clear)
+        respostas, barreira = [], threading.Barrier(6)
+
+        def pergunta():
+            barreira.wait()
+            respostas.append(programa.recursos_do_lab())
+        with mock.patch.object(programa, "LAB", lab), mock.patch.object(sys, "dont_write_bytecode", False):
+            for _ in range(25):
+                programa._RECURSOS.clear()   # cada rodada pergunta de novo, as 6 juntas
+                linhas = [threading.Thread(target=pergunta) for _ in range(6)]
+                for x in linhas:
+                    x.start()
+                for x in linhas:
+                    x.join()
+                self.assertFalse(sys.dont_write_bytecode)
+        self.assertEqual(set(respostas), {frozenset({"led"})})
+        self.assertEqual(len(respostas), 150)
+        self.assertFalse(list(lab.parent.rglob("*.pyc")))
+
+    @unittest.skipUnless(programa.LAB.is_file(), "sem o laboratorio/ (o clone limpo não tem)")
+    def test_o_laboratorio_daqui(self):
+        self.assertEqual(programa.recursos_do_lab(), frozenset({"led", "luz"}))
 
 
 class SemLaboratorio(Temporarias):
@@ -603,6 +831,25 @@ class ComLaboratorio(Temporarias):
         self.assertTrue((pasta / "saida" / "programa_livre.json").is_file())
         self.assertFalse((pasta / "saida" / "programa.json").exists())
 
+    def test_livre_sem_os_apertos_da_placa(self):
+        """o ▶ do app (livre) sem entradas: a placa roda sozinha, sem os apertos do roteiro de teste; com um aperto do
+        app, só ele. Fora do livre, o roteiro de teste aperta como sempre"""
+        main = ("from machine import Pin\nimport time\nfrom pinos import SW1\nb = Pin(SW1, Pin.IN, Pin.PULL_UP)\n"
+                "antes = 1\nfor i in range(150):\n    v = b.value()\n    if v != antes:\n        print('botao', v)\n"
+                "        antes = v\n    time.sleep_ms(10)\n")
+        pasta = self.placa(BOA, arquivos={"codigo/main.py": main, "codigo/gemeo.roteiro": "de 0,2 s a 0,3 s aperta SW1\n",
+                                          "codigo/roteiro.json": {"tempo": 1.5, "entradas": [{"t": 1, "serial": "oi\n"}]}})
+        sozinha = programa.rodar(pasta, livre=True, isolada=True)
+        self.assertEqual((sozinha["codigo"], sozinha["serial"]), (0, []))
+        self.assertEqual(sozinha["entradas"], {"apertos": [], "luz": []})
+        app = programa.rodar(pasta, {"apertos": [{"ref": "SW1", "de": 0.5, "ate": 0.7}]}, livre=True, isolada=True)
+        self.assertEqual([txt for _, txt in app["serial"]], ["botao 0", "botao 1"])
+        self.assertAlmostEqual(app["serial"][0][0], 500, delta=15)
+        self.assertEqual(app["entradas"]["apertos"], [{"ref": "SW1", "de": 500.0, "ate": 700.0, "origem": "app"}])
+        teste = programa.rodar(pasta, isolada=True)
+        self.assertAlmostEqual(teste["serial"][0][0], 200, delta=15)
+        self.assertEqual(teste["entradas"]["apertos"], [{"ref": "SW1", "de": 200.0, "ate": 300.0, "origem": "roteiro"}])
+
     def test_luz_no_divisor(self):
         main = "from machine import ADC, Pin\nimport time\nfrom pinos import LDR1\nadc = ADC(Pin(LDR1))\n" \
                "adc.atten(ADC.ATTN_11DB)\nfor i in range(4):\n    print('mv', adc.read_uv() // 1000)\n    time.sleep_ms(500)\n"
@@ -614,6 +861,153 @@ class ComLaboratorio(Temporarias):
         self.assertEqual(p["pinos"]["GPIO34"]["volts"], [[750.0, volts]])
         lidos = [int(txt.split()[1]) for _, txt in p["serial"]]
         self.assertAlmostEqual(lidos[-1] / 1000, volts, delta=0.01)
+
+
+def lab_antigo(rodar_lab):
+    """o rodar_lab como o laboratório antigo respondia: o brilho dos LEDs só no texto do aviso 'led', uma vez por
+    texto (o texto do evento 'led' é o mesmo de antes)"""
+    def rodar(copia, placa_txt):
+        linhas, codigo, problema = rodar_lab(copia, placa_txt)
+        saida, visto = [], {}
+        for x in linhas:
+            ev = json.loads(x)
+            if ev["tipo"] == "led":
+                if visto.get(ev["ref"]) == ev["texto"]:
+                    continue
+                visto[ev["ref"]] = ev["texto"]
+                ev = {"t_ms": ev["t_ms"], "tipo": "aviso", "texto": ev["texto"], "codigo": "led"}
+            saida.append(json.dumps(ev, ensure_ascii=False))
+        return saida, codigo, problema
+    return rodar
+
+
+@unittest.skipUnless(TEM_LAB, "sem o laboratório e o MicroPython do PC (laboratorio/ não está no clone limpo)")
+class DoisCaminhos(Temporarias):
+    """a luz pelo gêmeo (lux, o brilho em número) e pelo caminho antigo (volts por fora, o brilho no texto) contam a
+    mesma história no programa.json"""
+
+    def pelos_dois(self, pasta, **k):
+        """-> (programa.json pelo caminho antigo, pelo novo)"""
+        with mock.patch.object(programa, "recursos_do_lab", lambda: frozenset()), \
+                mock.patch.object(programa, "rodar_lab", lab_antigo(programa.rodar_lab)):
+            antigo = programa.rodar(pasta, isolada=True, **k)
+        self.assertEqual(programa.recursos_do_lab(), frozenset({"led", "luz"}))
+        return antigo, programa.rodar(pasta, isolada=True, **k)
+
+    def mesmas_decisoes(self, a, b):
+        """o mesmo código e as mesmas conferências; a serial, os modos, os níveis e o PWM iguais nos mesmos instantes
+        (± 1 ms); os volts no pino do LDR iguais (± 1 mV); e cada LED com a mesma luz e corrente em todo instante
+        dos dois (o texto antigo arredonda em 1% e 0,1 mA), aceso ou apagado igual (menos o 'meia luz' que o texto
+        antigo arredonda pra 0% e 0,0 mA: no caminho antigo ele some, e o gêmeo diz que está aceso)"""
+        self.assertEqual((a["codigo"], a["erro"], a["tempo_ms"], a["conferencias"]),
+                         (b["codigo"], b["erro"], b["tempo_ms"], b["conferencias"]))
+
+        def iguais(x, y, folga):
+            self.assertEqual(len(x), len(y), (x, y))
+            for p, q in zip(x, y):
+                self.assertAlmostEqual(p[0], q[0], delta=1)
+                for u, v in zip(p[1:], q[1:]):
+                    if isinstance(u, (int, float)) and isinstance(v, (int, float)):
+                        self.assertAlmostEqual(u, v, delta=folga)
+                    else:
+                        self.assertEqual(u, v)
+        iguais(a["serial"], b["serial"], 0)
+        self.assertEqual(list(a["pinos"]), list(b["pinos"]))
+        for g in a["pinos"]:
+            self.assertEqual((a["pinos"][g]["quem"], a["pinos"][g]["nome"]), (b["pinos"][g]["quem"], b["pinos"][g]["nome"]))
+            for k in ("modo", "nivel", "pwm"):
+                iguais(a["pinos"][g][k], b["pinos"][g][k], 0)
+            iguais(a["pinos"][g]["volts"], b["pinos"][g]["volts"], 0.001)
+        self.assertEqual(sorted(a["leds"]), sorted(b["leds"]))
+        for ref in a["leds"]:
+            for t in sorted({x[0] for x in a["leds"][ref] + b["leds"][ref]}):
+                x, y = programa.no_instante(a["leds"][ref], t), programa.no_instante(b["leds"][ref], t)
+                self.assertAlmostEqual(x[1], y[1], delta=0.0051, msg=f"luz do {ref} em {t} ms")
+                self.assertAlmostEqual(x[2], y[2], delta=0.051, msg=f"corrente do {ref} em {t} ms")
+                self.assertEqual(x[3], y[3])
+                if programa.aceso(a, ref, t) != programa.aceso(b, ref, t):   # só o arredondamento do texto antigo:
+                    # 'D1 meia luz, 0,0 mA na média (...), luz 0% do anúncio' vira 0 e 0, e o gêmeo diz aceso
+                    self.assertTrue(programa.aceso(b, ref, t) and y[1] < 0.005 and y[2] < 0.05, f"{ref} em {t} ms")
+        iguais([[x["t"], x["ref"], x["lux"], x["volts"], x["origem"]] for x in a["entradas"]["luz"]],
+               [[x["t"], x["ref"], x["lux"], x["volts"], x["origem"]] for x in b["entradas"]["luz"]], 0.001)
+
+    def test_luz_noturna_pequena(self):
+        pasta = self.placa(LUZ, pecas=["C10081"], arquivos={"codigo/main.py": MINI_LUZ, "codigo/roteiro.json": ROTEIRO_LUZ})
+        antigo, novo = self.pelos_dois(pasta, entradas={"luz": [{"ref": "LDR1", "t": 2.5, "lux": 15}]})
+        self.mesmas_decisoes(antigo, novo)
+        self.assertEqual((novo["codigo"], len(novo["conferencias"]["ok"]), novo["conferencias"]["falhas"]), (0, 5, []))
+        self.assertIn("serial com 'escureceu' depois de 1,000 s até 1,100 s", novo["conferencias"]["ok"])
+        e = catalogo.conferido("C10081")["eletrica"]
+        conta = [circuito.divisor_do_ldr(e, 22000, 3.3, lux) for lux in (100, 1, 100, 15)]
+        volts = novo["pinos"]["GPIO34"]["volts"]
+        self.assertEqual([t for t, _ in volts], [0.0, 1000.0, 2000.0, 2500.0])
+        for (_, v), c in zip(volts, conta):   # o gêmeo leu o divisor de verdade: a conta à mão, ± 1 mV
+            self.assertAlmostEqual(v, c, delta=0.001)
+        self.assertEqual([x["volts"] for x in novo["entradas"]["luz"]], [v for _, v in volts])
+        self.assertEqual([txt for _, txt in novo["serial"]], ["escureceu 2375", "clareou 376"])
+        luzes = [x[1] for x in novo["leds"]["D1"]]
+        self.assertTrue(any(round(x, 2) != x for x in luzes))   # a luz do gêmeo em número, e não o 59% do texto
+        self.assertTrue(all(round(x[1], 2) == x[1] for x in antigo["leds"]["D1"]))
+        self.assertTrue(any("entra em lux" in x for x in novo["pendentes"]))
+        self.assertTrue(any("entra como volts" in x for x in antigo["pendentes"]))
+
+    @unittest.skipUnless((programa.RAIZ / "placas" / "luz_noturna" / "codigo" / "main.py").is_file(),
+                         "sem a placas/luz_noturna (ela fica só na máquina do Luiz)")
+    def test_luz_noturna_de_verdade(self):
+        """a placa da luz noturna inteira (46 s de quarto, botão e vela), numa cópia"""
+        de = programa.RAIZ / "placas" / "luz_noturna"
+        pasta = self.placa((de / "placa.txt").read_text(), "luz_noturna")
+        shutil.rmtree(pasta / "pecas")
+        for nome in ("pecas", "codigo"):
+            shutil.copytree(de / nome, pasta / nome)
+        shutil.copy(de / "projeto.json", pasta / "projeto.json")
+        antigo, novo = self.pelos_dois(pasta)
+        self.mesmas_decisoes(antigo, novo)
+        self.assertEqual((novo["codigo"], novo["conferencias"]["falhas"]), (0, []))
+        self.assertGreater(len(novo["conferencias"]["ok"]), 20)
+
+    def test_led_aceso_so_pelo_pullup(self):
+        """o pino do LED que ficou como entrada com pull-up (o erro de quem esqueceu o Pin.OUT): passa um fiozinho de
+        corrente (o evento 'led' tem os números), o gêmeo diz 'D1 apagado', e pelos dois caminhos o D1 não acendeu"""
+        main = "from machine import Pin\nimport time\nfrom pinos import D1\nPin(D1, Pin.IN, Pin.PULL_UP)\ntime.sleep(1)\n"
+        pasta = self.placa(LUZ, pecas=["C10081"], arquivos={"codigo/main.py": main, "codigo/roteiro.json": {"tempo": 1.5}})
+        vistos, rodar_lab = [], programa.rodar_lab
+
+        def espia(*a):
+            linhas, codigo, problema = rodar_lab(*a)
+            vistos.extend(json.loads(x) for x in linhas)
+            return linhas, codigo, problema
+        with mock.patch.object(programa, "rodar_lab", espia):
+            antigo, novo = self.pelos_dois(pasta)
+        self.mesmas_decisoes(antigo, novo)
+        fio = [e for e in vistos if e["tipo"] == "led" and e["luz"] > 0]
+        self.assertTrue(fio and all(not e["aceso"] and e["texto"] == "D1 apagado" and e["i_med"] < 0.0001 for e in fio))
+        for p in (antigo, novo):
+            self.assertTrue(all(x[1:3] == [0.0, 0.0] for x in p["leds"]["D1"]), p["leds"])
+            self.assertFalse(any(programa.aceso(p, "D1", x[0]) for x in p["leds"]["D1"]))
+
+    def test_ldr_ligado_errado_aparece(self):
+        """com a luz em lux o pino lê o divisor de verdade: o LDR do lado errado lê o contrário e as conferências
+        pegam (no rodar, que é a etapa 8)"""
+        pasta = self.placa(LUZ_TROCADA, pecas=["C10081"], arquivos={"codigo/main.py": MINI_LUZ,
+                                                                     "codigo/roteiro.json": ROTEIRO_LUZ})
+        novo = programa.rodar(pasta, isolada=True)
+        self.assertEqual(novo["codigo"], 4)
+        self.assertEqual(len(novo["conferencias"]["falhas"]), 4)
+        self.assertGreater(novo["pinos"]["GPIO34"]["volts"][0][1], 2.5)   # 100 lux: o pino lê alto, como no escuro
+        self.assertEqual(novo["serial"][0][1].split()[0], "escureceu")    # e a luz acende com o quarto aceso
+
+    def test_divisor_ligado_num_gpio(self):
+        """o divisor alimentado por um GPIO que o programa liga (economiza o LDR quando não lê): a conta de fora põe
+        todo GPIO solto e não vê o divisor ligado, então o caminho antigo erra uma placa certa; o gêmeo acerta"""
+        main = MINI_LUZ.replace("from pinos import D1, LDR1\n", "from pinos import D1, LDR1\nPin(27, Pin.OUT, value=1)\n")
+        pasta = self.placa(LUZ.replace("liga U1.16 R1.1\n", "liga U1.10 R1.1\n"), pecas=["C10081"],
+                           arquivos={"codigo/main.py": main, "codigo/roteiro.json": ROTEIRO_LUZ})
+        antigo, novo = self.pelos_dois(pasta)
+        self.assertEqual((novo["codigo"], novo["conferencias"]["falhas"]), (0, []))
+        self.assertAlmostEqual(novo["pinos"]["GPIO34"]["volts"][1][1], 2.375, delta=0.01)   # 1 lux, pelo GPIO27 em 1
+        self.assertEqual((antigo["codigo"], antigo["serial"]), (4, []))   # a conta de fora deu ~0 V: nunca escureceu
+        self.assertLess(antigo["entradas"]["luz"][1]["volts"], 0.01)
 
 
 if __name__ == "__main__":

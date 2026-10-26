@@ -113,6 +113,83 @@ main { flex: 1; min-height: 0; display: flex; }
 .gpio .le.queima { color: var(--erro); } .gpio .le.fora { color: var(--cobre); } .gpio .le.ok { color: var(--ok); }
 .painel .pendentes { display: flex; flex-direction: column; gap: 4px; }
 .painel .pendentes .a-conferir { font-size: 12px; }
+/* ▶ Programa: a régua do tempo embaixo da placa e, do lado, o que o programa fazia naquele instante */
+.ferramentas button[data-programa][aria-pressed="true"] { background: var(--cobre); color: #2A1A05; }
+.ferramentas button[data-programa][aria-pressed="true"]:hover { background: #EBB878; }
+.area.com-regua { --regua: 104px; }
+.area.com-regua .desenho { height: calc(100% - var(--regua)); }
+.area.com-regua .tamanho { bottom: calc(var(--regua) + 8px); }
+.area.com-regua .ferramentas { max-height: calc(100% - var(--regua) - 24px); overflow-y: auto; }   /* tela baixa: as ferramentas rolam, a régua não cobre o ▶ */
+.regua { position: absolute; left: 0; right: 0; bottom: 0; height: var(--regua); z-index: 6; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 16px 8px; background: var(--painel); border-top: 1px solid var(--borda); }
+.regua .comandos { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.regua .botao-r { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: #C8CDD2; }
+.regua .botao-r:hover { background: #262C32; color: var(--texto); }
+.regua .botao-r:disabled { opacity: 0.35; cursor: not-allowed; }
+.regua .escolhas { padding: 2px; } .regua .escolhas button { min-height: 28px; padding: 0 10px; font-size: 13px; }
+.regua .agora-t { font-family: var(--mono); font-size: 13px; color: var(--sec); white-space: nowrap; } .regua .agora-t b { font-weight: 500; color: var(--texto); }
+.regua .rodando-r { margin-left: auto; }
+.trilho { position: relative; height: 40px; }
+.trilho input[type="range"] { position: absolute; left: 0; right: 0; top: 11px; width: 100%; height: 18px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+.trilho input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--cobre) var(--pos, 0%), #39424A var(--pos, 0%)); }
+.trilho input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: #F4F4F2; border: 0; }
+.trilho input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--cobre) var(--pos, 0%), #39424A var(--pos, 0%)); }
+.trilho input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #F4F4F2; border: 0; }
+.trilho input[type="range"]:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px; border-radius: 4px; }
+.trilho .marcas { position: absolute; left: 7px; right: 7px; top: 0; bottom: 0; pointer-events: none; }   /* 7 px: o meio da bolinha nas pontas */
+.trilho .marcas button { position: absolute; pointer-events: auto; padding: 0; }
+.trilho .m-serial { top: 0; width: 8px; height: 10px; transform: translateX(-50%); background: linear-gradient(#C8CDD2, #C8CDD2) center / 2px 100% no-repeat; }
+.trilho .m-aviso { top: 1px; width: 8px; height: 8px; transform: translateX(-50%); border-radius: 50%; }
+.trilho .m-aviso.ruim { background: var(--erro); } .trilho .m-aviso.atencao { background: var(--cobre); }
+.trilho .m-erro { top: 0; bottom: 0; width: 8px; transform: translateX(-50%); background: linear-gradient(var(--erro), var(--erro)) center / 2px 100% no-repeat; }
+.trilho .m-aperto { top: 31px; height: 7px; min-width: 4px; border-radius: 2px; background: #6FA8DC; }
+.trilho .m-luz { top: 30px; width: 9px; height: 9px; transform: translateX(-50%) rotate(45deg); background: #FFD34E; border-radius: 1px; }
+.programa .linha-p { display: flex; align-items: baseline; gap: 8px; }
+.programa .valor-p { flex: none; min-width: 52px; text-align: center; padding: 2px 8px; border-radius: 6px; font-family: var(--mono); font-size: 13px; background: #22272C; color: var(--sec); }
+.programa .valor-p.um { background: #173A26; color: var(--ok); } .programa .valor-p.pwm { background: #3A2E17; color: var(--cobre); }
+.programa .valor-p.volts { background: #1A2230; color: var(--destaque); } .programa .valor-p.queima { background: #3A1A1A; color: var(--erro); }
+.programa .estado-p { display: flex; flex-direction: column; gap: 4px; font-size: 13px; line-height: 1.5; color: #C8CDD2; }
+.programa .bloco-p { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid var(--borda); }
+.programa .bloco-p > b { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sec); }
+.programa .bloco-p > b .sub { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.serial-p { margin: 0; padding: 6px 8px; list-style: none; max-height: 220px; overflow: auto; background: var(--area); border: 1px solid var(--borda); border-radius: 8px; font-family: var(--mono); font-size: 12px; line-height: 1.5; }
+.serial-p li { display: flex; align-items: baseline; gap: 8px; color: #9AA3AD; } .serial-p li.ultima { color: var(--texto); } .serial-p li > span { min-width: 0; overflow-wrap: anywhere; }
+.serial-p li button, .lista-p li button { flex: none; min-width: 60px; padding: 0; text-align: right; font-family: var(--mono); font-size: 11px; color: var(--sec); }
+.serial-p li button:hover, .lista-p li button:hover { color: var(--cobre); }
+.lista-p { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; line-height: 1.45; color: #C8CDD2; }
+.lista-p li { display: flex; align-items: baseline; gap: 8px; } .lista-p li > span { min-width: 0; overflow-wrap: anywhere; }
+.lista-p li.info > span { font-size: 12px; color: var(--sec); } .lista-p .selo { margin-right: 6px; }
+.lista-p .ok { color: var(--ok); } .lista-p .falha { color: var(--erro); }
+.selo.ruim { color: var(--erro); border-color: #6B2A2A; } .selo.atencao { color: var(--cobre); border-color: #5A4527; }
+.erro-p { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 8px; background: #2A1416; border: 1px solid #6B2A2A; font-size: 13px; line-height: 1.5; color: var(--erro); }
+.erro-p code { font-family: var(--mono); font-size: 12px; background: var(--area); color: var(--texto); padding: 6px 8px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.erro-p pre { margin: 6px 0 0; font-family: var(--mono); font-size: 11px; color: var(--sec); white-space: pre-wrap; overflow-wrap: anywhere; }
+.som { fill: none; stroke: var(--cobre); stroke-width: 0.35; stroke-dasharray: 0.9 0.9; pointer-events: none; animation: fluxo 0.6s linear infinite; }
+/* ▶ Programa, Rodar de novo: os chips (apertos e luz do quarto), a luz do quarto e o botão; na régua, o que ainda não rodou é vazado */
+.mexer-p .dica b { font-weight: 500; color: var(--texto); }
+.mexer-p .luz-p { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; font-size: 13px; color: #C8CDD2; }
+.mexer-p .luz-p b { font-weight: 500; color: var(--texto); }
+.mexer-p .volts-p { display: flex; flex-direction: column; gap: 2px; }   /* uma luz por linha: o pino lê X V (a faixa) */
+.mexer-p .chips-p { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-p { display: inline-flex; align-items: center; max-width: 100%; min-height: 32px; padding-left: 10px; border: 1px solid var(--borda2); border-radius: 999px; font-family: var(--mono); font-size: 12px; color: #C8CDD2; }
+.chip-p.a-rodar { border-style: dashed; }   /* ainda não rodou (.novo e .erro são classes do desenho, sem clique) */
+.chip-p.recusado { border: 1px solid var(--erro); color: var(--erro); }
+.chip-p i { flex: none; width: 7px; height: 7px; margin-right: 7px; border-radius: 1px; background: #FFD34E; transform: rotate(45deg); }
+.chip-p i.apertos { width: 11px; height: 5px; border-radius: 2px; background: #6FA8DC; transform: none; }
+.chip-p > button { min-height: 32px; padding: 0; text-align: left; overflow-wrap: anywhere; }
+.chip-p > button .v { display: block; padding-bottom: 2px; font-size: 11px; color: var(--sec); }   /* a luz: o que o pino lê, embaixo */
+.chip-p > button:hover { color: var(--texto); }
+.chip-p > button.tirar { flex: none; width: 32px; text-align: center; color: var(--sec); }
+.chip-p > button.tirar:hover { color: var(--erro); }
+.mexer-p .rodar-p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.mexer-p .rodar-p .pilula { color: var(--cobre); border-color: #5A4527; }
+.mexer-p .rodar-p .pilula:hover:not(:disabled) { background: #2A2116; }
+.mexer-p .rodar-p .pilula:disabled { opacity: 0.5; cursor: not-allowed; }
+.mexer-p .aviso { margin: 0; }
+/* o que ainda não rodou: tracejado claro (como o chip), maior que a marca cheia e por cima dela (a do roteiro no mesmo
+   instante não esconde) e nunca um pontinho */
+.trilho .m-aperto.pendente { top: 28px; height: 12px; min-width: 14px; background: rgba(111, 168, 220, 0.35); border: 1.5px dashed #F4F4F2; }
+.trilho .m-luz.pendente { top: 29px; width: 11px; height: 11px; background: rgba(255, 211, 78, 0.35); border: 1.5px dashed #F4F4F2; }
+@media (max-width: 720px) { .area.com-regua { --regua: 112px; } .regua { padding: 4px 12px 6px; } }
 
 aside.inspetor { flex: 0 0 340px; overflow: auto; padding: 20px; border-left: 1px solid var(--borda); display: flex; flex-direction: column; gap: 16px; font-size: 14px; }
 .inspetor .cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
@@ -335,7 +412,7 @@ table.lux .de-ate { display: block; font-size: 10.5px; opacity: 0.75; }   /* a f
 .via { fill: var(--cobre); pointer-events: none; }
 .pad { fill: var(--cobre); }
 .broca { fill: var(--area); pointer-events: none; }
-.ref { fill: #F4F4F2; font-family: var(--mono); pointer-events: none; }
+.ref { fill: #F4F4F2; font-family: var(--mono); font-size-adjust: cap-height 1; pointer-events: none; }   /* a letra maiúscula com a altura do font-size: a do Gerber */
 .apagado { opacity: 0.18; }
 .sel { fill: none; stroke: var(--destaque); stroke-width: 0.3; pointer-events: none; }
 .sel-pino { fill: none; stroke: #FFFFFF; stroke-width: 0.25; pointer-events: none; }
@@ -380,6 +457,7 @@ const S = {
   aba: 'processo', detalhado: false,
   ligado: false,         // circuito ligado no papel (aba Projeto)
   ajustes: novosAjustes(),   // o que o painel mudou
+  prog: novoPrograma(),  // ▶ Programa (aba Projeto): o programa.json que a régua mostra e o instante dela
   api: false,            // true quando a pagina vem do app.py (da pra rodar os testes daqui)
   cotacao: null,         // fabrica.json: o que aconteceu no site da fabrica
   projeto: null,         // /api/projeto: objetivo, perguntas, blocos e carrinho (passos 1 a 3)
@@ -747,19 +825,27 @@ function placaSVG(m, o = {}) {
   m.furos.forEach((f, i) => {
     s += `<circle class="furo${nets ? ' apagado' : ''}" cx="${f.x}" cy="${Y(f.y)}" r="${f.d / 2}"${alvo('furo:' + i)}/>`;
   });
-  if (o.sim) {   // brilho dos LEDs acesos, por baixo de tudo
+  if (o.sim || o.programa) {   // brilho dos LEDs acesos, por baixo de tudo
     s += '<defs><filter id="borrao" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="0.9"/></filter></defs>';
     for (const p of m.pecas) {
-      const r = o.sim.pecas[p.ref];
-      if (!r || p.eletrica?.modelo !== 'led' || !r.acende) continue;
-      const forca = Math.min(1, r.i / p.eletrica.i_teste), cor = COR_DE_TELA[p.eletrica.cor];   // a cor do LED, da eletrica dele
-      s += `<circle class="brilho" cx="${p.x}" cy="${Y(p.y)}" r="${p.corpo.w / 2 + 1.5 + forca * 1.5}" opacity="${(0.25 + 0.5 * forca).toFixed(2)}"${cor ? ` style="fill:${cor}"` : ''} filter="url(#borrao)"/>`;
+      if (p.eletrica?.modelo !== 'led') continue;
+      let forca, opacidade, cor;
+      if (o.sim) {   // ▶ Ligar (como era): a corrente contra a do teste do datasheet, na cor da eletrica (sem ela, a do .brilho)
+        const r = o.sim.pecas[p.ref];
+        if (!r?.acende) continue;
+        forca = Math.min(1, r.i / p.eletrica.i_teste); opacidade = 0.25 + 0.5 * forca; cor = COR_DE_TELA[p.eletrica.cor];
+      } else {   // ▶ Programa: a luz que o gêmeo calculou (a parte do brilho do anúncio), na cor de cada LED; o aceso
+        const l = o.programa.luzes[p.ref];   // com menos de 1% ainda aparece, fraquinho (o painel diz 'bem fraquinho')
+        if (!ledAceso(l)) continue;
+        forca = Math.min(1, l.luz); opacidade = Math.max(BRILHO_MIN, 0.75 * Math.sqrt(forca)); cor = corDoLed(p);
+      }
+      s += `<circle class="brilho" cx="${p.x}" cy="${Y(p.y)}" r="${p.corpo.w / 2 + 1.5 + forca * 1.5}" opacity="${opacidade.toFixed(2)}"${cor ? ` style="fill:${cor}"` : ''} filter="url(#borrao)"/>`;
     }
   }
   for (const p of m.pecas) {
     const c = p.corpo, x = p.x - c.w / 2, y = Y(p.y) - c.h / 2;
     const raio = c.redondo ? Math.min(c.w, c.h) / 2 : 0.4;
-    const apertado = o.sim && p.eletrica?.modelo === 'chave' && o.ajustes?.chave[p.ref] ? ' apertado' : '';
+    const apertado = p.eletrica?.modelo === 'chave' && ((o.sim && o.ajustes?.chave[p.ref]) || o.programa?.apertados.has(p.ref)) ? ' apertado' : '';
     const loja = p.desenho?.length ? ' da-loja' : '';   // peca da loja: o retangulo so pega o clique; o desenho e o oficial
     s += `<rect class="corpo${p.pinos.length > 8 ? ' modulo' : ''}${loja}${apaga(null, p.ref)}${apertado}" x="${x}" y="${y}" width="${c.w}" height="${c.h}" rx="${raio}"${alvo('peca:' + p.ref)}/>`;
     for (const traco of p.desenho || []) {
@@ -786,8 +872,9 @@ function placaSVG(m, o = {}) {
       if (pino.furo) s += `<circle class="broca${pinoApagado(p, pino)}" cx="${pino.x}" cy="${Y(pino.y)}" r="${pino.furo / 2}"/>`;
     }
   }
-  for (const p of m.pecas) {
-    s += `<text class="ref${apaga(null, p.ref)}" x="${p.x}" y="${Y(p.y) - p.corpo.h / 2 - fonte * 0.45}" font-size="${fonte}" text-anchor="middle">${esc(p.ref)}</text>`;
+  for (const p of m.pecas) {   // o nome onde o Gerber escreve: a base no y do nome_pos, a altura e o comprimento das letras dele
+    const n = posDoNome(p);
+    s += `<text class="ref${apaga(null, p.ref)}" x="${n.x}" y="${Y(n.y)}" font-size="${n.altura}" textLength="${n.largura}" text-anchor="middle">${esc(p.ref)}</text>`;
   }
 
   // camadas por cima: selecao, novidades, erros
@@ -808,13 +895,19 @@ function placaSVG(m, o = {}) {
       if (o.sim.pecas[p.ref]?.queima) { s += contorno(p.ref, 'erro', 1.2) + etiquetaAoLado(p, Y, W, 'queima!', fonte * 0.8, 'var(--erro)', '#2A0B08'); }
     }
   }
+  if (o.programa) {   // ▶ Programa: o som apitando naquele instante e o LED que o gêmeo disse que queima
+    for (const p of m.pecas) {
+      if (p.eletrica?.modelo === 'piezo' && o.programa.sons.has(p.ref)) s += `<circle class="som" cx="${p.x}" cy="${Y(p.y)}" r="${Math.max(p.corpo.w, p.corpo.h) / 2 + 0.9}"/>`;
+      if (o.programa.luzes[p.ref]?.queima) s += contorno(p.ref, 'erro', 1.2) + etiquetaAoLado(p, Y, W, 'queima!', fonte * 0.8, 'var(--erro)', '#2A0B08');
+    }
+  }
   // os erros (vermelho) e os avisos (amarelo) da aba Testes: contorno em cada peça e a etiqueta onde o rótulo veio ('' = só
   // o contorno); os erros escolhem o lugar primeiro, cada etiqueta num canto livre, e os erros ficam por cima
   const ocupado = [];
   const camada = (lista, classe, fundo, cor, pula = {}) => Object.entries(lista || {}).map(([ref, rotulo]) => {
     const p = m.pecas.find(q => q.ref === ref);
     if (!p || ref in pula) return '';
-    return contorno(ref, classe, 1.2) + (rotulo ? etiquetaLivre(m, p, Y, rotulo, fonte * 0.8, fundo, cor, ocupado, fonte) : '');
+    return contorno(ref, classe, 1.2) + (rotulo ? etiquetaLivre(m, p, Y, rotulo, fonte * 0.8, fundo, cor, ocupado) : '');
   }).join('');
   const erros = camada(o.erros, 'erro', 'var(--erro)', '#2A0B08');
   s += camada(o.avisos, 'aviso-peca', 'var(--cobre)', '#2A1A05', o.erros || {}) + erros;
@@ -896,12 +989,25 @@ function caixaDaPeca(p, Y) {
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
 }
 
+// o nome da peça na serigrafia: o nome_pos que o gerar.py escolheu e gravou no modelo.json ({x, y} = o meio da base do
+// texto, y pra cima; altura e largura das letras, em mm). O modelo de antes dele (uma versão antiga no relógio) tinha o
+// nome sempre em cima do corpo: base 0,5 mm acima dele, letra de 1,2 mm (NOME_LONGE e LETRA do gerar.py)
+function posDoNome(p) {
+  if (p.nome_pos) return p.nome_pos;
+  const letra = 1.2, longe = 0.5;
+  return { x: p.x, y: p.y + p.corpo.h / 2 + longe, altura: letra, largura: p.ref.length * letra - letra / 3, lado: 'cima' };
+}
+// a caixa do nome da peça no desenho, em coordenadas do SVG: [x0, y0, x1, y1]
+function caixaDoNome(p, Y) {
+  const n = posDoNome(p);
+  return [n.x - n.largura / 2, Y(n.y + n.altura), n.x + n.largura / 2, Y(n.y)];
+}
+
 // a etiqueta perto da peça, no primeiro lugar que não cobre outra peça, o nome dela (R4, SW1) nem outra etiqueta (à
-// direita, à esquerda, em cima ou embaixo); se nenhum está livre, o que cobre menos. ocupado ganha a caixa da posta.
-// fonteRef: o tamanho do nome das peças no desenho
-function etiquetaLivre(m, p, Y, texto, fonte, fundo, cor, ocupado, fonteRef) {
+// direita, à esquerda, em cima ou embaixo); se nenhum está livre, o que cobre menos. ocupado ganha a caixa da posta
+function etiquetaLivre(m, p, Y, texto, fonte, fundo, cor, ocupado) {
   const w = larguraEtiqueta(texto, fonte), h = fonte * 1.6, [x0, y0, x1, y1] = caixaDaPeca(p, Y), topo = Y(p.y) - p.corpo.h / 2 - 0.4;
-  const nome = q => { const yb = Y(q.y) - q.corpo.h / 2 - fonteRef * 0.45, l = q.ref.length * fonteRef * 0.62; return [q.x - l / 2, yb - fonteRef, q.x + l / 2, yb + fonteRef * 0.2]; };
+  const nome = q => caixaDoNome(q, Y);
   const lugares = [[x1 + 1.4, topo], [x0 - 1.4 - w, topo], [p.x - w / 2, Math.min(y0, nome(p)[1]) - 0.4 - h / 2], [p.x - w / 2, y1 + 0.8 + h / 2]];
   const outras = [...m.pecas.filter(q => q !== p).flatMap(q => [caixaDaPeca(q, Y), nome(q)]), nome(p), ...ocupado];
   const cobre = ([x, y]) => outras.reduce((soma, [a, b, c, d]) => soma + Math.max(0, Math.min(x + w, c) - Math.max(x, a)) * Math.max(0, Math.min(y + h / 2, d) - Math.max(y - h / 2, b)), 0)
@@ -959,6 +1065,7 @@ function desenharProjeto(main) {
           <button type="button" class="zoom" data-centralizar aria-label="Centralizar (0)" title="Centralizar (0)">100%</button>
           <hr>
           <button type="button" data-ligar aria-label="Ligar o circuito (L)" title="Ligar o circuito (L)"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg></button>
+          <button type="button" data-programa hidden aria-label="Programa: a régua do tempo (P)" title="Programa: o que o main.py fez, na régua do tempo (P)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5v9l7.5-4.5z" fill="currentColor" stroke="none"/><path d="M3 18.5h18M6 16v5M12 16v5M18 16v5"/></svg></button>
         </div>
         <svg class="desenho" xmlns="http://www.w3.org/2000/svg"></svg>
         <span class="tamanho"></span>
@@ -970,6 +1077,13 @@ function desenharProjeto(main) {
   }
   const area = main.querySelector('.area');
   area.querySelector('.tamanho').textContent = `${mm(m.placa.w, 0)} × ${mm(m.placa.h, 0)} mm · 2 camadas`;
+  // ▶ Programa: só na placa que tem programa (a lanterna não tem); um de cada vez com o ▶ Ligar (o último ligado fica).
+  // Se o GET disse que falta o main.py, a régua fica aberta dizendo isso, e o botão some quando ela fechar
+  const tem = temPrograma(m), botaoProg = area.querySelector('[data-programa]');
+  if (S.prog.aberto && (S.ligado || (!tem && S.prog.tem !== false))) fecharPrograma();
+  botaoProg.hidden = !tem && !S.prog.aberto;
+  botaoProg.setAttribute('aria-pressed', S.prog.aberto);
+  const agora = desenharRegua(area);   // o que a placa fazia no instante da régua, ou null (régua fechada)
   const ligar = area.querySelector('[data-ligar]');
   const motivo = motivoSemSimulacao(m);
   ligar.disabled = !!motivo && !S.ligado;   // ligado, o botao sempre deixa desligar
@@ -990,12 +1104,13 @@ function desenharProjeto(main) {
   }
 
   const novos = S.destacar ? novidades(m, S.modelosVersao[(S.ver ?? versaoAtual()) - 1]) : null;
-  area.querySelector('.desenho').innerHTML = placaSVG(m, { sel: S.sel, novos, interativo: true, sim, ajustes: S.ajustes });
+  area.querySelector('.desenho').innerHTML = placaSVG(m, { sel: S.sel, novos, interativo: true, sim, ajustes: S.ajustes, programa: agora });
   if (S.cx === null) centralizar();
   aplicarZoom();
 
   let painel = main.querySelector('aside.inspetor');
   const info = S.sel && inspecionar(m, S.sel, sim);
+  if (!info && S.prog.aberto) return desenharPainelDoPrograma(main, m, painel, agora);
   if (!info && !sim && !semSolucao) { painel?.remove(); return; }
   if (!painel) { painel = document.createElement('aside'); painel.className = 'inspetor'; main.append(painel); }
   if (!info && semSolucao) {   // ligado, mas nao da pra resolver esta placa (ou esta versao dela)
@@ -1473,11 +1588,646 @@ function inspecionar(m, sel, sim) {
   return null;
 }
 
+// ---------- ▶ Programa: a régua do tempo (só lê; quem roda o programa é a etapa 8 ou o app) ----------
+// O codigo/main.py rodou no gêmeo do ESP32 (o laboratório) e virou o saida/programa.json (o roteiro de teste, com as
+// conferências) ou o saida/programa_livre.json (o do app, sem elas). O GET /api/programa devolve o mais novo dos dois,
+// ou {rodando: true}. A régua vai de 0 ao tempo_ms; no instante t a placa mostra cada LED com a luz e a cor dele, e o
+// painel, o que cada GPIO fazia, a serial até t, os avisos, o erro (com a linha do main.py) e as conferências
+function novoPrograma() {
+  return { aberto: false, tem: null, temDe: null, dado: null, versao: 0, bruto: null, rodando: false, falta: '', lendo: false,
+    proxima: 0, leu: 0, t: 0, tocando: false, vez: 0, vel: 1, main: null, desenhado: null, quando: 0,
+    // Rodar de novo: o pedido (os chips), o POST indo, a espera do resultado novo e o recado (o erro do app, em português;
+    // recadoSome: o recado que some quando chegar um resultado novo, o 409 e o 'não chegou')
+    pedido: null, enviando: false, espera: null, recado: '', recadoSome: '', errado: null };
+}
+const FOLGA_T = 0.0005;   // ms: o mesmo instante (como no programa.py: o laboratório arredonda o t em 3 casas)
+const emSeg = ms => `${mm(ms / 1000, 3)} s`;
+const porCentoFino = x => !(x > 0) ? '0%' : x < 0.01 ? `${mm(x * 100, 2)}%` : x < 0.095 ? `${mm(x * 100, 1)}%` : `${Math.round(x * 100)}%`;
+// o que o código do lab.py quer dizer (laboratorio/nucleo/contrato.py e ferramenta/programa.py)
+const CODIGO_DO_PROGRAMA = { 0: 'rodou até o fim', 1: 'parou com erro no programa', 2: 'nem chegou a rodar (a placa, o roteiro ou as entradas têm erro)',
+  3: 'travou', 4: 'rodou, mas uma conferência falhou', 5: 'não rodou: o gêmeo (laboratório e MicroPython) não está nesta máquina' };
+// o rótulo de cada aviso do gêmeo, com as palavras da etapa 8 (testar.py): 'ruim' reprova a etapa 8 (o REPROVA, o
+// flutuando, o sem circuito e o que para o programa no por_que_parou: travou, reset, wdt e sono), 'atencao' não reprova
+// mas merece o olho (o MOSTRA, e o roteiro forçando um pino: o 'curto' e o 'tensao' do contrato.py, que falam de
+// queimar o pino da placa de verdade), 'info' é conversa do laboratório (a versão do MicroPython, o Wi-Fi de mentira)
+const AVISO_RUIM = { queima: 'queima', corrente: 'corrente alta', boot: 'pino de boot', flash: 'pino da memória flash', travou: 'travou',
+  reset: 'reiniciou', wdt: 'reiniciou', sono: 'dormiu' };
+const AVISO_ATENCAO = { entrada: 'leitura incerta', serial: 'pino da serial', psram: 'pino da psram', placa: 'pino fora do DevKit',
+  pull: 'sem pull de dentro', rapido: 'troca rápido', indisponivel: 'sem o gêmeo', curto: 'curto no roteiro', tensao: 'tensão alta no roteiro' };
+function tipoDoAviso(c, txt) {
+  if (c === 'entrada' && /flutuando|aleatóri/.test(txt)) return ['flutuando', 'ruim'];
+  if (c === 'circuito' && txt.startsWith('não deu pra ligar o circuito')) return ['sem circuito', 'ruim'];
+  if (c === 'adc') return [/faixa boa/.test(txt) ? 'fora da faixa boa' : 'ADC', 'atencao'];
+  if (AVISO_RUIM[c]) return [AVISO_RUIM[c], 'ruim'];
+  if (AVISO_ATENCAO[c]) return [AVISO_ATENCAO[c], 'atencao'];
+  return ['', 'info'];
+}
+const ICONE_TOCA = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>';
+const ICONE_PAUSA = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>';
+const ICONE_VOLTA = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h2.2v14H6zM19 5v14L9.5 12z"/></svg>';
+const ICONE_VAI = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.8 5H18v14h-2.2zM5 5v14l9.5-7z"/></svg>';
+
+// a cor de tela de um LED: a 'cor' da eletrica (do datasheet), a da peça escolhida no projeto (pergunta 'cor') ou a do
+// nome dela ('LED vermelho 5 mm'); sem nenhuma, um branco neutro (nada de inventar um vermelho)
+function corDoLed(p) {
+  const daPeca = (S.projeto?.perguntas || []).find(q => q.id === 'cor')?.por_led?.find(x => x.ref === p.ref)?.da_peca;
+  const nome = (p.nome || '').toLowerCase(), peloNome = Object.keys(COR_DE_TELA).sort((a, b) => b.length - a.length).find(c => nome.includes(c));
+  return COR_DE_TELA[p.eletrica?.cor] || COR_DE_TELA[daPeca] || COR_DE_TELA[peloNome] || '#FFF3DC';
+}
+// o LED aceso no instante, como o aceso() do programa.py (a luz vem com 2 casas: 0,1% de PWM dá luz 0 e uns µA)
+const ledAceso = l => !!l && (l.luz > 0 || l.mA > 0);
+const BRILHO_MIN = 0.1;   // a opacidade do brilho de um LED aceso bem fraquinho: só pra ele não sumir do desenho
+
+// a placa tem programa? A etapa 'Roda o programa' só existe com o codigo/main.py; sem os testes, a placa com o cérebro
+// pode ter. Se o GET disse 'sem_programa' (falta o main.py), não tem até os testes rodarem de novo (o testes.json novo
+// diz). A lanterna não tem: nem o botão aparece
+function temPrograma(m) {
+  const P = S.prog;
+  if (P.tem === false && P.temDe === (S.testes?.inicio ?? null)) return false;
+  if (P.dado) return true;
+  if (S.testes?.etapas) return S.testes.etapas.some(e => /programa/i.test(e.nome));
+  return !!m?.pecas.some(p => p.eletrica?.modelo === 'mcu');
+}
+
+// lê o programa: com o app, o GET /api/programa (o mais novo, ou 'rodando'); sem ele (python -m http.server), o
+// saida/programa.json. Só com a régua aberta, a cada 2 s. O 404 ('ainda não rodou', 'falta o main.py') espera 10 s pra
+// perguntar de novo (cada 404 é uma linha vermelha no console), menos com os testes rodando (o testes.json, lido a cada
+// 1 s, diz): aí a etapa 8 vai rodar o programa, e a régua pergunta a cada 2 s pra mostrar o 'rodando…' e o resultado
+async function lerPrograma(agora = false) {
+  const P = S.prog, pressa = (!!S.testes?.rodando || !!P.espera) && Date.now() >= P.leu + (P.espera ? 1000 : 2000);
+  if (!PLACA || P.lendo || (!agora && Date.now() < P.proxima && !pressa)) return;
+  P.lendo = true;
+  const pediu = Date.now();   // o Rodar de novo só conta a resposta de um GET feito depois do POST
+  let txt = null, ok = false;
+  try {
+    if (S.api) {
+      const r = await fetch(`/api/programa?placa=${encodeURIComponent(PLACA)}`, { cache: 'no-store' });
+      [txt, ok] = [await r.text(), r.ok];
+    } else { txt = await ler('saida/programa.json'); ok = txt !== null; }
+  } catch { /* o app caiu: pergunta de novo daqui a pouco */ }
+  P.lendo = false;
+  P.leu = Date.now();
+  P.proxima = P.leu + (ok ? 2000 : 10000);
+  if (txt === null && !S.api && !P.dado) txt = '{"erro": "ainda não tem o saida/programa.json"}';
+  // o Rodar de novo: depois do POST, o app diz 'rodando' até o processo acabar. Se o GET devolve o mesmo de antes do
+  // POST, o programa acabou sem gravar resultado novo (caiu antes); sem resposta do app por 10 s, para de esperar
+  const e = P.espera, depois = !!e && pediu >= e.desde;
+  const semNovo = depois && (txt !== null && txt === e.bruto ? 'Não chegou resultado novo: o programa parou antes de gravar, e a régua continua com o de antes. Tente de novo; se repetir, rode os testes (a etapa 8 mostra o porquê).'
+    : txt === null && P.leu - e.desde > 10000 ? 'Não chegou resultado novo: o app parou de responder (ele está aberto?). Tente de novo.' : '');
+  if (semNovo) {   // o bruto do 'rodando' sai: a próxima leitura vale (o resto do estado é o de antes do POST)
+    Object.assign(P, { espera: null, rodando: false, bruto: txt, recado: semNovo, recadoSome: semNovo });
+    return desenhar();
+  }
+  if (txt === null || txt === P.bruto) return;
+  let d;
+  try { d = JSON.parse(txt); } catch { return; }   // pela metade: lê de novo na próxima
+  P.bruto = txt;
+  if (d?.rodando !== true) {   // chegou o resultado novo (ou o erro dele): a espera acaba e o recado velho (409, sem resposta) some
+    if (depois) P.espera = null;
+    if (P.recadoSome && P.recado === P.recadoSome) P.recado = '';
+  }
+  if (d?.sem_programa) {   // a régua fica aberta com o porquê; o botão some quando fechar
+    Object.assign(P, { tem: false, temDe: S.testes?.inicio ?? null, dado: null, rodando: false,
+      falta: `${d.erro || 'esta placa não tem programa (falta o codigo/main.py)'}. Quando ele existir, rode os testes: a etapa 8 roda o programa no gêmeo` });
+  } else if (d?.rodando === true) Object.assign(P, { tem: null, rodando: true });
+  else if (ok && typeof d?.tempo_ms === 'number') {
+    Object.assign(P, { tem: null, rodando: false, falta: '', main: null, dado: arrumarPrograma(d), versao: P.versao + 1 });
+    P.t = Math.min(P.t, P.dado.total);
+    P.pedido ??= pedidoDoPrograma(P.dado);   // os chips começam com o que o app mandou da última vez
+  } else Object.assign(P, { tem: null, rodando: false, falta: d?.erro ? `${d.erro}${ok ? '' : '. Rode os testes: a etapa 8 roda o programa no gêmeo'}` : 'não consegui ler o programa desta placa' });
+  desenhar();
+}
+
+// o programa.json com as linhas do tempo em ordem (a busca do instante conta com isso), o fim da régua (total, em ms) e
+// as paradas das setas: os instantes em que algo muda (o pino e o LED que ele acende mudam a 0,02 ms um do outro: as
+// mudanças a menos de 1 ms viram uma parada só, no fim delas)
+function arrumarPrograma(d) {
+  const emOrdem = l => (Array.isArray(l) ? l : []).filter(x => Array.isArray(x) && typeof x[0] === 'number').sort((a, b) => a[0] - b[0]);
+  const pinos = Object.fromEntries(Object.entries(d.pinos || {}).map(([g, x]) => [g,
+    { ...x, modo: emOrdem(x.modo), nivel: emOrdem(x.nivel), pwm: emOrdem(x.pwm), volts: emOrdem(x.volts) }]));
+  const leds = Object.fromEntries(Object.entries(d.leds || {}).map(([ref, l]) => [ref, emOrdem(l)]));
+  const apertos = (d.entradas?.apertos || []).filter(a => typeof a.de === 'number' && typeof a.ate === 'number');
+  const luz = (d.entradas?.luz || []).filter(x => typeof x.t === 'number').sort((a, b) => a.t - b.t);
+  const p = { ...d, pinos, leds, serial: emOrdem(d.serial), avisos: emOrdem(d.avisos), entradas: { ...d.entradas, apertos, luz },
+    conferencias: { ok: d.conferencias?.ok || [], falhas: d.conferencias?.falhas || [] }, pendentes: d.pendentes || [] };
+  const ts = [...Object.values(pinos).flatMap(x => [...x.modo, ...x.nivel, ...x.pwm, ...x.volts]), ...Object.values(leds).flat(), ...p.serial]
+    .map(x => x[0]).concat(apertos.flatMap(a => [a.de, a.ate]), luz.map(x => x.t), typeof p.erro?.t === 'number' ? [p.erro.t] : []);
+  p.total = d.tempo_ms > 0 ? d.tempo_ms : ts.reduce((a, b) => Math.max(a, b), 1);   // o tempo de placa que rodou (sem ele, o último evento)
+  p.paradas = [];
+  for (const t of [0, ...ts.filter(t => t > 0 && t <= p.total)].sort((a, b) => a - b)) {
+    if (p.paradas.length && t - p.paradas.at(-1) < 1) p.paradas[p.paradas.length - 1] = t;
+    else p.paradas.push(t);
+  }
+  return p;
+}
+
+// quantas entradas da linha do tempo aconteceram até t (no mesmo instante, conta: como o no_instante do programa.py)
+function ateOInstante(linha, t) {
+  let a = 0, b = linha.length;
+  while (a < b) { const k = (a + b) >> 1; if (linha[k][0] <= t + FOLGA_T) a = k + 1; else b = k; }
+  return a;
+}
+const noInstante = (linha, t) => linha[ateOInstante(linha, t) - 1] ?? null;   // a última até t, ou null
+
+// o que a placa fazia no instante t (ms): {t, luzes: {D1: {luz, mA, queima}}, pinos: {GPIO32: {modo, nivel, pwm, volts}},
+// luz: {LDR1: a luz do quarto que valia}, apertados (os botões), sons (o que está num PWM ligado), serial e avisos
+// (quantas linhas até t)}
+function noPrograma(p, t) {
+  const luzes = {}, pinos = {}, luz = {}, sons = new Set();
+  for (const [ref, linha] of Object.entries(p.leds)) {
+    const x = noInstante(linha, t);
+    luzes[ref] = { luz: x?.[1] ?? 0, mA: x?.[2] ?? 0, queima: !!x?.[3] };
+  }
+  for (const [g, x] of Object.entries(p.pinos)) {
+    const modo = noInstante(x.modo, t)?.[1] ?? null, pwm = noInstante(x.pwm, t);
+    pinos[g] = { modo, nivel: noInstante(x.nivel, t)?.[1] ?? null, pwm, volts: noInstante(x.volts, t)?.[1] ?? null };
+    if (modo === 'pwm' && pwm?.[1] > 0) for (const ref of (x.quem || '').split(', ')) if (ref) sons.add(ref);   // o desenho só usa no piezo
+  }
+  for (const x of p.entradas.luz) if (x.t <= t + FOLGA_T) luz[x.ref] = x;
+  const apertados = new Set(p.entradas.apertos.filter(a => a.de <= t + FOLGA_T && t < a.ate - FOLGA_T).map(a => a.ref));
+  return { t, luzes, pinos, luz, apertados, sons, serial: ateOInstante(p.serial, t), avisos: ateOInstante(p.avisos, t) };
+}
+// o que a placa e o painel mostram no instante (sem o t): se não mudou, a régua anda sem redesenhar nada
+const chaveDoInstante = a => JSON.stringify([a.luzes, a.pinos, [...a.apertados], a.serial, a.avisos, Object.values(a.luz).map(x => x.t)]);
+
+function alternarPrograma() {
+  const P = S.prog;
+  if (!P.aberto && !temPrograma(modeloVisto())) return;
+  P.aberto = !P.aberto;
+  if (P.aberto) { S.ligado = false; S.sel = null; lerPrograma(true); }   // um de cada vez com o ▶ Ligar
+  else pararDeTocar();
+  desenhar();
+}
+function fecharPrograma() { pararDeTocar(); S.prog.aberto = false; }   // sem desenhar: quem chama já está desenhando
+
+// ▶/⏸: anda no tempo de placa (1× = o tempo de verdade; ¼× = 4 vezes mais devagar); no fim, começa de novo
+function alternarTocar() {
+  const P = S.prog;
+  if (!P.dado) return;
+  if (P.tocando) { pararDeTocar(); return mostrarInstante(true); }
+  if (P.t >= P.dado.total - FOLGA_T) P.t = 0;
+  const vez = ++P.vez;
+  P.tocando = true;
+  let antes = performance.now();
+  const quadro = agora => {
+    if (P.vez !== vez || !P.tocando) return;
+    if (!P.aberto || !P.dado || S.aba !== 'projeto') { pararDeTocar(); return; }
+    P.t = Math.min(P.dado.total, P.t + Math.min(agora - antes, 250) * P.vel);   // a aba escondida não pula o programa inteiro
+    antes = agora;
+    if (P.t >= P.dado.total) P.tocando = false;
+    mostrarInstante(!P.tocando);
+    if (P.tocando) requestAnimationFrame(quadro);
+  };
+  requestAnimationFrame(quadro);
+  mostrarInstante(true);
+}
+function pararDeTocar() { S.prog.tocando = false; S.prog.vez++; }
+
+// as setas: pro instante da mudança de antes ou da de depois (um pino, um LED, a serial, um aperto, a luz do quarto)
+function pular(dir) {
+  const P = S.prog, p = P.dado;
+  if (!p) return;
+  pararDeTocar();
+  const t = dir > 0 ? p.paradas.find(x => x > P.t + FOLGA_T) : p.paradas.findLast(x => x < P.t - FOLGA_T);
+  irParaInstante(t ?? P.t);
+}
+function irParaInstante(t) {
+  const P = S.prog;
+  if (!P.dado) return;
+  P.t = Math.min(Math.max(Number(t) || 0, 0), P.dado.total);
+  mostrarInstante(true);
+}
+
+// a régua andou: o tempo e a bolinha dela sempre; a placa e o painel só quando o que eles mostram mudou (tocando, no
+// máximo umas 30 vezes por segundo)
+function mostrarInstante(forcar = false) {
+  const P = S.prog, r = $('.area .regua');
+  if (r) preencherRegua(r);
+  if (!P.dado || S.aba !== 'projeto') return;
+  if (!forcar && performance.now() - P.quando < 33) return;
+  if (forcar || chaveDoInstante(noPrograma(P.dado, P.t)) !== P.desenhado) desenhar();
+}
+
+// ▶ Programa: espaço toca e pausa, ← e → pulam pras mudanças (até com a régua na mão). Num campo, as teclas são dele;
+// num botão (ou no resumo de um <details>) que ganhou o foco pelo Tab, o espaço aperta ele. O que ganhou o foco num
+// clique (o ▶ Programa, o 1×, uma linha da serial...) não leva o espaço: ele toca, como o ▶ da régua promete
+let focoDoClique = null;
+document.addEventListener('pointerdown', e => { focoDoClique = e.target.closest?.('button, summary') ?? null; }, true);
+document.addEventListener('focusin', e => { if (e.target !== focoDoClique) focoDoClique = null; });
+function teclaDoPrograma(e) {
+  if (!S.prog.aberto || !S.prog.dado || S.aba !== 'projeto' || e.ctrlKey || e.metaKey || e.altKey) return false;
+  const el = e.target.closest?.('input, textarea, select, button, summary');
+  if (el && !('regua' in el.dataset) && (!el.matches('button, summary') || (e.key === ' ' && el !== focoDoClique))) return false;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') pular(e.key === 'ArrowRight' ? 1 : -1);
+  else if (e.key === ' ') alternarTocar();
+  else return false;
+  e.preventDefault();
+  return true;
+}
+
+// a régua embaixo da placa (só com o ▶ Programa aberto): os comandos e as marcas mudam com o programa; o instante, sem
+// refazer nada (preencherRegua). Devolve o que a placa fazia no instante dela, ou null (fechada ou sem programa)
+function desenharRegua(area) {
+  const P = S.prog;
+  let r = area.querySelector('.regua');
+  if (!P.aberto) { r?.remove(); area.classList.remove('com-regua'); return null; }
+  area.classList.add('com-regua');
+  if (!r) {
+    r = Object.assign(document.createElement('div'), { className: 'regua' });
+    r.setAttribute('role', 'group'); r.setAttribute('aria-label', 'Régua do tempo do programa');
+    area.append(r);
+  }
+  const assinatura = `${P.versao}:${P.dado ? 'dado' : P.rodando ? 'rodando' : P.falta}:${JSON.stringify(P.pedido)}`;
+  if (r.dataset.assinatura !== assinatura) { r.dataset.assinatura = assinatura; r.innerHTML = reguaHTML(P.dado); }
+  preencherRegua(r);
+  if (!P.dado) return null;
+  const a = noPrograma(P.dado, P.t);
+  P.desenhado = chaveDoInstante(a); P.quando = performance.now();
+  return a;
+}
+
+// na régua: risquinho em cima = uma linha da serial; bolinha = aviso (vermelha reprova, amarela só avisa); traço vermelho
+// = o erro; embaixo, barrinha azul = botão apertado e losango amarelo = a luz do quarto mudou (vazados: os chips do
+// Rodar de novo que ainda não rodaram). Clicar numa marca vai pra ela
+function reguaHTML(p) {
+  if (!p) return '<span class="sub" data-sem-programa></span>';
+  const pos = t => `${(100 * Math.min(Math.max(t, 0), p.total) / p.total).toFixed(3)}%`;
+  const marca = (classe, t, titulo, largura = '') => `<button type="button" tabindex="-1" class="${classe}" style="left:${pos(t)}${largura}" data-ir="${t}" title="${esc(titulo)}" aria-label="${esc(titulo)}"></button>`;
+  const marcas = [
+    ...p.serial.map(([t, txt]) => marca('m-serial', t, `${emSeg(t)} · serial: ${txt}`)),
+    ...p.avisos.map(([t, c, txt]) => [t, tipoDoAviso(c, txt), txt]).filter(([, [, nivel]]) => nivel !== 'info')
+      .map(([t, [rotulo, nivel], txt]) => marca(`m-aviso ${nivel}`, t, `${emSeg(t)} · ${rotulo}: ${txt}`)),
+    ...(typeof p.erro?.t === 'number' ? [marca('m-erro', p.erro.t, `${emSeg(p.erro.t)} · erro${p.erro.linha ? ` na linha ${p.erro.linha} do main.py` : ''}`)] : []),
+    ...p.entradas.apertos.filter(a => a.de <= p.total).map(a => marca('m-aperto', a.de, `${a.ref} apertado de ${emSeg(a.de)} a ${emSeg(a.ate)}`,
+      `;width:${(100 * (Math.min(a.ate, p.total) - a.de) / p.total).toFixed(3)}%`)),
+    ...p.entradas.luz.filter(x => x.t <= p.total).map(x => marca('m-luz', x.t, `${emSeg(x.t)} · ${x.ref} com ${milhar(x.lux)} lux${typeof x.volts === 'number' ? ` (${mm(x.volts, 2)} V no pino)` : ''}`)),
+    ...chipsDoPedido().filter(x => !x.rodou && x.t <= p.total).map(x => marca(`${x.tipo === 'apertos' ? 'm-aperto' : 'm-luz'} pendente`, x.t,
+      `${x.texto} (ainda não rodou: Rodar de novo)`, x.tipo === 'apertos' ? `;width:${(100 * (Math.min(x.ate, p.total) - x.t) / p.total).toFixed(3)}%` : '')),
+  ];
+  return `<div class="comandos">
+      <button type="button" class="botao-r" data-tocar></button>
+      <button type="button" class="botao-r" data-pular="-1" aria-label="Voltar pra mudança de antes (←)" title="Voltar pra mudança de antes (←)">${ICONE_VOLTA}</button>
+      <button type="button" class="botao-r" data-pular="1" aria-label="Ir pra próxima mudança (→)" title="Ir pra próxima mudança (→)">${ICONE_VAI}</button>
+      <div class="escolhas mini" role="group" aria-label="Velocidade">${[[1, '1×'], [0.25, '¼×']].map(([v, txt]) => `<button type="button" data-vel="${v}">${txt}</button>`).join('')}</div>
+      <span class="agora-t" data-agora-t></span>
+      <span class="selo rodando rodando-r" data-rodando-r hidden>rodando…</span>
+    </div>
+    <div class="trilho"><div class="marcas">${marcas.join('')}</div>
+      <input type="range" data-regua min="0" max="${p.total}" step="any" value="0" aria-label="Instante do programa"></div>`;
+}
+
+function preencherRegua(r) {
+  const P = S.prog, p = P.dado, sem = r.querySelector('[data-sem-programa]');
+  if (sem) { sem.textContent = P.rodando ? 'rodando… quando o gêmeo acabar, a régua aparece aqui' : P.falta || 'lendo o programa…'; return; }
+  if (!p) return;
+  const t = Math.min(Math.max(P.t, 0), p.total), faixa = r.querySelector('[data-regua]');
+  if (+faixa.value !== t) faixa.value = t;
+  faixa.style.setProperty('--pos', `${(100 * t / p.total).toFixed(3)}%`);
+  faixa.setAttribute('aria-valuetext', emSeg(t));
+  r.querySelector('[data-agora-t]').innerHTML = `<b>${emSeg(t)}</b> de ${mm(p.total / 1000, 1)} s`;
+  const em = $('aside.programa [data-em-p]');   // o painel só muda quando a placa muda; o instante dele anda com a régua
+  if (em) em.textContent = `em ${emSeg(t)}`;
+  for (const x of document.querySelectorAll('aside.programa [data-em-mexer]')) x.textContent = emSeg(t);   // onde o clique entra
+  const tocar = r.querySelector('[data-tocar]'), estado = P.tocando ? 'pausa' : 'toca';
+  if (tocar.dataset.estado !== estado) {
+    tocar.dataset.estado = estado;
+    tocar.innerHTML = P.tocando ? ICONE_PAUSA : ICONE_TOCA;
+    tocar.title = P.tocando ? 'Pausar (espaço)' : 'Tocar (espaço)';
+    tocar.setAttribute('aria-label', tocar.title);
+  }
+  for (const b of r.querySelectorAll('[data-vel]')) b.setAttribute('aria-pressed', +b.dataset.vel === P.vel);
+  r.querySelector('[data-pular="-1"]').disabled = !p.paradas.some(x => x < t - FOLGA_T);
+  r.querySelector('[data-pular="1"]').disabled = !p.paradas.some(x => x > t + FOLGA_T);
+  r.querySelector('[data-rodando-r]').hidden = !P.rodando;
+}
+
+// os GPIOs do programa, na ordem das peças do placa.txt (como no ▶ Ligar), cada um com o nome de gente e as peças nele
+function gpiosDoPrograma(m, c, p) {
+  const lista = [];
+  for (const g of c?.pinos || []) {
+    if (!p.pinos[g.nome]) continue;
+    const { quem, onde } = nomeDoGpio(m, c, g);
+    lista.push({ nome: g.nome, quem, onde, g, refs: [...new Set([...g.ramo, ...(p.pinos[g.nome].quem || '').split(', ').filter(Boolean)])] });
+  }
+  for (const [nome, x] of Object.entries(p.pinos)) {   // o que o programa usou fora do circuito (o LED azul do DevKit...)
+    if (lista.some(y => y.nome === nome)) continue;
+    const q = c?.u.pinos.find(y => y.nome === nome), ser = q && c.u.serigrafia?.[q.n];
+    lista.push({ nome, quem: x.nome ? `${x.nome}${x.quem ? ` (${x.quem})` : ''}` : x.quem || 'nada ligado nele na placa',
+      onde: [ser && ser !== nome ? ser : null, nome].filter(Boolean).join(' · '), g: null, refs: (x.quem || '').split(', ').filter(Boolean) });
+  }
+  return lista;
+}
+
+// o que um GPIO fazia no instante: o valor da plaquinha (0, 1, PWM %, volts) e a frase de gente, com as peças dele (o LED
+// com a luz, o botão apertado ou solto, o som apitando, o olho de luz com a luz do quarto)
+function leituraDoGpio(m, u, x, a) {
+  const e = u?.eletrica || {}, pin = a.pinos[x.nome] || {}, de = k => x.refs.filter(r => modeloDaPeca(m, r) === k);
+  const partes = [];
+  let valor = '–', classe = '', aviso = '';
+  if (pin.modo === 'saida') {
+    const n = pin.nivel ?? 0;   // o pino de saída começa em 0, como no laboratório
+    [valor, classe] = [String(n), n ? 'um' : ''];
+    partes.push(`saída em ${n}${positivo(e.vdd) ? ` (${n ? volts(e.vdd) : '0'} V)` : ''}`);
+  } else if (pin.modo === 'pwm') {
+    const duty = pin.pwm?.[1] ?? 0, hz = pin.pwm?.[2];
+    [valor, classe] = [porCentoFino(duty), duty > 0 ? 'pwm' : ''];
+    partes.push(duty > 0 ? `PWM: ligado ${porCentoFino(duty)} do tempo${hz ? `, em ${milhar(Math.round(hz))} Hz` : ''}` : 'PWM parado (0%)');
+  } else if (pin.modo === 'adc') {
+    const v = pin.volts;
+    [valor, classe] = [v == null ? '?' : `${mm(v, 2)} V`, 'volts'];
+    partes.push(v == null ? 'lê o ADC (ainda sem tensão no pino)' : `o ADC lê ${mm(v, 2)} V`);
+    if (v != null && positivo(e.adc_min) && positivo(e.adc_max)) {
+      const dentro = v >= e.adc_min && v <= e.adc_max;
+      partes.push(`${dentro ? 'dentro' : 'fora'} da faixa boa do ADC (${mm(e.adc_min, 2)} a ${mm(e.adc_max, 2)} V)`);
+      aviso = dentro ? 'ok' : 'fora';
+    }
+  } else if (['pullup', 'pulldown', 'entrada'].includes(pin.modo)) {
+    // o que o pino lê sai do circuito (o papel do pino, com a regra da etapa 4) e do botão naquele instante; o roteiro
+    // pode forçar o nível (aí vale o dele). GPIO34 a 39 não têm pull de dentro
+    const chaves = de('chave'), apertado = chaves.some(r => a.apertados.has(r)), papel = x.g?.papel;
+    const comPull = !(e.so_entrada || []).includes(x.nome) && pin.modo;
+    let le = pin.nivel;
+    if (le == null && chaves.length) {
+      if (papel === 'pulldown_fora') le = apertado ? 1 : 0;
+      else if (papel === 'pullup' || papel === 'pullup_fora') le = apertado ? 0 : papel === 'pullup_fora' || comPull === 'pullup' ? 1 : comPull === 'pulldown' ? 0 : null;
+    }
+    [valor, classe] = [le == null ? '?' : String(le), le ? 'um' : ''];
+    partes.push(`entrada${comPull === 'pullup' ? ' com o pull-up de dentro' : comPull === 'pulldown' ? ' com o pull-down de dentro' : ''}`);
+    if (chaves.length) partes.push(chaves.map(r => `${r} ${a.apertados.has(r) ? 'apertado' : 'solto'}`).join(', '));
+    if (le == null && chaves.length) { partes.push('o pino fica no ar: lê qualquer coisa'); aviso = 'fora'; }
+    else if (le != null) partes.push(`lê ${le}`);
+  } else if (pin.modo) partes.push(pin.modo);
+  else partes.push('o programa ainda não mexeu neste pino');
+  for (const r of x.refs.filter(r => r in a.luzes)) {   // a luz vem do gêmeo com 2 casas: em % inteiro
+    const l = a.luzes[r], media = pin.modo === 'pwm' ? ' na média' : '';
+    const ma = l.mA < 0.05 ? 'menos de 0,1 mA' : `${mm(l.mA, 1)} mA`;
+    if (l.queima) { partes.push(`${r} QUEIMA (${mm(l.mA, 1)} mA)`); classe = aviso = 'queima'; }
+    else if (!ledAceso(l)) partes.push(`${r} apagado`);
+    else if (l.luz >= 0.005) partes.push(`${r} aceso: luz ${Math.round(l.luz * 100)}% do anúncio, ${ma}${media}`);
+    else partes.push(`${r} aceso bem fraquinho: menos de 1% da luz do anúncio, ${ma}${media}`);
+  }
+  for (const r of de('piezo')) partes.push(a.sons.has(r) ? `${r} apitando` : `${r} quieto`);   // a frequência já está no PWM
+  for (const r of de('ldr')) if (a.luz[r]) partes.push(`${r} com ${milhar(a.luz[r].lux)} lux no quarto`);
+  return { valor, classe, aviso, texto: partes.join(' · ') };
+}
+
+// "U1: porta USB: falta..." vira "U1 · porta USB: falta...": o assunto do selo pendente fica com a peça e o assunto
+const pendenteDoPrograma = t => t.replace(/^([A-Z]+\d+): (?=[^:]+: )/, '$1 · ');
+
+function erroDoProgramaHTML(p) {
+  const e = p.erro, linhas = String(e.texto || '').split('\n').map(x => x.trim()).filter(Boolean);
+  const codigo = e.linha ? S.prog.main?.[e.linha - 1] : null, temT = typeof e.t === 'number';
+  return `<div class="erro-p"><b>✗ Erro${e.linha ? ` na linha ${e.linha} do main.py` : ''}${temT ? `, em ${emSeg(e.t)}` : ''}</b>
+    <span>${esc(linhas.at(-1) || 'o laboratório não explicou')}</span>
+    ${codigo != null ? `<code>${e.linha}  ${esc(codigo.trim())}</code>` : ''}
+    ${temT ? `<button type="button" class="link" data-ir="${e.t}">Ir pro instante do erro →</button>` : ''}
+    ${linhas.length > 1 ? `<details class="fontes"><summary>O que o MicroPython escreveu</summary><pre>${esc(e.texto)}</pre></details>` : ''}</div>`;
+}
+
+// o esqueleto do painel: muda com o programa; o que muda com o instante entra no preencherPrograma
+function programaHTML(m, p, gpios) {
+  const P = S.prog;
+  const fechar = '<button type="button" class="fechar" data-programa aria-label="Fechar o programa"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
+  const cab = `<div class="cab"><div><div class="tipo">${!p ? 'O main.py no gêmeo' : p.livre ? 'Rodado pelo app' : 'Roteiro de teste'}</div><div class="titulo">Programa</div></div>${fechar}</div>`;
+  const mexer = podeMexer() ? '<div class="bloco-p mexer-p" data-mexer></div>' : '';   // os chips e o Rodar de novo (preencherMexer)
+  if (!p) return cab + `<p class="dica">${P.rodando ? '<span class="selo rodando">rodando…</span> O gêmeo está rodando o main.py desta placa. Quando acabar, a régua aparece aqui.' : esc(comMaiuscula(P.falta || 'lendo o programa…'))}</p>${mexer}`;
+  const conf = p.conferencias, total = conf.ok.length + conf.falhas.length, quando = p.quando ? ` em ${dia(p.quando)} às ${hora(p.quando)}` : '';
+  const leds = refs => refs.map(r => m.pecas.find(q => q.ref === r)).filter(q => q?.eletrica?.modelo === 'led')
+    .map(q => `<span class="bolinha" style="background:${corDoLed(q)}" aria-hidden="true"></span>`).join('');
+  const avisos = p.avisos.map(([t, c, txt], i) => {
+    const [rotulo, nivel] = tipoDoAviso(c, txt);
+    return `<li data-i="${i}" hidden class="${nivel}"><button type="button" data-ir="${t}" title="Ir pra ${emSeg(t)}">${emSeg(t)}</button><span>${rotulo ? `<span class="selo ${nivel}">${esc(rotulo)}</span>` : ''}${esc(txt)}</span></li>`;
+  }).join('');
+  return `${cab}
+    <p class="dica">O main.py rodou no gêmeo do ESP32, sem a placa. Arraste a régua embaixo da placa, ou use ◀ ▶ (e as setas do teclado) pra pular de uma mudança pra outra: os LEDs acendem com a luz que o gêmeo calculou, na cor de cada um. Na régua, os risquinhos de cima são a serial; os de baixo, os botões apertados e a luz do quarto.</p>
+    <div class="estado-p">
+      ${P.rodando ? '<span><span class="selo rodando">rodando…</span> o gêmeo está rodando de novo: quando acabar, a régua troca pelo resultado novo</span>' : ''}
+      <span>${esc(comMaiuscula(CODIGO_DO_PROGRAMA[p.codigo] ?? `o laboratório saiu com o código ${p.codigo}`))}: ${mm(p.tempo_ms / 1000, 1)} s de placa${quando}.</span>
+      <span class="sub">${p.livre ? 'Rodado pelo app, só com os apertos e a luz que vieram de lá.' : 'O roteiro de teste da placa (codigo/roteiro.json e gemeo.roteiro), o mesmo da etapa 8.'}</span>
+    </div>
+    ${p.erro ? erroDoProgramaHTML(p) : ''}
+    ${mexer}
+    <div class="bloco-p"><b>Os pinos <span class="sub" data-em-p></span></b>
+      <div class="gpios">${gpios.map(x => `<div class="gpio"><span class="quem">${leds(x.refs)}<b>${esc(x.quem)}</b><span class="mono">· ${esc(x.onde)}</span></span>
+        <span class="linha-p"><span class="valor-p" data-valor-p="${esc(x.nome)}"></span><span class="le" data-le-p="${esc(x.nome)}"></span></span></div>`).join('')
+        || '<span class="sub">o programa não usou nenhum pino</span>'}</div></div>
+    <div class="bloco-p"><b>Serial <span class="sub" data-serial-conta></span></b>
+      ${p.serial.length ? `<ol class="serial-p" data-serial-p>${p.serial.map(([t, txt], i) => `<li data-i="${i}" hidden><button type="button" data-ir="${t}" title="Ir pra ${emSeg(t)}">${emSeg(t)}</button><span>${esc(txt)}</span></li>`).join('')}</ol>`
+        : '<span class="sub">o programa não escreveu nada na serial</span>'}</div>
+    ${avisos ? `<div class="bloco-p"><b>Avisos do gêmeo <span class="sub" data-avisos-conta></span></b><ul class="lista-p" data-avisos-p>${avisos}</ul></div>` : ''}
+    <div class="bloco-p"><b>Conferências${!p.livre && total ? ` <span class="sub">${conf.ok.length} de ${total} ok</span>` : ''}</b>
+      ${p.livre ? '<span class="sub">Só no roteiro de teste: este programa rodou pelo app, e as conferências (codigo/roteiro.json e confere.json) ficam pra etapa 8.</span>'
+        : !total ? '<span class="sub">nenhuma: o roteiro.json e o confere.json não conferem nada</span>'
+        : `${conf.falhas.length ? `<ul class="lista-p">${conf.falhas.map(f => `<li class="falha">✗ ${esc(f)}</li>`).join('')}</ul>` : ''}
+          ${conf.ok.length ? `<details class="fontes"><summary>✓ ${conf.ok.length} ${conf.ok.length === 1 ? 'passou' : 'passaram'}: ver ${conf.ok.length === 1 ? 'qual' : 'quais'}</summary><ul class="lista-p">${conf.ok.map(x => `<li class="ok">✓ ${esc(x)}</li>`).join('')}</ul></details>` : ''}`}
+    </div>
+    ${p.pendentes.length ? `<div class="pendentes">${p.pendentes.map(t => pendenteHTML(pendenteDoPrograma(t))).join('')}</div>` : ''}`;
+}
+
+// o painel no instante da régua: o valor e a frase de cada GPIO, a serial até t (a última em destaque) e os avisos até t
+function preencherPrograma(m, c, p, gpios, a, painel) {
+  const q = sel => painel.querySelector(sel);
+  const em = q('[data-em-p]');
+  if (em) em.textContent = `em ${emSeg(a.t)}`;
+  for (const x of gpios) {
+    const l = leituraDoGpio(m, c?.u, x, a), v = q(`[data-valor-p="${CSS.escape(x.nome)}"]`), le = q(`[data-le-p="${CSS.escape(x.nome)}"]`);
+    if (!v || !le) continue;
+    v.textContent = l.valor; v.className = `valor-p ${l.classe}`;
+    le.textContent = l.texto; le.className = `le ${l.aviso}`;
+  }
+  for (const [sel, n, total, conta, txt] of [['[data-serial-p]', a.serial, p.serial.length, '[data-serial-conta]', 'linhas'], ['[data-avisos-p]', a.avisos, p.avisos.length, '[data-avisos-conta]', 'avisos']]) {
+    const lista = q(sel);
+    if (!lista) continue;
+    for (const li of lista.children) { li.hidden = +li.dataset.i >= n; li.classList.toggle('ultima', +li.dataset.i === n - 1); }
+    lista.scrollTop = lista.scrollHeight;   // a última até t fica à vista
+    q(conta).textContent = `${n} de ${total} ${txt} até aqui`;
+  }
+}
+
+// o painel do lado da placa com o ▶ Programa aberto (o inspetor, se tiver peça escolhida, fica na frente)
+function desenharPainelDoPrograma(main, m, painel, a) {
+  const P = S.prog, p = P.dado;
+  if (!painel) { painel = document.createElement('aside'); main.append(painel); }
+  if (p?.erro?.linha && P.main === null) {   // a linha do main.py que deu erro, pra mostrar o código dela
+    P.main = [];
+    ler('codigo/main.py').then(txt => { P.main = txt === null ? [] : txt.split('\n'); desenhar(); });
+  }
+  const c = pinosDoCerebro(m), gpios = p ? gpiosDoPrograma(m, c, p) : [];
+  const assinatura = `programa:${PLACA}:${m.versao}:${P.versao}:${P.rodando}:${P.falta}:${P.main?.length}:${podeMexer()}:${gpios.map(x => x.quem).join()}`;
+  if (painel.dataset.assinatura !== assinatura) {
+    painel.dataset.assinatura = assinatura;
+    painel.className = 'inspetor painel programa';
+    painel.setAttribute('aria-label', 'O programa da placa');
+    painel.innerHTML = programaHTML(m, p, gpios);
+  }
+  preencherMexer(m, painel);
+  if (p && a) preencherPrograma(m, c, p, gpios, a, painel);
+}
+
+// ---------- ▶ Programa: mexer e rodar de novo ----------
+// O pedido são os chips: os apertos [{ref, de, ate}] e a luz do quarto [{ref, t, lux}], em segundos, do jeito que o
+// POST /api/programa recebe (programa.validar_entradas). Clicar no botão desenhado aperta ele no instante da régua por
+// 0,2 s; o 1, 10 ou 100 lux muda a luz do quarto no instante da régua. 'Rodar de novo ↻' manda o pedido: o app roda o
+// main.py no gêmeo só com ele (sem nenhum chip, a placa roda sozinha), e a régua pergunta até o resultado novo chegar
+const APERTO_MS = 200;                  // quanto tempo o clique segura o botão
+const LUZES_DO_QUARTO = [1, 10, 100];   // lux
+
+const podeMexer = () => S.api && S.prog.tem !== false;   // o POST é do app, e só na placa que tem programa
+const pedidoAtual = () => (S.prog.pedido ??= { apertos: [], luz: [] });
+
+// os chips de um programa que chegou: o que o app mandou da última vez (o roteiro de teste não é do app: vazio)
+function pedidoDoPrograma(p) {
+  const doApp = l => (p?.livre ? (l || []).filter(x => x.origem === 'app') : []);
+  return { apertos: doApp(p?.entradas?.apertos).map(a => ({ ref: a.ref, de: a.de / 1000, ate: a.ate / 1000 })),
+    luz: doApp(p?.entradas?.luz).map(x => ({ ref: x.ref, t: x.t / 1000, lux: x.lux })) };
+}
+
+// o chip já rodou? Está no programa da régua (o do app), com os mesmos tempos
+function rodou(tipo, x) {
+  const p = S.prog.dado, mesmo = (a, b) => Math.abs(a - b) <= FOLGA_T;
+  if (!p?.livre) return false;
+  if (tipo === 'apertos') return p.entradas.apertos.some(a => a.origem === 'app' && a.ref === x.ref && mesmo(a.de, x.de * 1000) && mesmo(a.ate, x.ate * 1000));
+  return p.entradas.luz.some(a => a.origem === 'app' && a.ref === x.ref && mesmo(a.t, x.t * 1000) && a.lux === x.lux);
+}
+
+// os volts que essa luz dá no GPIO do LDR, pela conta do Sianvolt: o circuito inteiro com os GPIOs soltos e o LDR do
+// meio (a mesma do programa.py, volts_da_luz), e a faixa como a etapa 4 (testar.faixa_do_ldr): o LDR nos cantos min e
+// max e o 3V3 no vdd_min e no vdd_max (o pendente fica no vdd). {v, de, ate, com3v3, onde} ou {erro, onde} (número
+// pendente); null se o LDR não está num GPIO
+function voltsDaLuz(m, ref, lux) {
+  const c = pinosDoCerebro(m), g = c?.pinos.find(x => x.ramo.includes(ref)), p = m.pecas.find(q => q.ref === ref);
+  if (!g || !p) return null;
+  const ser = c.u.serigrafia?.[g.n], onde = `${g.nome}${ser && ser !== g.nome ? ` (${ser})` : ''}`;
+  const e = c.u.eletrica, vdds = ['vdd_min', 'vdd_max'].map(k => (positivo(e[k]) ? e[k] : null));
+  const no = (canto, vdd) => simular(comPinos(m, {}, vdd), { ldr: { [ref]: ohmsDoLdr(p.eletrica, lux, canto, ref) } })?.nets[g.net];
+  try {
+    const v = no('meio', null), cantos = ['min', 'max'].flatMap(canto => vdds.map(vdd => no(canto, vdd)));
+    return v == null ? null : { v, de: Math.min(...cantos), ate: Math.max(...cantos), com3v3: vdds.every(Boolean), onde };
+  } catch (err) { return { erro: err.message, onde }; }
+}
+
+// o nome de gente da peça: o apelido do bloco no projeto e o nome na placa ('botão modo (SW1)'), ou o tipo ('botão SW1')
+function nomeDeGente(m, ref) {
+  const b = S.projeto?.blocos?.find(x => x.ref === ref && x.apelido);
+  return b ? `${b.apelido} (${ref})` : `${(NOME_DO_MODELO[modeloDaPeca(m, ref)] || 'peça').toLowerCase()} ${ref}`;
+}
+// '2,38 V (1,80 a 2,84)': o pino com o LDR do meio e, entre parênteses, a faixa (como a etapa 4)
+const voltsComFaixa = v => `${mm(v.v, 2)} V (${mm(v.de, 2)} a ${mm(v.ate, 2)})`;
+
+// os chips em ordem de tempo: {tipo ('apertos' | 'luz'), i (a posição no pedido: o 'aperto 2' das frases do app), x, t e
+// ate (ms), texto, volts (o que o pino do LDR lê, na linha de baixo do chip), rodou}. O espaço entre o número e a
+// unidade não quebra (o 'V' não fica sozinho na outra linha)
+function chipsDoPedido() {
+  const pedido = S.prog.pedido || { apertos: [], luz: [] }, m = modeloVisto();
+  const chips = [...pedido.apertos.map((a, i) => ({ tipo: 'apertos', i, x: a, t: a.de * 1000, ate: a.ate * 1000,
+    texto: `aperta ${a.ref} de ${mm(a.de, 3)} a ${mm(a.ate, 3)} s` })),
+  ...pedido.luz.map((x, i) => {
+    const v = m && voltsDaLuz(m, x.ref, x.lux);
+    return { tipo: 'luz', i, x, t: x.t * 1000, texto: `${x.ref} = ${milhar(x.lux)} lux em ${mm(x.t, 3)} s`,
+      volts: v?.v != null ? `o pino lê ${voltsComFaixa(v)}` : '' };
+  })];
+  for (const c of chips) c.rodou = rodou(c.tipo, c.x);
+  return chips.sort((a, b) => a.t - b.t || (a.tipo < b.tipo ? -1 : 1));
+}
+
+// clicar no botão desenhado com a régua aberta: aperta ele no instante da régua, por 0,2 s
+function apertarNoInstante(ref) {
+  const P = S.prog, de = Math.round(P.t), ate = de + APERTO_MS, pedido = pedidoAtual();
+  const junto = pedido.apertos.find(a => a.ref === ref && a.de * 1000 < ate && de < a.ate * 1000);
+  P.errado = null;
+  if (junto) P.recado = `O ${ref} já está apertado nesse instante (de ${mm(junto.de, 3)} a ${mm(junto.ate, 3)} s). Pra mudar, tire esse no ✕.`;
+  else {
+    pedido.apertos = [...pedido.apertos, { ref, de: de / 1000, ate: ate / 1000 }].sort((a, b) => a.de - b.de);
+    P.recado = '';
+  }
+  desenhar();
+}
+
+// a luz do quarto no LDR muda no instante da régua (no mesmo instante, a escolha nova fica no lugar da outra)
+function luzNoInstante(ref, lux) {
+  const t = Math.round(S.prog.t) / 1000, pedido = pedidoAtual();
+  pedido.luz = [...pedido.luz.filter(x => !(x.ref === ref && x.t === t)), { ref, t, lux }].sort((a, b) => a.t - b.t);
+  Object.assign(S.prog, { recado: '', errado: null });
+  desenhar();
+}
+
+function tirarChip(tipo, i) {
+  const pedido = pedidoAtual();
+  if (!Array.isArray(pedido[tipo])) return;
+  pedido[tipo] = pedido[tipo].filter((_, k) => k !== i);
+  Object.assign(S.prog, { recado: '', errado: null });
+  desenhar();
+}
+
+// manda o pedido pro app. Ele responde na hora ({rodando: true}) e o GET diz 'rodando' até o programa_livre.json novo
+// chegar (lerPrograma pergunta a cada 1 s enquanto espera). 400 = o pedido tem erro (a frase do app diz qual chip),
+// 409 = os testes ou outro programa estão rodando nesta placa
+async function rodarDeNovo() {
+  const P = S.prog;
+  if (P.enviando || P.espera || P.rodando || !podeMexer()) return;
+  Object.assign(P, { enviando: true, recado: '', errado: null });
+  desenhar();
+  let r = null, d = {};
+  try {
+    r = await fetch(`/api/programa?placa=${encodeURIComponent(PLACA)}`, { method: 'POST',
+      headers: { 'X-Bancada': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(pedidoAtual()) });
+    d = await r.json().catch(() => ({}));
+  } catch { /* o app fechou */ }
+  P.enviando = false;
+  if (r?.ok && d.rodando) {
+    Object.assign(P, { espera: { bruto: P.bruto, viu: false, desde: Date.now() }, rodando: true });
+    lerPrograma(true);
+  } else {
+    P.recado = `Não rodou: ${!r ? 'sem resposta do app (ele está aberto?)' : d.erro || `o app não aceitou (resposta ${r.status})`}`;
+    P.recadoSome = r?.status === 400 ? '' : P.recado;   // o 400 é dos chips e fica; o resto passa com o resultado novo
+    const qual = /^(aperto|luz) (\d+):/.exec(d.erro || '');
+    P.errado = qual ? { tipo: qual[1] === 'aperto' ? 'apertos' : 'luz', i: +qual[2] - 1 } : null;
+  }
+  desenhar();
+}
+
+// o bloco do Rodar de novo no painel: como mexer, a luz do quarto (com os volts de cada luz), os chips e o botão
+function mexerHTML(m) {
+  const P = S.prog, chaves = porModelo(m, 'chave').map(p => p.ref), ldrs = porModelo(m, 'ldr').map(p => p.ref);
+  const ocupado = P.enviando || !!P.espera || P.rodando, agora = `<b class="mono" data-em-mexer>${emSeg(P.t)}</b>`;
+  const como = chaves.length ? `Clique no ${chaves.map(ref => esc(nomeDeGente(m, ref))).join(' ou no ')} desenhado na placa: ele fica apertado ${mm(APERTO_MS / 1000, 1)} s a partir de ${agora}, o instante da régua.` : '';
+  const luz = ldrs.map(ref => {   // o que o pino lê com cada luz, uma por linha, com a faixa (como a etapa 4)
+    const vs = LUZES_DO_QUARTO.map(lux => [lux, voltsDaLuz(m, ref, lux)]), pend = vs.find(([, v]) => v?.erro)?.[1];
+    const onde = vs.find(([, v]) => v)?.[1]?.onde, com3v3 = vs.every(([, v]) => v?.com3v3);
+    const volts = pend ? `<span class="sub">Os volts ficam sem número: ${esc(pend.erro)}</span>` : onde ? `<div class="volts-p sub"><span>O ${esc(onde)} lê:</span>
+      ${vs.map(([lux, v]) => `<span>${milhar(lux)} lux: ${v?.v != null ? esc(voltsComFaixa(v)) : '?'}</span>`).join('')}
+      <span>Entre parênteses, com o LDR${com3v3 ? ' e o 3V3' : ''} nos cantos, como a etapa 4${com3v3 ? '' : ' (a faixa do 3V3 está pendente)'}; o programa roda com o LDR do meio.</span></div>` : '';
+    return `<div class="luz-p"><span>Quanta luz chega no ${esc(nomeDeGente(m, ref))} a partir de ${agora}:</span>
+      <div class="escolhas mini" role="group" aria-label="Luz do quarto no ${esc(ref)}">${LUZES_DO_QUARTO.map(lux => `<button type="button" data-luz-quarto="${esc(ref)}" data-lux-quarto="${lux}">${milhar(lux)} lux</button>`).join('')}</div>
+      ${volts}</div>`;
+  }).join('');
+  const chips = chipsDoPedido().map(c => {
+    const erro = P.errado?.tipo === c.tipo && P.errado.i === c.i, tudo = c.volts ? `${c.texto} · ${c.volts}` : c.texto;
+    return `<span class="chip-p${c.rodou ? '' : ' a-rodar'}${erro ? ' recusado' : ''}"><i class="${c.tipo}" aria-hidden="true"></i><button type="button" data-ir="${c.t}" title="Ir pra ${emSeg(c.t)} na régua">${esc(c.texto)}${c.volts ? `<span class="v">${esc(c.volts)}</span>` : ''}</button><button type="button" class="tirar" data-tirar="${c.tipo}:${c.i}" aria-label="Tirar: ${esc(tudo)}" title="Tirar">✕</button></span>`;
+  });
+  return `<b>Mexer e rodar de novo</b>
+    ${como ? `<p class="dica">${como}</p>` : ''}${luz}
+    ${chips.length ? `<div class="chips-p">${chips.join('')}</div>${chips.some(c => c.includes(' a-rodar')) ? '<span class="sub">tracejado: ainda não rodou</span>' : ''}`
+      : '<span class="sub">nenhum aperto nem luz: rodando de novo assim, a placa roda sozinha, sem ninguém mexer</span>'}
+    <div class="rodar-p"><button type="button" class="pilula" data-rodar-prog ${ocupado ? 'disabled' : ''}>Rodar de novo ↻</button>
+      ${ocupado ? '<span class="selo rodando">rodando…</span>' : '<span class="sub">roda o main.py no gêmeo só com isso</span>'}</div>
+    ${P.recado ? `<p class="aviso" role="status">${esc(P.recado)}</p>` : ''}`;
+}
+
+function preencherMexer(m, painel) {
+  const el = painel.querySelector('[data-mexer]'), P = S.prog;
+  if (!el) return;
+  const assinatura = JSON.stringify([m.versao, P.versao, P.pedido, P.enviando, !!P.espera, P.rodando, P.recado, P.errado]);
+  if (el.dataset.assinatura === assinatura) return;
+  el.dataset.assinatura = assinatura;
+  el.innerHTML = mexerHTML(m);
+}
+
 // ---------- zoom e arrasto (mexem so no viewBox) ----------
 function areaInfo() {
   const area = $('.area'), m = modeloVisto();
   if (!area || !m) return null;
-  const r = area.getBoundingClientRect();
+  const r = area.querySelector('.desenho').getBoundingClientRect();   // a área toda, menos a régua do ▶ Programa (o canto de cima é o mesmo)
   const base = Math.min((r.width - 150) / m.placa.w, (r.height - 64) / m.placa.h);   // sobra espaco pras ferramentas
   return { area, r, base, m };
 }
@@ -1512,7 +2262,8 @@ function nomeDoAlvo(m, alvo, sim) {
   const [k, id] = alvo.split(':');
   if (k === 'peca') {
     const p = m.pecas.find(q => q.ref === id), agora = agoraDe(m, id, sim).replace('agora: ', '');
-    return `${id} · ${p?.nome ?? ''}${agora ? ' · ' + agora : ''}`;
+    const aperta = S.prog.aberto && podeMexer() && p?.eletrica?.modelo === 'chave' ? ` · clique: aperta em ${emSeg(Math.round(S.prog.t))}` : '';
+    return `${id} · ${p?.nome ?? ''}${agora ? ' · ' + agora : ''}${aperta}`;
   }
   if (k === 'pino') {
     const pino = pinoDe(m, id), nome = nomePino(m, id);
@@ -2462,6 +3213,18 @@ document.addEventListener('click', async e => {
     for (const ref of Object.keys(S.opcoes)) delete S.opcoes[ref];   // a conta muda: as opcoes do resistor tambem
     return mexer('responder', { pergunta: b.dataset.responder, resposta: b.dataset.resposta }, 'Refazendo a conta…');
   }
+  if ('programa' in b.dataset) return alternarPrograma();   // ▶ Programa: a régua do tempo
+  if ('tocar' in b.dataset) return alternarTocar();
+  if (b.dataset.pular) return pular(+b.dataset.pular);
+  if (b.dataset.vel) { S.prog.vel = +b.dataset.vel; return mostrarInstante(); }
+  if (b.dataset.ir) { pararDeTocar(); return irParaInstante(+b.dataset.ir); }   // uma marca da régua, uma linha da serial, um chip
+  if (b.dataset.tirar) { const [tipo, i] = b.dataset.tirar.split(':'); return tirarChip(tipo, +i); }   // o ✕ de um chip
+  if (b.dataset.luzQuarto) return luzNoInstante(b.dataset.luzQuarto, +b.dataset.luxQuarto);
+  if ('rodarProg' in b.dataset) return rodarDeNovo();
+  if (S.prog.aberto && S.modo === 'seta' && !S.arrastou && podeMexer() && b.dataset.alvo?.startsWith('peca:')) {   // o botão desenhado
+    const ref = b.dataset.alvo.slice(5);
+    if (modeloDaPeca(modeloVisto(), ref) === 'chave') return apertarNoInstante(ref);
+  }
   if ('ligar' in b.dataset) return alternarLigado();
   if (b.dataset.chave) { S.ajustes.chave[b.dataset.chave] = !S.ajustes.chave[b.dataset.chave]; return desenhar(); }
   if (b.dataset.gpio) { S.ajustes.pinos[b.dataset.gpio] = +b.dataset.nivel; return desenhar(); }   // o pino do cérebro em 0 ou 1
@@ -2486,6 +3249,7 @@ document.addEventListener('click', async e => {
 document.addEventListener('input', e => {
   const el = e.target;
   if (el.id === 'cat-texto') { C.texto = el.value; C.todas = false; return desenharCatalogo(); }
+  if ('regua' in el.dataset) { pararDeTocar(); return irParaInstante(+el.value); }   // arrastando a régua do ▶ Programa
   if (el.dataset.pilha) S.ajustes.pilha[el.dataset.pilha] = +el.value;
   else if (el.dataset.resistor) S.ajustes.resistor[el.dataset.resistor] = el.dataset.lista.split(',').map(Number)[+el.value];
   else return;
@@ -2494,7 +3258,7 @@ document.addEventListener('input', e => {
 
 document.addEventListener('mousedown', e => {
   const area = e.target.closest('.area');
-  if (!area || e.target.closest('.ferramentas')) return;
+  if (!area || e.target.closest('.ferramentas, .regua')) return;
   S.arrastou = false;
   if (S.modo === 'mao' || e.button === 1) {
     e.preventDefault();
@@ -2514,7 +3278,7 @@ document.addEventListener('mousemove', e => {
   }
   const area = e.target.closest('.area'), hud = $('.hud');
   if (!hud) return;
-  if (!area || S.modo !== 'seta' || e.target.closest('.ferramentas')) { hud.hidden = true; return; }
+  if (!area || S.modo !== 'seta' || e.target.closest('.ferramentas, .regua')) { hud.hidden = true; return; }
   const m = modeloVisto(), svg = area.querySelector('.desenho');
   const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse());
   const dentro = pt.x >= 0 && pt.y >= 0 && pt.x <= m.placa.w && pt.y <= m.placa.h;
@@ -2538,13 +3302,14 @@ document.addEventListener('mouseup', () => {
 
 document.addEventListener('wheel', e => {
   const area = e.target.closest('.area');
-  if (!area) return;
+  if (!area || e.target.closest('.regua')) return;
   e.preventDefault();
   const r = area.getBoundingClientRect();
   zoomEm(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
 }, { passive: false });
 
 document.addEventListener('keydown', e => {
+  if (teclaDoPrograma(e)) return;
   if (!PLACA || e.target.closest('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'Escape') { S.sel = null; $('#versoes').hidden = true; return desenhar(); }
   if (S.aba !== 'projeto') return;
@@ -2554,6 +3319,7 @@ document.addEventListener('keydown', e => {
   if (e.key === '-') zoomEm(0.8);
   if (e.key === '0') { centralizar(); aplicarZoom(); }
   if (e.key === 'l') alternarLigado();
+  if (e.key === 'p') alternarPrograma();
 });
 
 window.addEventListener('resize', aplicarZoom);
@@ -2562,6 +3328,7 @@ if (PLACA) {
   lerDe('/api/placas').then(api => { S.api = !!api; desenhar(); });
   atualizar();
   setInterval(atualizar, 1000);
+  setInterval(() => { if (S.prog.aberto && S.aba === 'projeto') lerPrograma(); }, 1000);   // a régua aberta: o programa novo, ou 'rodando'
 } else {   // janela principal: Projetos | Pecas (relê a lista de projetos de vez em quando; as pecas, por clique)
   for (const id of ['voltar', 'direita']) $('#' + id).hidden = true;
   $('#abas').innerHTML = '<button type="button" data-inicio="projetos">Projetos</button><button type="button" data-inicio="pecas">Peças</button>';

@@ -8,7 +8,8 @@ uso: python3 ferramenta/programa.py placas/<x>            o roteiro de teste da 
 Uma rodada (rodar):
 1. pinos: o codigo/pinos.py sai do placa.txt (D1 = 32 ...), pro programa e a placa nunca discordarem
 2. preparar: a cópia saida/programa/sianvolt_<placa>_<hash8>/ com codigo/*.py, roteiro.json e gemeo.roteiro.
-   O laboratório trabalha numa pasta com o NOME da cópia; o hash do caminho deixa cada placa com a sua
+   O laboratório trabalha numa pasta com o NOME da cópia; o hash do caminho deixa cada placa com a sua.
+   No livre (o do app), só valem as entradas que vieram do app: sem nenhuma, a placa roda sozinha
 3. o lab.py roda a cópia no gêmeo, ligado no placa.txt (--circuito), e devolve a linha do tempo (--json)
 4. normalizar: a linha do tempo vira o programa.json (tempos em ms), com os nomes do NOSSO placa.txt
 5. conferir: o codigo/confere.json (só no roteiro de teste; o livre roda sem conferências)
@@ -17,10 +18,13 @@ A trava saida/.rodando deixa uma rodada por placa (a etapa 8 do testar usa a mes
 
 Entradas do app, em segundos (como o roteiro.json): {"apertos": [{"ref": "SW1", "de": 1.0, "ate": 1.2}],
 "luz": [{"ref": "LDR1", "t": 2.0, "lux": 1}]}. O aperto vira 'de 1 s a 1,2 s aperta SW1' no fim do gemeo.roteiro
-(aperta a chave de verdade do circuito). A luz vira volts no GPIO do LDR, no roteiro.json, pela conta do nosso
-circuito (com_pinos + resolver + ohms_do_ldr, o LDR do meio). O gemeo.roteiro nunca leva linha de lux: o
-laboratório não conhece e a rodada morreria. O roteiro.json da placa pode trazer a luz do mesmo jeito:
-{"t": 5, "luz": "LDR1", "lux": 1} (o preparar troca pelos volts).
+(aperta a chave de verdade do circuito). A luz vai no roteiro.json, e o roteiro.json da placa traz a luz do mesmo
+jeito: {"t": 5, "luz": "LDR1", "lux": 1}. O preparar pergunta pro laboratório se ele conhece a luz
+(recursos_do_lab, sem supor): se conhece, a luz vai em lux e o gêmeo põe o LDR do meio no circuito, então o pino
+lê o divisor de verdade (um LDR ligado errado aparece aqui); num laboratório antigo, a luz vira volts no GPIO do
+LDR, pela conta do nosso circuito (com_pinos + resolver + ohms_do_ldr, o LDR do meio). O brilho dos LEDs vem do
+evento 'led' do gêmeo (os números) ou, num laboratório antigo, do texto do aviso 'led'. O gemeo.roteiro da placa
+não leva linha de lux: a luz mora no roteiro.json, que serve aos dois laboratórios.
 
 codigo/confere.json, o que o roteiro do laboratório não sabe conferir: {"confere": [...]}, com 4 tipos fechados.
 Tempo sem '_ms' no nome é em segundos, como no roteiro.json. Chave que começa com '_' é comentário.
@@ -37,6 +41,8 @@ Tempo sem '_ms' no nome é em segundos, como no roteiro.json. Chave que começa 
 import contextlib
 import fcntl
 import hashlib
+import importlib
+import importlib.util
 import json
 import math
 import os
@@ -47,6 +53,7 @@ import subprocess
 import sys
 import threading
 import time
+import types
 from datetime import datetime
 from pathlib import Path
 
@@ -101,6 +108,54 @@ def tem_laboratorio():
     """o lab.py e o MicroPython do PC (o gêmeo) estão nesta máquina? O clone limpo não tem: a rodada dá código 5"""
     fe = Path(os.environ.get("LAB_FERRAMENTAS") or RAIZ / "laboratorio" / ".ferramentas")
     return LAB.is_file() and (fe / "micropython-unix" / "micropython").is_file()
+
+
+_RECURSOS = {}   # o que o laboratório sabe, guardado até um dos arquivos mudar (o app fica aberto dias)
+_TRAVA_DO_LAB = threading.Lock()   # o sys.modules e o sys.dont_write_bytecode são do processo: uma pergunta por vez
+
+
+def recursos_do_lab():
+    """o que o laboratório desta máquina sabe além do de sempre, perguntado pra ele mesmo (sem supor):
+    'led' = o contrato tem o evento 'led' (o brilho de cada LED em número); 'luz' = o roteiro.json aceita
+    {"t", "luz": "LDR1", "lux"} e o motor gemeo transforma isso em luz no LDR. Laboratório antigo ou nenhum: vazio"""
+    nucleo, motor = LAB.parent / "nucleo", LAB.parent / "motores" / "gemeo" / "motor" / "roteiro.py"
+    try:
+        chave = (str(LAB), tuple((nucleo / a).stat().st_mtime_ns for a in ("contrato.py", "roteiro.py")),
+                 motor.stat().st_mtime_ns)
+    except OSError:
+        return frozenset()
+    with _TRAVA_DO_LAB:
+        if _RECURSOS.get("chave") != chave:
+            _RECURSOS.update(chave=chave, tem=_perguntar_ao_lab(nucleo, motor))
+        return _RECURSOS["tem"]
+
+
+def _perguntar_ao_lab(nucleo, motor):
+    """carrega o contrato e o roteiro do laboratório com nomes só deles (sem pôr o laboratório no sys.path e sem
+    escrever .pyc lá) e testa: o contrato conhece o 'led'? o roteiro e o gêmeo aceitam a luz?"""
+    nome = "_nucleo_do_lab"
+    for m in [m for m in sys.modules if m == nome or m.startswith(nome + ".")]:
+        del sys.modules[m]   # o laboratório mudou: lê de novo
+    sys.modules[nome] = types.ModuleType(nome)
+    sys.modules[nome].__path__ = [str(nucleo)]
+    antes, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+    try:
+        contrato, roteiro = (importlib.import_module(f"{nome}.{m}") for m in ("contrato", "roteiro"))
+        spec = importlib.util.spec_from_file_location("_roteiro_do_gemeo", motor)
+        gemeo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gemeo)
+    except Exception:   # um laboratório quebrado ou de outro formato: o caminho de sempre
+        return frozenset()
+    finally:
+        sys.dont_write_bytecode = antes
+    tem = {"led"} if "led" in getattr(contrato, "TIPOS", {}) else set()
+    try:
+        roteiro.validar({"entradas": [{"t": 0, "luz": "LDR1", "lux": 1}]})
+        if any(a.get("tipo") == "luz" for _, a in gemeo.Roteiro(1e6, [{"t_ms": 0, "luz": "LDR1", "lux": 1}]).eventos):
+            tem.add("luz")
+    except Exception:   # o roteiro antigo recusa a chave 'luz', e o gêmeo antigo procura o pino dela
+        pass
+    return frozenset(tem)
 
 
 # ---------- a placa ----------
@@ -272,14 +327,19 @@ def validar_entradas(pasta, entradas):
     return saida
 
 
-def volts_da_luz(modelo, ref, lux):
-    """(GPIO, volts) que o pino do LDR lê com essa luz: o circuito inteiro (com_pinos + resolver), com os GPIOs
-    soltos e o LDR do meio (circuito.ohms_do_ldr). No divisor de sempre dá igual ao circuito.divisor_do_ldr"""
+def gpio_do_ldr(modelo, ref):
+    """(o LDR, o GPIO em que ele liga, direto ou por um resistor), ou ValueError"""
     p = next((p for p in modelo["pecas"] if p["ref"] == ref), None)
     ligs = por_peca(modelo).get(ref)
     if p is None or modelo_de(p) != "ldr" or not ligs:
         raise ValueError(f"{ref} não é um olho de luz ligado num GPIO do ESP32")
-    gpio = ligs[0][0]
+    return p, ligs[0][0]
+
+
+def volts_da_luz(modelo, ref, lux):
+    """(GPIO, volts) que o pino do LDR lê com essa luz: o circuito inteiro (com_pinos + resolver), com os GPIOs
+    soltos e o LDR do meio (circuito.ohms_do_ldr). No divisor de sempre dá igual ao circuito.divisor_do_ldr"""
+    p, gpio = gpio_do_ldr(modelo, ref)
     net = next(q["net"] for q in mcu_da(modelo)["pinos"] if q["nome"] == gpio)
     r = circuito.resolver(circuito.com_pinos(modelo, {}), {"ldr": {ref: circuito.ohms_do_ldr(p["eletrica"], lux, quem=ref)}})
     return gpio, r["nets"][net]
@@ -305,7 +365,7 @@ def apertos_do_roteiro(texto):
         if m and not m.group(5).upper().startswith("GPIO"):
             saida.append({"ref": m.group(5), "de": ms(*m.group(1, 2)), "ate": ms(*m.group(3, 4))})
             continue
-        m = re.match(rf"{_T}\s+(aperta|solta)\s+(\S+)$", s)
+        m = re.match(rf"(?:em\s+)?{_T}\s+(aperta|solta)\s+(\S+)$", s)
         if m and not m.group(4).upper().startswith("GPIO"):
             if m.group(3) == "aperta":
                 abertos[m.group(4)] = {"ref": m.group(4), "de": ms(*m.group(1, 2)), "ate": None}
@@ -343,24 +403,43 @@ def apagar_vaga(nome):
             arq.unlink(missing_ok=True)
 
 
-def preparar(pasta, entradas=None, livre=False, isolada=False):
+def so_o_ambiente(extra):
+    """o gemeo.roteiro da placa sem as entradas (apertos e pino forçado): ficam os comentários e o que é o mundo
+    em volta (aparelho I2C, wifi). É o que vale no livre, onde as entradas são só as do app"""
+    fica = []
+    for linha in extra.splitlines():
+        s = linha.split("#")[0].strip()
+        if not s or re.match(rf"(?:(?:em\s+)?{_T}\s+)?(?:i2c|wifi)\b", s):
+            fica.append(linha)
+    return "\n".join(fica)
+
+
+def preparar(pasta, entradas=None, livre=False, isolada=False, lux=None):
     """monta a cópia que o lab.py roda -> (pasta da cópia, entradas usadas em ms, pro programa.json).
-    A cópia tem os codigo/*.py, o roteiro.json (sem 'confere' no livre; a luz já em volts) e o gemeo.roteiro da
-    placa com os apertos do app no fim. A placa (codigo/) nunca é mudada"""
+    A cópia tem os codigo/*.py, o roteiro.json e o gemeo.roteiro. Fora do livre: o roteiro de teste da placa, com o
+    que o app mandou no fim. No livre (o do app): só as entradas do app; o roteiro.json vai sem entradas e sem
+    'confere', e o gemeo.roteiro só com o mundo em volta (I2C, wifi): sem nada do app, a placa roda sozinha.
+    lux: a luz vai em lux pro gêmeo (True) ou em volts no pino do LDR, pela nossa conta (False, o laboratório antigo);
+    None pergunta pro laboratório (recursos_do_lab). Na luz em lux, os volts do programa.json saem do gêmeo
+    (normalizar). A placa (codigo/) nunca é mudada"""
     pasta = Path(pasta).resolve()
     codigo = pasta / "codigo"
     if not (codigo / "main.py").is_file():
         raise ValueError("a placa não tem programa: falta o codigo/main.py")
+    if lux is None:
+        lux = "luz" in recursos_do_lab()
     app = validar_entradas(pasta, entradas)
     rot = ler_json(codigo / "roteiro.json", {})
     if not isinstance(rot, dict) or not isinstance(rot.get("entradas", []), list):
         raise ValueError('o codigo/roteiro.json é um objeto {"tempo", "entradas": [...], "confere": [...]}')
-    rot = {k: v for k, v in rot.items() if not (livre and k == "confere")}   # o livre roda sem conferências
     extra = (codigo / "gemeo.roteiro").read_text() if (codigo / "gemeo.roteiro").is_file() else ""
     for n, linha in enumerate(extra.splitlines(), 1):
         if re.search(r"\blux\b", linha.split("#")[0], re.I):
             raise ValueError(f'codigo/gemeo.roteiro, linha {n}: a luz vai no roteiro.json ({{"t": 5, "luz": "LDR1", '
-                             '"lux": 1}}); o laboratório não entende lux e a rodada morreria')
+                             '"lux": 1}}), que serve ao laboratório novo (em lux) e ao antigo (em volts)')
+    if livre:   # só o que veio do app: nem os apertos do gemeo.roteiro nem as entradas do roteiro.json
+        rot = {k: v for k, v in rot.items() if k not in ("confere", "entradas")}
+        extra = so_o_ambiente(extra)
     usadas = {"apertos": [{**a, "origem": "roteiro"} for a in apertos_do_roteiro(extra)] +
               [{"ref": a["ref"], "de": round(a["de"] * 1000, 3), "ate": round(a["ate"] * 1000, 3), "origem": "app"}
                for a in app["apertos"]],
@@ -375,7 +454,14 @@ def preparar(pasta, entradas=None, livre=False, isolada=False):
         else:
             outras.append(e)
     luzes += [{**x, "origem": "app"} for x in app["luz"]]
-    if luzes:
+    if luzes and lux:   # o gêmeo põe a luz no LDR do circuito: a ref tem que ser um LDR ligado num GPIO
+        modelo = modelo_da_placa(pasta)
+        for x in luzes:
+            gpio_do_ldr(modelo, x["ref"])
+            outras.append({"t": x["t"], "luz": x["ref"], "lux": x["lux"], "_": "o gêmeo põe o LDR do meio no circuito"})
+            usadas["luz"].append({"ref": x["ref"], "t": round(x["t"] * 1000, 3), "lux": x["lux"], "volts": None,
+                                  "origem": x["origem"]})
+    elif luzes:   # o laboratório antigo não conhece a luz: vira a tensão do divisor no pino, pela nossa conta
         modelo = modelo_da_placa(pasta)
         for x in luzes:
             gpio, v = volts_da_luz(modelo, x["ref"], x["lux"])
@@ -437,19 +523,29 @@ LED_APAGADO = re.compile(r"(\w+) apagado$")
 LED_ACESO = re.compile(r"(\w+) aceso, ([\d,]+) mA, luz (\d+)% do anúncio$")
 LED_MEIA = re.compile(r"(\w+) meia luz, ([\d,]+) mA na média \(([\d,]+) mA quando liga\), luz (\d+)% do anúncio$")
 QUEIMA = re.compile(r"(\w+) QUEIMA: passa ([\d,]+) mA")
+LDR_COMECA = re.compile(r"(\w+) começa com ([\d,]+) lux \(o LDR do meio: ([^)]+)\)")
 
 
 def vazio_do_pino():
     return {"quem": None, "nome": None, "modo": [], "nivel": [], "pwm": [], "volts": []}
 
 
+def led_do_evento(ev):
+    """o evento 'led' do gêmeo (o brilho em número: ref, i_med e i_max em A, luz, aceso, queima) -> (ref, luz, mA na
+    média, queima), ou None se faltar número. O LED que o gêmeo diz apagado (aceso False: menos de 1% de luz e nunca
+    1 mA, a regra do texto) entra com 0 e 0, como o texto 'D1 apagado': o de 35 µA de um pino que ficou como
+    entrada com pull-up não 'acende' na etapa 8, e os dois caminhos decidem igual"""
+    if not (isinstance(ev.get("ref"), str) and numero(ev.get("luz")) and numero(ev.get("i_med"))
+            and isinstance(ev.get("aceso"), bool)):
+        return None
+    if not ev["aceso"]:
+        return ev["ref"], 0.0, 0.0, bool(ev.get("queima"))
+    return ev["ref"], float(ev["luz"]), round(ev["i_med"] * 1000, 3), bool(ev.get("queima"))
+
+
 def led_do_aviso(ev):
-    """o aviso 'led' do gêmeo -> (ref, luz, mA na média, mA quando liga, queima ou None), ou None se não entendeu.
-    Com os campos numéricos (ref, luz, i_med, i_max, queima), se um dia o gêmeo mandar, eles valem; senão, o texto"""
-    if isinstance(ev.get("ref"), str) and numero(ev.get("luz")) and numero(ev.get("i_med")):
-        i_max = ev["i_max"] if numero(ev.get("i_max")) else ev["i_med"]
-        return (ev["ref"], float(ev["luz"]), round(ev["i_med"] * 1000, 3), f"{i_max * 1000:.1f}".replace(".", ","),
-                bool(ev.get("queima")))
+    """o aviso 'led' do laboratório antigo (só texto) -> (ref, luz, mA na média, mA quando liga, queima ou None), ou
+    None se não entendeu. A luz e a corrente saem arredondadas como no texto (1% e 0,1 mA)"""
     txt = ev.get("texto", "")
     m = LED_APAGADO.match(txt)
     if m:
@@ -476,6 +572,12 @@ def codigo_dos_eventos(fim, falhas, erro):
                                                                            4 if falhas else 0)
 
 
+def janela_da_serial(c):
+    """' depois de 5,000 s até 5,500 s' (o 'desde' e o 'ate' da conferência 'serial', como o laboratório escreve)"""
+    return ((f" depois de {seg(c['desde'] * 1000)}" if numero(c.get("desde")) else "") +
+            (f" até {seg(c['ate'] * 1000)}" if numero(c.get("ate")) else ""))
+
+
 def descrever(c):
     """uma conferência do roteiro.json em texto, do jeito que o laboratório escreve"""
     if "pwm" in c:
@@ -483,7 +585,7 @@ def descrever(c):
     if "pino" in c:
         return f"{c['pino']} = {c['valor']} em {seg(c['t'] * 1000)}"
     if "serial" in c:
-        return f"serial com '{c['serial']}'" + (f" até {seg(c['ate'] * 1000)}" if "ate" in c else "")
+        return f"serial com '{c['serial']}'" + janela_da_serial(c)
     if "trocas" in c:
         return f"trocas de {c['trocas']} entre {c.get('min', 0)} e {c.get('max', '∞')}"
     est = c.get("estado")
@@ -498,8 +600,7 @@ def e_a_falha(c, texto):
     if "pino" in c and numero(c.get("t")):
         return texto.startswith(str(c["pino"])) and f" = {c.get('valor')} em {seg(c['t'] * 1000)}" in texto
     if "serial" in c:
-        ate = f" até {seg(c['ate'] * 1000)}" if numero(c.get("ate")) else ""
-        return texto.startswith(f"serial com '{c['serial']}'{ate}:")
+        return texto.startswith(f"serial com '{c['serial']}'{janela_da_serial(c)}:")
     if "trocas" in c:
         return texto.startswith(f"trocas de {c['trocas']}") and f" entre {c.get('min', 0)} e " in texto
     return texto.startswith("estado ")
@@ -528,7 +629,10 @@ def normalizar(linhas, pasta, codigo=None, livre=False, entradas=None, confere=N
      avisos: [[t, codigo, texto]], erro: None | {t, texto, linha}, conferencias: {ok: [...], falhas: [...]},
      entradas: {apertos: [{ref, de, ate, origem}], luz: [{ref, t, lux, volts, origem}]}, pendentes: [...]}
     Tempos em ms. 'quem' e 'nome' saem do NOSSO placa.txt e do projeto.json (o 'nome' dos eventos é apelido
-    do laboratório). A luz do LED é a fração do brilho do anúncio; i_mA é a corrente média (no PWM, a média).
+    do laboratório). A luz do LED é a fração do brilho do anúncio; i_mA é a corrente média (no PWM, a média): do
+    evento 'led' (os números do gêmeo; o LED que ele diz apagado vai com 0 e 0) ou, num laboratório antigo, do
+    texto do aviso 'led' (1% e 0,1 mA). A luz que o preparar mandou em lux chega aqui com volts None: os volts são
+    os do gêmeo (o evento 'adc' com origem 'circuito' no pino do LDR), ou None se a rodada parou antes.
     codigo: o do lab.py (None = o que ele daria por esta linha do tempo). confere: a lista do roteiro.json"""
     pasta = Path(pasta)
     eventos = []
@@ -547,16 +651,32 @@ def normalizar(linhas, pasta, codigo=None, livre=False, entradas=None, confere=N
         proj = None
     prog = {"placa": pasta.name, "quando": datetime.now().isoformat(timespec="seconds"), "livre": livre,
             "codigo": codigo, "tempo_ms": 0.0, "pinos": {}, "leds": {}, "serial": [], "avisos": [], "erro": None,
-            "conferencias": {"ok": [], "falhas": []}, "entradas": entradas or {"apertos": [], "luz": []},
-            "pendentes": []}
+            "conferencias": {"ok": [], "falhas": []}, "pendentes": [],
+            "entradas": {k: [dict(x) for x in v] for k, v in (entradas or {"apertos": [], "luz": []}).items()}}
 
     def pino(nome):
         return prog["pinos"].setdefault(nome, vazio_do_pino())
 
     queimou, fim, conf = set(), None, None   # queimou: (ref, mA quando liga); o gêmeo avisa cada texto uma vez só
+    numerico = any(ev.get("tipo") == "led" for ev in eventos)   # o laboratório manda o brilho em número
+    do_circuito = []   # (t, GPIO, volts): o que o circuito pôs no pino quando a luz do LDR mudou
+    # a luz foi em lux: o preparar não fez a conta dos volts (None), mesmo se nenhuma luz coube na rodada
+    em_lux = any(x.get("volts") is None for x in prog["entradas"].get("luz", []))
+    pecas = {p["ref"]: p for p in modelo["pecas"]} if modelo else {}
     for ev in eventos:
         t, tipo = ev.get("t_ms", 0.0), ev.get("tipo")
-        if tipo == "modo":
+        if tipo == "led":
+            led = led_do_evento(ev)
+            if led is None:   # sem os números (ou sem o aceso): o texto de sempre, como no laboratório antigo
+                velho = led_do_aviso(ev)
+                led = velho and (*velho[:3], bool(ev.get("queima")))
+            if not led:
+                prog["avisos"].append([t, "led", ev.get("texto", "")])   # sem os números: o texto não some
+                continue
+            linha = prog["leds"].setdefault(led[0], [])
+            if not linha or linha[-1][1:] != list(led[1:]):   # o apagado de 35 µA repete o 0 e 0: fica um só
+                linha.append([t, *led[1:]])
+        elif tipo == "modo":
             pino(ev["pino"])["modo"].append([t, ev["modo"]])
         elif tipo == "pino":
             pino(ev["pino"])["nivel"].append([t, ev["valor"]])
@@ -564,9 +684,13 @@ def normalizar(linhas, pasta, codigo=None, livre=False, entradas=None, confere=N
             pino(ev["pino"])["pwm"].append([t, ev["duty"], ev.get("freq_hz")])
         elif tipo == "adc":
             pino(ev["pino"])["volts"].append([t, ev["volts"]])
+            if ev.get("origem") == "circuito":   # a tensão que o circuito pôs no pino quando a luz do LDR mudou
+                do_circuito.append((t, ev["pino"], ev["volts"]))
         elif tipo == "serial" and ev.get("dir") == "tx":
             prog["serial"].append([t, ev["texto"]])
         elif tipo == "aviso":
+            if ev.get("codigo") == "led" and numerico:   # o mesmo brilho já veio em número no evento 'led'
+                continue
             led = led_do_aviso(ev) if ev.get("codigo") == "led" else None
             if led:
                 ref, luz, i, i_liga, queima = led
@@ -578,7 +702,13 @@ def normalizar(linhas, pasta, codigo=None, livre=False, entradas=None, confere=N
                 ultimo = (prog["leds"].get(m.group(1)) or [None])[-1]
                 if ultimo and abs(ultimo[0] - t) <= FOLGA_T:
                     ultimo[3] = True
-            prog["avisos"].append([t, ev.get("codigo"), ev.get("texto", "")])
+            texto = ev.get("texto", "")
+            m = LDR_COMECA.match(texto) if ev.get("codigo") == "luz" else None
+            if m:   # a dica do laboratório é a do roteiro dele: aqui a luz muda pelo app ou pelo roteiro.json
+                nome = f" ({nome_de_gente(proj, pecas[m[1]])})" if m[1] in pecas else ""
+                texto = (f"{m[1]}{nome} começa com {m[2]} lux (o LDR do meio: {m[3]}) e fica assim até " +
+                         ("o app mudar a luz dele" if livre else "uma luz do codigo/roteiro.json mudar"))
+            prog["avisos"].append([t, ev.get("codigo"), texto])
         elif tipo == "erro" and prog["erro"] is None:
             prog["erro"] = {"t": t, "texto": ev["texto"], "linha": linha_do_main(ev["texto"])}
         elif tipo == "fim":
@@ -587,7 +717,6 @@ def normalizar(linhas, pasta, codigo=None, livre=False, entradas=None, confere=N
             conf = ev
 
     if modelo is not None:
-        pecas = {p["ref"]: p for p in modelo["pecas"]}
         for gpio, lista in nos_gpios(modelo).items():
             p = pino(gpio)
             refs = list(dict.fromkeys(ref for ref, _, _ in lista))
@@ -598,9 +727,18 @@ def normalizar(linhas, pasta, codigo=None, livre=False, entradas=None, confere=N
         prog["pendentes"] += [f"{p['ref']}: o datasheet não tem a curva de brilho; a luz é a corrente ÷ a corrente de "
                               "teste (uma reta)" for p in modelo["pecas"]
                               if modelo_de(p) == "led" and p["ref"] in prog["leds"] and not p["eletrica"].get("brilho")]
-    if prog["entradas"].get("luz"):
-        prog["pendentes"].append("a luz do quarto entra como volts no pino do LDR, pela nossa conta (o LDR do meio): "
-                                 "o gêmeo ainda não recebe lux, então um LDR ligado errado só aparece na etapa 4")
+    gpios_de = {ref: [g for g, _, _ in ligs] for ref, ligs in por_peca(modelo).items()} if modelo else {}
+    for x in prog["entradas"].get("luz", []):
+        if x.get("volts") is None:   # a luz foi em lux: os volts são os que o gêmeo viu no pino do LDR naquela hora
+            achou = [v for tl, p, v in do_circuito if abs(tl - x["t"]) <= FOLGA_T and p in gpios_de.get(x["ref"], [p])]
+            x["volts"] = achou[-1] if achou else None
+    if prog["entradas"].get("luz") and em_lux:   # pelo que o preparar mandou, e não pelo que coube na rodada
+        prog["pendentes"].append("a luz do quarto entra em lux no LDR, com o LDR do meio do datasheet: cada LDR de "
+                                 "verdade sai de um jeito, então os limites do main.py se calibram no quarto")
+    elif prog["entradas"].get("luz"):
+        prog["pendentes"].append("a luz do quarto entra como volts no pino do LDR, pela nossa conta (o LDR do meio, com "
+                                 "os outros pinos soltos): este laboratório não recebe lux, então o que o programa liga "
+                                 "nos pinos não muda essa tensão")
     prog["pinos"] = dict(sorted(prog["pinos"].items(), key=lambda x: ordem(x[0])))
     ok, falhas = do_laboratorio(conf, confere)
     prog["conferencias"] = {"ok": ok, "falhas": falhas}

@@ -2,7 +2,7 @@
 
 Vem de dois lugares:
   1) as entradas do Pedido (o roteiro.json do contrato, já com pino físico e t_ms): nível ou tensão num pino,
-     ou texto na serial (chega no sys.stdin na hora de placa);
+     texto na serial (chega no sys.stdin na hora de placa) ou a luz num LDR do circuito (lux);
   2) opcional, um arquivo gemeo.roteiro na pasta do programa, pro que o contrato não tem (formato do protótipo):
         i2c 0x48 0x00 = 0x19 0x80      aparelho I2C de mentira: endereço, registrador, bytes (no tempo 0)
         2 s i2c 0x48 0x00 = 0x1E 0x00  ... o aparelho muda de valor em 2 s
@@ -10,7 +10,9 @@ Vem de dois lugares:
         de 1,0 s a 1,5 s aperta SW1    chave do circuito (--circuito) apertada nesse intervalo
         2 s aperta SW1 / 2,5 s solta SW1
         0 s GPIO34 = 1,65 V / 1 s GPIO4 = 0 / 3 s GPIO4 solto
-     Vírgula ou ponto no decimal; s, ms ou us. As conferências ficam no roteiro.json (o lab.py confere).
+        em 5 s LDR1 = 1 lux            a luz no LDR1 do circuito (--circuito) a partir de 5 s (0 lux = escuro)
+     Vírgula ou ponto no decimal; s, ms ou us; o 'em' na frente do tempo é opcional. As conferências ficam no
+     roteiro.json (o lab.py confere).
 """
 import re
 
@@ -42,6 +44,8 @@ class Roteiro:
             t = round(e["t_ms"] * 1000)
             if "serial" in e:   # texto que chega na serial da placa (o sys.stdin do MicroPython)
                 self.eventos.append((t, {"tipo": "serial", "texto": e["serial"]}))
+            elif "luz" in e:    # a luz num LDR do circuito: o núcleo põe a resistência dele no circuito
+                self.eventos.append((t, {"tipo": "luz", "ref": e["luz"], "lux": float(e["lux"])}))
             elif "volts" in e:
                 self.eventos.append((t, {"tipo": "externo", "gpio": _gpio(e["pino"]), "sinal": ("volts", e["volts"])}))
             else:
@@ -74,10 +78,14 @@ class Roteiro:
             self.eventos.append((t1, self._acao(["aperta", m.group(5)])))
             self.eventos.append((t2, self._acao(["solta", m.group(5)])))
             return
-        m = re.match(r"%s\s+(.*)$" % _T, s)
+        m = re.match(r"(?:em\s+)?%s\s+(.*)$" % _T, s)
         if not m:
             raise ValueError("não entendi a linha")
         self.eventos.append((tempo(m.group(1) + " " + m.group(2)), self._acao(m.group(3).split())))
+
+    def luzes(self):
+        """[(t_us, ref, lux)] de cada luz do roteiro (o gemeo.py confere que a ref é um LDR do circuito)"""
+        return [(t, a["ref"], a["lux"]) for t, a in self.eventos if a["tipo"] == "luz"]
 
     @staticmethod
     def _i2c(p):
@@ -102,4 +110,8 @@ class Roteiro:
         if p[0] == "i2c":
             addr, reg, resto = self._i2c(p[1:])
             return {"tipo": "i2c", "addr": addr, "reg": reg, "bytes": resto}
+        m = re.fullmatch(r"(\w+)=(\d+(?:[.,]\d+)?)lux", "".join(p), re.I)
+        if m:   # LDR1 = 1 lux (com ou sem espaço antes do lux); a origem faz o núcleo pôr a luz na linha do tempo
+            return {"tipo": "luz", "ref": m.group(1), "lux": float(m.group(2).replace(",", ".")),
+                    "origem": "gemeo.roteiro"}
         raise ValueError("não entendi '%s'" % " ".join(p))

@@ -3,9 +3,9 @@
     python3 laboratorio/motores/gemeo/ensaios/testa.py [--rapido]     (--rapido pula o laço que trava, ~3 s cada)
 
 Cada caso roda 'lab.py rodar <placa> <programa> --motor gemeo --json', confere o código de saída, valida cada
-linha contra o contrato e procura os eventos esperados. No fim confere que não sobrou micropython rodando (só os
-que este teste abriu: outros Claudes podem estar usando o laboratório) e que ferramenta/ não mudou. Sai com 0
-quando tudo passa.
+linha contra o contrato e procura os eventos esperados (no uso errado, código 2, procura o texto no stderr). No
+fim confere que não sobrou micropython rodando (só os que este teste abriu: outros Claudes podem estar usando o
+laboratório) e que ferramenta/ não mudou. Sai com 0 quando tudo passa.
 """
 import json
 import os
@@ -35,9 +35,27 @@ CASOS = [
       ("aviso", "texto", "GPIO4 está flutuando"), ("aviso", "codigo", "corrente"),
       ("erro", "texto", "ValueError: pin can only be input")]),
     ("esp32", X + "pisca", ["--circuito", LAB / E / "placa_teste.txt"], 0,
-     [("aviso", "texto", "D1 aceso, 5,9 mA"), ("aviso", "texto", "D1 apagado")]),
+     [("led", "texto", "D1 aceso, 5,9 mA"), ("led", "texto", "D1 apagado"), ("led", "i_max", "0.005926"),
+      ("led", "luz", "0.5926")]),
     ("c3", X + "pisca", ["--circuito", LAB / E / "circuito_c3/placa_c3.txt"], 0,
-     [("aviso", "texto", "GPIO9 é pino de boot e o circuito deixa ele em 0,60 V"), ("aviso", "texto", "D1 aceso, 5,9 mA")]),
+     [("aviso", "texto", "GPIO9 é pino de boot e o circuito deixa ele em 0,60 V"), ("led", "texto", "D1 aceso, 5,9 mA")]),
+    # a luz em lux no LDR do circuito (roteiro.json e gemeo.roteiro): o GPIO34 lê o divisor de verdade
+    ("esp32", E + "luz", ["--circuito", LAB / E / "circuito_ldr/placa_ldr.txt"], 0,
+     [("luz", "lux", "100"), ("adc", "origem", "circuito"), ("adc", "volts", "2.3751"), ("serial", "texto", "mv 2375"),
+      ("led", "texto", "D1 aceso, 5,9 mA"), ("led", "luz", "0.5926"), ("led", "aceso", "True"),
+      ("luz", "origem", "gemeo.roteiro")]),
+    # o LDR longe do pino, por um resistor: o gêmeo acha o GPIO34 pelo R9 (o 'adc' do circuito; 1 lux = 2,387 V à mão)
+    ("esp32", E + "luz", ["--circuito", LAB / E / "circuito_ldr/placa_ldr_res.txt",
+                          "--roteiro", LAB / E / "circuito_ldr/roteiro_res.json"], 0,
+     [("adc", "origem", "circuito"), ("adc", "volts", "2.386"), ("serial", "texto", "mv 2387")]),
+    # o LED aceso só pelo pull-up: os números do fiozinho de corrente, mas apagado (aceso False, como o texto)
+    ("esp32", E + "pullup", ["--circuito", LAB / E / "circuito_ldr/placa_ldr.txt"], 0,
+     [("led", "texto", "D1 apagado"), ("led", "aceso", "False"), ("led", "luz", "0.003"), ("led", "i_med", "e-05")]),
+    ("esp32", E + "luz", [], 2, [("stderr", None, "rode com --circuito placa.txt")]),
+    ("esp32", E + "luz_errada", ["--circuito", LAB / E / "circuito_ldr/placa_ldr.txt"], 1,
+     [("erro", "texto", "LDR9 não é um LDR do circuito (os LDRs: LDR1)")]),
+    ("esp32", E + "luz_errada", ["--circuito", LAB / E / "placa_teste.txt"], 1,
+     [("erro", "texto", "LDR9 não é um LDR do circuito (ele não tem LDR)")]),
     ("c3", X + "pisca", ["--circuito", LAB / E / "placa_teste.txt"], 0,
      [("aviso", "texto", "o circuito tem um ESP32 DevKit (U1), mas a placa escolhida é o C3")]),
     ("esp32", E + "wifi_adc2", ["--tempo", "3"], 0,
@@ -80,6 +98,10 @@ def conferir(r, esperado, procura):
     problemas, eventos = [], []
     if r.returncode != esperado:
         problemas.append("código %d, esperava %d (%s)" % (r.returncode, esperado, r.stderr.strip()[-200:]))
+    if esperado == contrato.USO:   # uso errado: nada no stdout, a explicação no stderr
+        problemas += ["faltou '%s' no stderr (%s)" % (t, r.stderr.strip()[-200:]) for _, _, t in procura
+                      if t not in r.stderr] + (["o stdout devia ficar vazio"] if r.stdout.strip() else [])
+        return problemas, {}
     for linha in r.stdout.splitlines():
         ev = json.loads(linha)
         if ev["tipo"] != "conferencias":

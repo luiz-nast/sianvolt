@@ -1,0 +1,20 @@
+# ensaio da luz com o LDR longe do pino: 3V3 → 22 kΩ → GPIO34 → R9 de 1 kΩ → LDR → GND. O pino do ADC não
+# fica na net do LDR: o gêmeo acha ele pelo resistor (R9) e manda o "adc" com origem circuito. LED com 220 Ω
+# no GPIO23; o LDR é o mesmo C10081 de pecas/ (o do placa_ldr.txt)
+# (pinagem do DevKit de 30 pinos: 30 = GPIO23, 4 = GPIO34, 16 = 3V3, 14 e 17 = GND)
+placa 100 70
+furos cantos 3.2
+peca U1 esp32_devkit 35 35
+peca R1 resistor_axial 80 60 220
+peca D1 led_5mm 80 50
+peca R2 resistor_axial 80 25 22k
+peca LDR1 C10081 80 10
+liga U1.30 R1.1      # GPIO23 -> resistor do LED
+liga R1.2 D1.1       # -> + do LED
+liga D1.2 GND        # − do LED no GND
+liga U1.16 R2.1      # 3V3 -> 22 kΩ
+liga R2.2 U1.4       # -> GPIO34 (ADC)
+peca R9 resistor_axial 60 10 1k
+liga U1.4 R9.1      # GPIO34 -> 1 kΩ
+liga R9.2 LDR1.1     # -> LDR
+liga LDR1.2 GND      # -> GND: no escuro o LDR vira uma resistência enorme e a tensão no GPIO34 sobe

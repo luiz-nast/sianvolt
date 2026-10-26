@@ -9,7 +9,7 @@ sys.dont_write_bytecode = True   # sem .pyc: nada escrito fora de build/
 sys.path.insert(0, str(LAB))
 import lab  # noqa: E402
 import motores  # noqa: E402
-from nucleo import contrato, ferramentas as fer, mentira, placas, preparar, roteiro  # noqa: E402
+from nucleo import contrato, ferramentas as fer, mentira, placas, preparar, roteiro, texto  # noqa: E402
 from nucleo.mentira import pin  # noqa: E402
 
 AQUI = fer.BUILD / ".tmp" / "teste_nucleo"
@@ -92,13 +92,29 @@ def teste_conferencias():
              ({"estado": "tempo"}, True), ({"estado": ["acabou", "erro"]}, False)]
     casos += [({"t": 1.5, "pino": "LED", "valor": 0}, False),   # depois do fim (estado tempo): não deu pra ver
               ({"serial": "olá", "ate": 5}, True), ({"serial": "tchau", "ate": 5}, False)]
+    casos += [({"serial": "olá", "desde": 0.2}, True), ({"serial": "olá", "desde": 0.3}, False),   # tem que sair DEPOIS
+              ({"serial": "olá", "desde": 0.299}, True), ({"serial": "olá", "desde": 0.2, "ate": 0.3}, True),
+              ({"serial": "olá", "desde": 0.1, "ate": 0.2}, False), ({"serial": "olá", "desde": 2}, False)]
     rot = roteiro.validar({"confere": [c for c, _ in casos]})
     res = roteiro.conferir(ev, rot, placas.PLACAS["esp32"])
     for (c, quer), r in zip(casos, res):
         certo(r["ok"] == quer, "confere %r deu %s (%s)" % (c, r["ok"], r["texto"]))
-    certo("não deu pra ver" in res[-3]["texto"] and "não deu pra ver" in res[-1]["texto"],
-          "depois do fim: diz que não deu pra ver: %s | %s" % (res[-3]["texto"], res[-1]["texto"]))
+    certo("não deu pra ver" in res[-9]["texto"] and "não deu pra ver" in res[-7]["texto"],
+          "depois do fim: diz que não deu pra ver: %s | %s" % (res[-9]["texto"], res[-7]["texto"]))
     certo("nada até 0,100 s" in res[7]["texto"], "serial: diz o que saiu até 'ate': %s" % res[7]["texto"])
+    certo(res[-5]["texto"] == "serial com 'olá' depois de 0,300 s: nada depois de 0,300 s (a última linha saiu em "
+          "0,300 s)", "serial com desde: diz que nada saiu depois (%s)" % res[-5]["texto"])
+    certo(res[-2]["texto"] == "serial com 'olá' depois de 0,100 s até 0,200 s: nada até 0,200 s (a primeira linha "
+          "depois de 0,100 s saiu em 0,300 s)", "serial com desde e ate: a janela (%s)" % res[-2]["texto"])
+    certo("não deu pra ver" in res[-1]["texto"], "desde depois do fim da rodada: não deu pra ver (%s)" % res[-1]["texto"])
+    no_fim = [{"serial": "olá", "desde": 1}, {"serial": "olá", "desde": 0.9999998}]   # depois do fim não existe janela
+    for r in roteiro.conferir(ev, roteiro.validar({"confere": no_fim}), placas.PLACAS["esp32"]):
+        certo(not r["ok"] and "não deu pra ver: a rodada parou em 1,000 s" in r["texto"],
+              "desde no fim da rodada (estado tempo): não deu pra ver (%s)" % r["texto"])
+    r = roteiro.conferir(ev[:-1] + [contrato.fim("acabou", "mentira", "esp32", "esp32", 1000, 0.1)],
+                         roteiro.validar({"confere": no_fim[:1]}), placas.PLACAS["esp32"])[0]
+    certo(not r["ok"] and "nada depois de 1,000 s" in r["texto"],
+          "desde no fim, o programa acabou: nada mais sairia (%s)" % r["texto"])
     acabou = ev[:-1] + [contrato.fim("acabou", "mentira", "esp32", "esp32", 1000, 0.1)]
     r = roteiro.conferir(acabou, roteiro.validar({"confere": [{"t": 1.5, "pino": "LED", "valor": 0}]}),
                          placas.PLACAS["esp32"])[0]
@@ -114,8 +130,65 @@ def teste_conferencias():
     cods = [e.get("codigo") for e in contrato._conferir_entradas(forca, esp) if e["tipo"] == "aviso"]
     certo(cods == ["curto", "tensao"], "roteiro forçando pino de saída e 7,5 V na ESP32 viram aviso: %r" % cods)
     for ruim in ({"tempo": -1}, {"precisa": ["voar"]}, {"entradas": [{"t": 0, "pino": "LED"}]},
-                 {"confere": [{"t": 1, "pwm": "PWM", "duty": 0.5}]}, {"confere": [{"olha": 1}]}, {"extra": 1}):
+                 {"confere": [{"t": 1, "pwm": "PWM", "duty": 0.5}]}, {"confere": [{"olha": 1}]}, {"extra": 1},
+                 {"confere": [{"serial": "x", "desde": 2, "ate": 1}]}, {"confere": [{"serial": "x", "desde": -1}]},
+                 {"tempo": float("inf")}, {"entradas": [{"t": float("nan"), "serial": "x"}]}):
         certo(recusa(roteiro.validar, ruim), "roteiro devia recusar %r" % ruim)
+
+
+def teste_luz_e_led():
+    """a luz do LDR como entrada (roteiro.json -> Pedido -> evento 'luz') e o brilho do LED como evento 'led'"""
+    rot = roteiro.validar({"entradas": [{"t": 1, "luz": "LDR1", "lux": 1, "_": "apagaram a luz"},
+                                        {"t": 0, "luz": " LDR1 ", "lux": 100}]})
+    ent = roteiro.entradas(rot, placas.PLACAS["esp32"])
+    certo(ent == [{"t_ms": 0.0, "luz": "LDR1", "lux": 100.0}, {"t_ms": 1000.0, "luz": "LDR1", "lux": 1.0}],
+          "luz nas entradas do Pedido, sem pino: %r" % ent)
+    for ruim in ({"t": 0, "luz": "LDR1"}, {"t": 0, "lux": 1}, {"t": 0, "luz": "LDR1", "lux": -1},
+                 {"t": 0, "luz": "", "lux": 1}, {"t": 0, "luz": "LDR1", "lux": "1"}, {"t": 0, "luz": 1, "lux": 1},
+                 {"t": 0, "luz": "LDR1", "lux": 1, "pino": "POT"}, {"t": 0, "luz": "LDR1", "lux": float("inf")}):
+        certo(recusa(roteiro.validar, {"entradas": [ruim]}), "roteiro devia recusar a luz %r" % ruim)
+    pasta = programa("luz", "pisca")
+    try:
+        pedido(pasta, ent, 2000)
+        certo(False, "luz sem --circuito devia ser uso errado")
+    except ValueError as e:
+        certo("rode com --circuito" in str(e) and "LDR1" in str(e), "luz sem --circuito: erro claro (%s)" % e)
+    ev = contrato.executar(mentira.motor(), pedido(pasta, ent, 2000, circuito=pasta / "placa.txt"))
+    luz = [e for e in ev if e["tipo"] == "luz"]
+    certo(luz == [], "o motor sem 'luz' nos RECURSOS não recebe a luz, e ela não aparece como se tivesse acontecido")
+    certo(any(e.get("codigo") == "recurso" and "LDR1 com 100 lux em 0,000 s" in e["texto"] and "ficaram de fora" in
+              e["texto"] for e in ev), "o motor sem luz: o aviso diz o que ficou de fora")
+    ev = contrato.executar(mentira.motor(), pedido(pasta, ent[:1], 2000, circuito=pasta / "placa.txt"))
+    certo(any(e.get("codigo") == "recurso" and e["texto"].endswith("0,000 s ficou de fora") for e in ev),
+          "uma luz só: 'ficou' (%s)" % [e["texto"] for e in ev if e.get("codigo") == "recurso"])
+    m = mentira.motor()
+    m.RECURSOS = m.RECURSOS | {"luz", "eletrica"}
+    ev = contrato.executar(m, pedido(pasta, ent, 2000, circuito=pasta / "placa.txt"))
+    luz = [e for e in ev if e["tipo"] == "luz"]
+    certo([(e["t_ms"], e["ref"], e["lux"], e["origem"]) for e in luz] == [(0.0, "LDR1", 100.0, "roteiro"),
+                                                                         (1000.0, "LDR1", 1.0, "roteiro")],
+          "o lab.py insere a luz na linha do tempo: %r" % luz)
+    certo(texto.linha(luz[1]) == "LDR1 com 1 lux  (roteiro)", "luz em texto: %r" % texto.linha(luz[1]))
+    led = {"t_ms": 1.0, "tipo": "led", "ref": "D1", "i_med": 0.005926, "i_max": 0.005926, "luz": 0.5926,
+           "aceso": True, "queima": False, "texto": "D1 aceso, 5,9 mA, luz 59% do anúncio"}
+    certo(contrato.valida(led) == led, "o evento 'led' valida, com o aceso e o queima True/False")
+    do_arquivo = {"t_ms": 0, "tipo": "luz", "ref": "LDR1", "lux": 1.5, "origem": "gemeo.roteiro"}
+    certo(contrato.valida(do_arquivo)["origem"] == "gemeo.roteiro" and
+          texto.linha(do_arquivo) == "LDR1 com 1,5 lux  (gemeo.roteiro)", "a luz do gemeo.roteiro: valida e vira texto")
+    for ruim in (dict(led, queima=0), dict(led, aceso=1), {k: v for k, v in led.items() if k != "aceso"},
+                 dict(led, luz="59%"), dict(led, i_med=True), {k: v for k, v in led.items() if k != "ref"},
+                 {"t_ms": 0, "tipo": "luz", "ref": "LDR1", "lux": -1, "origem": "roteiro"},
+                 {"t_ms": 0, "tipo": "adc", "pino": "GPIO34", "volts": 1.0, "origem": "lab"}):
+        certo(recusa(contrato.valida, ruim), "valida devia recusar %r" % (ruim,))
+    adc = {"t_ms": 0, "tipo": "adc", "pino": "GPIO34", "volts": 2.3751, "origem": "circuito"}
+    certo(contrato.valida(adc)["origem"] == "circuito" and texto.linha(adc) == "GPIO34 = 2,38 V  (circuito)",
+          "adc do circuito: valida e vira texto")
+    certo(texto.linha(led) == led["texto"], "o LED em texto é o texto de sempre")
+    fim = contrato.fim("tempo", "gemeo", "esp32", "esp32", 3, 0.1)
+    rel = texto.relatorio([led, dict(led, t_ms=2.0, i_med=0.005927), dict(led, t_ms=3.0, luz=0, i_med=0, i_max=0,
+                                                                          aceso=False, texto="D1 apagado"), fim], [])
+    certo(rel.count("D1 aceso") == 1 and "D1 apagado" in rel, "no terminal, o LED que mudou sem mudar o texto não "
+          "repete a linha:\n" + rel)
 
 
 def pedido(pasta, entradas, tempo_ms, **extra):
@@ -274,8 +347,8 @@ def teste_catalogo_e_exemplos():
 if __name__ == "__main__":
     shutil.rmtree(AQUI, ignore_errors=True)
     AQUI.mkdir(parents=True)
-    for teste in (teste_apelidos, teste_valida, teste_conferencias, teste_roteiro_e_fim, teste_codigos,
-                  teste_vagas, teste_ferramentas, teste_catalogo_e_exemplos):
+    for teste in (teste_apelidos, teste_valida, teste_conferencias, teste_roteiro_e_fim, teste_luz_e_led,
+                  teste_codigos, teste_vagas, teste_ferramentas, teste_catalogo_e_exemplos):
         antes = CONTA["falha"], teste()
         print("%-28s %s" % (teste.__name__, "ok" if CONTA["falha"] == antes[0] else "FALHOU"))
     for pasta in [AQUI] + [fer.BUILD / p / "mentira" for p in placas.PLACAS]:   # o que o motor de mentira deixou
