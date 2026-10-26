@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 import blocos
 import catalogo
 import loja
+import programa
 
 RAIZ = Path(__file__).resolve().parent.parent
 PLACAS = RAIZ / "placas"
@@ -27,7 +28,10 @@ PORTA = 8765
 OCIOSO = 180          # sem nenhum pedido por 3 min (janela fechada), o app fecha
 HOSTS = {f"127.0.0.1:{PORTA}", f"localhost:{PORTA}"}   # so o navegador desta maquina; outro nome no Host e golpe (DNS rebinding)
 SERVIDO = ("/bancada/", "/placas/")                     # o resto do repositorio (.git, .claude...) nao sai daqui
-rodando = {}          # placa -> processo do testar.py
+CODIGO_DE_LOJA = re.compile(r"[a-z]+:[a-z0-9-]+")   # peça de loja brasileira no catálogo (robocore:esp32-wifi-bluetooth)
+rodando = {}          # placa -> processo do testar.py ou do programa.py (um por placa)
+o_que = {}            # placa -> "testes" ou "programa": o que é o processo do rodando[placa]
+testar_depois = set()  # placas com o testar pedido no meio do programa: roda quando o programa acabar
 trava = threading.Lock()
 ultimo = [time.monotonic()]
 
@@ -60,13 +64,53 @@ def usos():
     return quem
 
 
+def vivo(nome):
+    """a placa tem um testar.py ou programa.py rodando agora? chamar com a trava"""
+    return nome in rodando and rodando[nome].poll() is None
+
+
 def rodar_testes(pasta, frase=None):
     """dispara o testar.py dessa placa (um por vez); chamar com a trava. frase = o que mudou, pra versao"""
-    if pasta.name in rodando and rodando[pasta.name].poll() is None:
+    if vivo(pasta.name):
         return False
     rodando[pasta.name] = subprocess.Popen([python(), str(RAIZ / "ferramenta" / "testar.py"), str(pasta), *(["-m", frase] if frase else [])], cwd=RAIZ,
                                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    o_que[pasta.name] = "testes"
     return True
+
+
+def comando_do_programa(pasta, entradas):
+    """o programa.py dessa placa do jeito do app: livre (sem conferências), com os apertos e a luz que vieram"""
+    return [python(), str(RAIZ / "ferramenta" / "programa.py"), str(pasta), "--livre", "--entradas",
+            json.dumps(entradas, ensure_ascii=False)]
+
+
+def rodar_programa(pasta, entradas):
+    """dispara o programa da placa no gêmeo, no mesmo lugar do testar (rodando[placa]); chamar com a trava"""
+    proc = subprocess.Popen(comando_do_programa(pasta, entradas), cwd=RAIZ, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+    rodando[pasta.name], o_que[pasta.name] = proc, "programa"
+    threading.Thread(target=testar_quando_acabar, args=(pasta, proc), daemon=True).start()
+
+
+def testar_quando_acabar(pasta, proc):
+    """o testar pedido no meio do programa roda assim que ele acaba (em vez de sumir)"""
+    proc.wait()
+    with trava:   # outro programa já começou nesse meio tempo: fica pro fim dele
+        if pasta.name in testar_depois and not (vivo(pasta.name) and o_que.get(pasta.name) == "programa"):
+            testar_depois.discard(pasta.name)
+            rodar_testes(pasta)   # se os testes já começaram por outro pedido, não abre outro
+
+
+def ultimo_programa(pasta):
+    """o programa.json ou o programa_livre.json mais novo da placa, ou None"""
+    arqs = [a for a in (programa.arquivo(pasta, True), programa.arquivo(pasta, False)) if a.is_file()]
+    for arq in sorted(arqs, key=lambda a: a.stat().st_mtime_ns, reverse=True):
+        try:
+            return json.loads(arq.read_text())
+        except (OSError, ValueError):   # sendo trocado agora: tenta o outro
+            continue
+    return None
 
 
 class Bancada(SimpleHTTPRequestHandler):
@@ -124,6 +168,21 @@ class Bancada(SimpleHTTPRequestHandler):
                 return self.responder({"erro": str(e)}, 502)
         if url.path == "/api/foto":
             return self.foto(q.get("codigo", ""))
+        if url.path == "/api/programa":   # 'rodando', ou o último que rodou (o do app ou o do roteiro de teste)
+            pasta = placa(q.get("placa", ""))
+            if not pasta:
+                return self.responder({"erro": "placa não existe"}, 404)
+            if not (pasta / "codigo" / "main.py").is_file():   # a lanterna: sem o ▶ Programa, nem com os testes rodando
+                return self.responder({"erro": "esta placa não tem programa (falta o codigo/main.py)", "sem_programa": True},
+                                      404)
+            with trava:   # o testar também roda o programa (a etapa 8): o resultado novo está vindo
+                ocupada = vivo(pasta.name)
+            if ocupada or programa.ocupada(pasta):
+                return self.responder({"rodando": True})
+            prog = ultimo_programa(pasta)
+            if prog is None:
+                return self.responder({"erro": "o programa desta placa ainda não rodou"}, 404)
+            return self.responder({**prog, "rodando": False})
         if url.path == "/":
             self.send_response(302)
             self.send_header("Location", "/bancada/")
@@ -164,7 +223,7 @@ class Bancada(SimpleHTTPRequestHandler):
 
     def foto(self, codigo):
         """foto da peca na LCSC (fica no cache do loja.py)"""
-        if not loja.CODIGO.match(codigo):
+        if not loja.CODIGO.fullmatch(codigo):   # o '$' do CODIGO aceita 'C1\n'
             return self.responder({"erro": "código"}, 400)
         try:
             url = loja.pagina(codigo)["foto"]
@@ -185,7 +244,8 @@ class Bancada(SimpleHTTPRequestHandler):
         if self.headers.get("Host") not in HOSTS:
             return self.responder({"erro": "host"}, 403)
         # o cabecalho proprio faz o navegador barrar pedido vindo de outro site
-        if url.path not in ("/api/testar", "/api/escolher", "/api/responder", "/api/catalogo/checar", "/api/catalogo/buscar") \
+        if url.path not in ("/api/testar", "/api/escolher", "/api/responder", "/api/programa", "/api/catalogo/checar",
+                            "/api/catalogo/buscar") \
                 or self.headers.get("X-Bancada") != "1":
             return self.responder({"erro": "não existe"}, 404)
         try:
@@ -201,20 +261,39 @@ class Bancada(SimpleHTTPRequestHandler):
         pasta = placa(nome)
         if not pasta:
             return self.responder({"erro": f"a placa '{nome}' não existe"}, 404)
+        if url.path == "/api/programa":   # o corpo e conferido antes: aperto so em botao, luz so em olho de luz
+            if not (pasta / "codigo" / "main.py").is_file():
+                return self.responder({"erro": "esta placa não tem programa (falta o codigo/main.py)"}, 400)
+            try:
+                entradas = programa.validar_entradas(pasta, corpo)
+            except ValueError as e:
+                return self.responder({"erro": str(e)}, 400)
         with trava:   # uma rodada por placa de cada vez; a chave e a pasta de verdade, nao o texto da URL
-            ocupada = pasta.name in rodando and rodando[pasta.name].poll() is None
+            ocupada = vivo(pasta.name) and o_que.get(pasta.name, "testes")
+            if url.path == "/api/testar" and ocupada == "programa":   # roda quando o programa acabar
+                testar_depois.add(pasta.name)
+                return self.responder({"ok": True, "ja_rodando": False, "depois_do_programa": True})
             if url.path == "/api/testar":
                 return self.responder({"ok": True, "ja_rodando": not rodar_testes(pasta)})
             if ocupada:   # nao mexe no placa.txt no meio de uma rodada
-                return self.responder({"erro": "os testes estão rodando; tenta de novo em uns segundos"}, 409)
+                quem = "o programa da placa está rodando" if ocupada == "programa" else "os testes estão rodando"
+                return self.responder({"erro": f"{quem}; tenta de novo em uns segundos"}, 409)
+            if url.path == "/api/programa":   # responde na hora; o GET diz quando acabou
+                rodar_programa(pasta, entradas)
+                return self.responder({"rodando": True})
             try:
                 if url.path == "/api/escolher":
                     ref, codigo = str(corpo.get("ref", "")), str(corpo.get("codigo", ""))
-                    if not re.fullmatch(r"[A-Za-z_]\w*", ref) or not loja.CODIGO.match(codigo):
+                    de_loja = loja.CODIGO.fullmatch(codigo) or CODIGO_DE_LOJA.fullmatch(codigo)   # C123 ou robocore:...
+                    if not re.fullmatch(r"[A-Za-z_]\w*", ref) or not de_loja:
                         return self.responder({"erro": "ref ou código inválido"}, 400)
                     feito = blocos.escolher(pasta, ref, codigo)
-                else:
-                    feito = blocos.responder(pasta, str(corpo.get("pergunta", "")), str(corpo.get("resposta", "")))
+                else:   # ref = um LED só (a cor dele, ou o brilho só dele); sem ref, a resposta geral
+                    ref = corpo.get("ref")
+                    if ref is not None and not (isinstance(ref, str) and re.fullmatch(r"[A-Za-z_]\w*", ref)):
+                        return self.responder({"erro": "ref inválido"}, 400)
+                    feito = blocos.responder(pasta, str(corpo.get("pergunta", "")), str(corpo.get("resposta", "")),
+                                             ref=ref)
             except ValueError as e:
                 return self.responder({"erro": str(e)}, 400)
             except loja.SemLoja as e:

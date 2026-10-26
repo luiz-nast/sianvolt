@@ -1,0 +1,18 @@
+# a placa do saida_mistura.jsonl com o devkit_esp32_30 (o jsonl rodou com o esp32_devkit: mesmos pinos 30, 19 e 20):
+# D1 no GPIO23 ligado e desligado, D2 no GPIO2 em PWM e o botão SW1 no GPIO4. Valores só de ensaio
+placa 90 70
+furos cantos 3.2
+peca U1 devkit_esp32_30 45 30
+peca R1 resistor_axial 22 52 220
+peca D1 led_5mm 10 52
+peca R2 resistor_axial 56 52 220
+peca D2 led_5mm 68 52
+peca SW1 botao_6x6 40 60
+liga U1.30 R1.2      # GPIO23
+liga R1.1 D1.1
+liga D1.2 GND
+liga U1.19 R2.1      # GPIO2 (PWM)
+liga R2.2 D2.1
+liga D2.2 GND
+liga U1.20 SW1.1     # GPIO4 -> botão
+liga SW1.3 GND

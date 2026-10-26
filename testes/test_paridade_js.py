@@ -70,7 +70,9 @@ class MesmaConta(unittest.TestCase):
             self.mesmo_resultado(k, circuito.resolver(m, aj), s_js)
 
     def test_300_circuitos_com_esp32(self):
-        """o ESP32 (comPinos), o LDR com e sem ajuste, o piezo aberto e como fio, e o capacitor"""
+        """o ESP32 (comPinos, com True e False no estado), o LDR com e sem ajuste, o piezo aberto e como fio, e o
+        capacitor. Cada caso roda também com o ajuste do jeito que o app guarda ({pilha, resistor, chave}, sem 'ldr'
+        nem 'piezo'): o simular completa o que falta, como o resolver"""
         rnd = random.Random(8)
         casos = [sortear_com_esp32(rnd) for _ in range(300)]
         modelos = [p["eletrica"]["modelo"] for m, *_ in casos for p in m["pecas"]]
@@ -78,10 +80,13 @@ class MesmaConta(unittest.TestCase):
             self.assertGreater(modelos.count(modelo), 20, modelo)
         self.assertTrue({True, False} <= {fio for *_, aj in casos for fio in aj["piezo"].values()})
         self.assertGreater(sum(len(aj["ldr"]) for *_, aj in casos), 20)
-        js = no_node("console.log(JSON.stringify(entrada.map(([m, estado, vdd, aj]) => simular(comPinos(m, estado, vdd), aj))));",
-                     casos)
-        for k, ((m, estado, vdd, aj), s_js) in enumerate(zip(casos, js)):
-            self.mesmo_resultado(k, circuito.resolver(circuito.com_pinos(m, estado, vdd), aj), s_js)
+        self.assertTrue({True, False} <= {v for _, estado, *_ in casos for v in estado.values() if isinstance(v, bool)})
+        js = no_node("console.log(JSON.stringify(entrada.map(([m, estado, vdd, aj]) => [simular(comPinos(m, estado, vdd), aj), "
+                     "simular(comPinos(m, estado, vdd), { pilha: {}, resistor: {}, chave: aj.chave })])));", casos)
+        for k, ((m, estado, vdd, aj), (s_js, s_app)) in enumerate(zip(casos, js)):
+            completo = circuito.com_pinos(m, estado, vdd)
+            self.mesmo_resultado(k, circuito.resolver(completo, aj), s_js)
+            self.mesmo_resultado(k, circuito.resolver(completo, {"chave": aj["chave"]}), s_app)
 
     def test_ldr_e_divisor_iguais(self):
         rnd = random.Random(9)
@@ -100,8 +105,9 @@ class MesmaConta(unittest.TestCase):
             self.assertAlmostEqual(circuito.divisor_do_ldr(e, r, vdd, lux, canto), volts_js, delta=1e-12, msg=(lux, canto))
 
     def test_mesmos_erros(self):
-        """o que um lado recusa, o outro também: estado e canto que não existem, pino que não é GPIO, número pendente
-        na eletrica e LDR de 0 Ω (o primeiro caso é o bom, que passa); sem mcu, os dois devolvem o modelo"""
+        """o que um lado recusa, o outro também, com a mesma frase: estado e canto que não existem, pino que não é GPIO,
+        número pendente na eletrica (o r_3v3 também), lux que não é número e LDR de 0 Ω (o primeiro caso é o bom, que
+        passa); sem mcu, os dois devolvem o modelo"""
         G = {"GND": "GND", "3V3": "N3", "VIN": "N5", "GPIO32": "N1"}
         led = [peca("R1", RESISTOR, {"1": "N1", "2": "N2"}, valor=220), peca("D1", LED, {"1": "N2", "2": "GND"})]
         ldr = peca("LDR1", LDR, {"1": "N3", "2": "GND"})
@@ -121,21 +127,73 @@ class MesmaConta(unittest.TestCase):
             ({"pecas": [mcu(G)] + led}, {"GPIO32": 1}, 0, {}),
             ({"pecas": [mcu(G), ldr]}, {}, None, {"ldr": {"LDR1": 0}}),
             ({"pecas": [mcu(G), peca("LDR1", {**LDR, "r10_min": None}, {"1": "N3", "2": "GND"})]}, {}, None, {}),
-        ]
-        ldrs = [(LDR, 10, "tipico"), ({**LDR, "gama": None}, 10, "meio"), ({**LDR, "r_escuro": None}, 0, "meio")]
-        js = no_node("""const tenta = f => { try { f(); return 'passou'; } catch (err) { return 'recusou'; } };
+            ({"pecas": [mcu(G)] + led}, {"GPIO32": "1"}, None, {}),
+            ({"pecas": [mcu(G)] + led}, {"GPIO32": 1}, "3.3", {}),
+            ({"pecas": [mcu(G), ldr]}, {}, None, {"ldr": {"LDR1": "1k"}}),
+        ] + [({"pecas": [mcu(G, e)] + led}, {"GPIO32": 1}, None, {})   # o r_3v3 pendente, com o 3V3 ligado
+             for e in (sem("r_3v3"), {**MCU, "r_3v3": "pendente"}, {**MCU, "r_3v3": 0}, {**MCU, "r_3v3": -1})]
+        ldrs = [(LDR, 10, "tipico"), ({**LDR, "gama": None}, 10, "meio"), ({**LDR, "r_escuro": None}, 0, "meio"),
+                (LDR, 0, "tipico"), (LDR, None, "tipico"), (LDR, "10", "meio"), (LDR, -1, "meio"), (LDR, True, "min")]
+        js = no_node("""const tenta = f => { try { f(); return 'passou'; } catch (err) { return err.message; } };
 console.log(JSON.stringify([entrada.pinos.map(([m, estado, vdd, aj]) => tenta(() => simular(comPinos(m, estado, vdd), aj))),
   entrada.ldrs.map(([e, lux, canto]) => tenta(() => ohmsDoLdr(e, lux, canto))), comPinos({ pecas: [] }, { GPIO32: 1 }).pecas.length]));""",
                      {"pinos": pinos, "ldrs": ldrs})
-        self.assertEqual(js, [["passou"] + ["recusou"] * (len(pinos) - 1), ["recusou"] * len(ldrs), 0])
-        self.assertIsNotNone(circuito.resolver(circuito.com_pinos(*pinos[0][:3]), pinos[0][3]))
-        for k, (m, estado, vdd, aj) in enumerate(pinos[1:], 1):
-            with self.assertRaises(ValueError, msg=k):
-                circuito.resolver(circuito.com_pinos(m, estado, vdd), aj)
-        for k, (e, lux, canto) in enumerate(ldrs):
-            with self.assertRaises(ValueError, msg=k):
-                circuito.ohms_do_ldr(e, lux, canto)
+
+        def frase(f):   # a frase do erro, como o JS (o repr do Python escreve True; o JS, true)
+            try:
+                f()
+            except ValueError as err:
+                return str(err).replace("True", "true")
+            return "passou"
+        py = [[frase(lambda: circuito.resolver(circuito.com_pinos(m, estado, vdd), aj)) for m, estado, vdd, aj in pinos],
+              [frase(lambda: circuito.ohms_do_ldr(e, lux, canto)) for e, lux, canto in ldrs], 0]
+        self.assertEqual(py[0][0], "passou")
+        self.assertNotIn("passou", py[0][1:] + py[1])
+        self.assertEqual(py, js)
         self.assertEqual(len(circuito.com_pinos({"pecas": []}, {"GPIO32": 1})["pecas"]), 0)
+
+    def test_motivo_de_nao_ligar_com_esp32(self):
+        """o ▶ Ligar: placa com ESP32 liga, crua ou já com comPinos; sem pilha nem ESP32 não; número pendente diz qual"""
+        G = {"GND": "GND", "3V3": "N3", "GPIO32": "N1"}
+        led = [peca("R1", RESISTOR, {"1": "N1", "2": "N2"}, valor=220), peca("D1", LED, {"1": "N2", "2": "GND"})]
+        casos = [   # (peças, o motivo esperado)
+            ([mcu(G)] + led, None),
+            ([peca("BT1", PILHA, {"1": "N1", "2": "GND"})] + led, None),
+            (led, "sem pilha nem ESP32 na placa, nada pra ligar"),
+            ([mcu(G, {**MCU, "r_pino": None})] + led, "U1: falta conferir a resistência do pino no datasheet"),
+            ([mcu(G, {**MCU, "r_pull": "pendente"})] + led, "U1: falta conferir o pull-up de dentro no datasheet"),
+            ([mcu({"GND": "GND", "3V3": "N3"}, {**MCU, "r_pino": None})] + led, None),   # sem GPIO ligado, sem r_pino
+            ([mcu(G, {**MCU, "vdd": None})] + led, "U1: falta conferir a tensão do 3V3 no datasheet"),
+            ([mcu(G, {**MCU, "r_3v3": None})] + led, "U1: falta conferir a resistência do 3V3 no datasheet"),
+        ]
+        js = no_node("console.log(JSON.stringify(entrada.map(pecas => motivoSemSimulacao({ simulacao: { pode: true }, pecas }))));",
+                     [pecas for pecas, _ in casos])
+        self.assertEqual(js, [motivo for _, motivo in casos])
+        ja = no_node("const m = { simulacao: { pode: true }, pecas: entrada };"
+                     "console.log(JSON.stringify([motivoSemSimulacao(comPinos(m, {})), motivoSemSimulacao(comPinos(m, { GPIO32: 1 }))]));",
+                     casos[0][0])
+        self.assertEqual(ja, [None, None], "já com comPinos, também liga")
+
+    def test_resolver_linear_igual_ate_o_ultimo_bit(self):
+        """o resolverLinear tira da linha inteira (j de 0), como o Python: o mesmo número até o último bit.
+        Com j = c (o jeito antigo do app), as sobras das colunas já zeradas mudam a diagonal no fim"""
+        rnd = random.Random(10)
+        casos = []
+        for _ in range(200):
+            n = rnd.randint(2, 8)
+            A = [[circuito.GMIN if i == j else 0.0 for j in range(n)] for i in range(n)]
+            for _ in range(rnd.randint(n, 3 * n)):   # condutâncias entre nets, do jeito que o resolver monta (n = o terra)
+                a, b = rnd.sample(range(n + 1), 2)
+                g = 1 / rnd.choice([circuito.R_CHAVE, 3.5, 20, 30, 220, 1000, 22000, 45000, 1e6])
+                for x, y in ((a, b), (b, a)):
+                    if x < n:
+                        A[x][x] += g
+                        if y < n:
+                            A[x][y] -= g
+            casos.append([A, [rnd.uniform(-1, 1) / rnd.choice([1, 30, 1000]) for _ in range(n)]])
+        js = no_node("console.log(JSON.stringify(entrada.map(([A, b]) => resolverLinear(A, b))));", casos)
+        for k, ((A, b), x_js) in enumerate(zip(casos, js)):
+            self.assertEqual(circuito.resolver_linear(A, b), x_js, k)
 
     def test_brilho_igual_nas_duas(self):
         import blocos

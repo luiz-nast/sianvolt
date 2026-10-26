@@ -42,10 +42,17 @@ def _positivo(x):
     return isinstance(x, (int, float)) and not isinstance(x, bool) and x > 0
 
 
+# o nome de gente de cada número da eletrica, pras frases de pendente (o Luiz lê na etapa 4 e no painel)
+NOME_DO_CAMPO = {"vdd": "a tensão do 3V3", "r_3v3": "a resistência do 3V3", "r_pino": "a resistência do pino",
+                 "r_pull": "o pull-up de dentro", "r_escuro": "a resistência no escuro",
+                 "r10_min": "a resistência mínima em 10 lux", "r10_max": "a resistência máxima em 10 lux",
+                 "gama": "quanto a resistência cai com a luz (gama)"}
+
+
 def _da_eletrica(e, campo, quem):
     """número da eletrica que a conta precisa; pendente (sem número) recusa, em vez de inventar um"""
     if not _positivo(e.get(campo)):
-        raise ValueError(f"{quem}: o {campo} da eletrica está pendente, sem ele não dá pra ligar no papel")
+        raise ValueError(f"{quem}: falta conferir {NOME_DO_CAMPO[campo]} no datasheet")
     return e[campo]
 
 
@@ -54,29 +61,32 @@ def _da_eletrica(e, campo, quem):
 LUX_PADRAO = 10   # sem ajuste, o LDR fica em 10 lux, o ponto da tabela do datasheet (r10)
 
 
-def ohms_do_ldr(e, lux, canto="meio"):
+def ohms_do_ldr(e, lux, canto="meio", quem="LDR"):
     """resistência do LDR nessa luz. canto: 'meio' (média geométrica da faixa do r10, gama do datasheet),
-    'min' ou 'max' (o r10 e o gama ± gama_tol que dão a menor ou a maior resistência). lux 0 ou None = escuro"""
-    escuro = _da_eletrica(e, "r_escuro", "LDR")
-    if not lux or lux <= 0:
+    'min' ou 'max' (o r10 e o gama ± gama_tol que dão a menor ou a maior resistência). lux 0 ou None = escuro.
+    quem: a ref, pras frases de erro. Canto ou lux que não existem recusam sempre, até no escuro"""
+    if canto not in ("meio", "min", "max"):
+        raise ValueError(f"canto {canto!r} não existe ('meio', 'min' ou 'max')")
+    if lux is not None and not (isinstance(lux, (int, float)) and not isinstance(lux, bool) and lux >= 0):
+        raise ValueError(f"{quem}: {lux!r} lux não existe (a luz é um número de 0 pra cima; 0 é o escuro)")
+    escuro = _da_eletrica(e, "r_escuro", quem)
+    if not lux:
         return escuro
-    g, tol = _da_eletrica(e, "gama", "LDR"), e.get("gama_tol") or 0
-    r10_min, r10_max = _da_eletrica(e, "r10_min", "LDR"), _da_eletrica(e, "r10_max", "LDR")
+    g, tol = _da_eletrica(e, "gama", quem), e.get("gama_tol") or 0
+    r10_min, r10_max = _da_eletrica(e, "r10_min", quem), _da_eletrica(e, "r10_max", quem)
     if canto == "meio":
         r = (r10_min * r10_max) ** 0.5 * (lux / 10) ** -g
     elif canto == "min":
         r = min(r10_min * (lux / 10) ** -(g - tol), r10_min * (lux / 10) ** -(g + tol))
-    elif canto == "max":
-        r = max(r10_max * (lux / 10) ** -(g - tol), r10_max * (lux / 10) ** -(g + tol))
     else:
-        raise ValueError(f"canto {canto!r} não existe ('meio', 'min' ou 'max')")
+        r = max(r10_max * (lux / 10) ** -(g - tol), r10_max * (lux / 10) ** -(g + tol))
     return min(r, escuro)
 
 
-def divisor_do_ldr(e, r_fixo, vdd, lux, canto="meio"):
+def divisor_do_ldr(e, r_fixo, vdd, lux, canto="meio", quem="LDR"):
     """volts no pino do divisor vdd → r_fixo → pino → LDR → GND (no escuro, a tensão sobe).
     O pino do ADC não puxa corrente: é a conta do divisor, sem o resto do circuito"""
-    r = ohms_do_ldr(e, lux, canto)
+    r = ohms_do_ldr(e, lux, canto, quem)
     return vdd * r / (r_fixo + r)
 
 
@@ -92,20 +102,21 @@ def com_pinos(modelo, estado, vdd=None):
     estado: {"GPIO32": 1 | 0 | "pullup" | None}. 1 = vdd com r_pino em série; 0 = 0 V com r_pino;
     "pullup" = vdd com r_pull (o pull-up de dentro); None ou fora do estado = solto. Só GPIOn entra no estado.
     vdd: a tensão do 3V3 (None = a da eletrica). O VIN não entra: os 5 V dele seriam suposição.
-    Número pendente na eletrica (vdd, r_pino, r_pull) recusa com ValueError. Sem peça mcu, devolve o modelo como está."""
+    Número pendente na eletrica (vdd; r_3v3 com o 3V3 ligado; r_pino e r_pull quando o estado pede) recusa com
+    ValueError, numa frase de gente. True e False valem 1 e 0. Sem peça mcu, devolve o modelo como está."""
     mcu = next((p for p in modelo["pecas"] if (p.get("eletrica") or {}).get("modelo") == "mcu"), None)
     if mcu is None:
         return modelo
     e, ref = mcu["eletrica"], mcu["ref"]
     vdd = _da_eletrica(e, "vdd", ref) if vdd is None else vdd
     if not _positivo(vdd):
-        raise ValueError(f"{ref}: vdd {vdd!r} não serve (é a tensão do 3V3, em volts)")
+        raise ValueError(f"{ref}: {vdd!r} não serve como tensão do 3V3 (é um número em volts)")
     net = {q["nome"]: q["net"] for q in mcu["pinos"] if q["net"] and q.get("nome")}
     gnds = sorted(q["net"] for q in mcu["pinos"] if q["net"] and q.get("nome") == "GND")
     gnd = gnds[0] if gnds else "GND"
     virt = [_fonte("~terra", gnd, gnd, 0.0, 1e9)]
     if "3V3" in net:
-        virt.append(_fonte("~3V3", net["3V3"], gnd, vdd, e.get("r_3v3")))   # sem r_3v3: a R_PILHA
+        virt.append(_fonte("~3V3", net["3V3"], gnd, vdd, _da_eletrica(e, "r_3v3", ref)))
     for nome, nivel in estado.items():
         if not re.fullmatch(r"GPIO[0-9]+", nome):
             raise ValueError(f"{nome}: só pino GPIO entra no estado (o 3V3 e o GND entram sozinhos; o VIN não é modelado)")
@@ -116,7 +127,7 @@ def com_pinos(modelo, estado, vdd=None):
         elif nivel is None:
             continue
         else:
-            raise ValueError(f"{nome}: estado {nivel!r} não existe (1, 0, 'pullup' ou None)")
+            raise ValueError(f"{nome}: o estado {nivel!r} não existe (o pino fica em 1, 0, 'pullup' ou solto)")
         if nome in net:
             virt.append(_fonte("~" + nome, net[nome], gnd, volts, ohms))
     return {**modelo, "pecas": virt + modelo["pecas"]}
@@ -164,9 +175,9 @@ def resolver(modelo, ajustes=None):
             return aj["resistor"].get(p["ref"], p["valor"])
         o = aj["ldr"].get(p["ref"])
         if o is None:
-            return ohms_do_ldr(p["eletrica"], LUX_PADRAO)
+            return ohms_do_ldr(p["eletrica"], LUX_PADRAO, quem=p["ref"])
         if not _positivo(o):
-            raise ValueError(f"{p['ref']}: LDR com {o!r} Ω não existe (o ajuste vem do ohms_do_ldr)")
+            raise ValueError(f"{p['ref']}: LDR com {o!r} Ω não existe (o ajuste do LDR é em ohms, maior que 0)")
         return o
 
     acesos = {p["ref"]: True for p in pecas if p["eletrica"]["modelo"] == "led"}

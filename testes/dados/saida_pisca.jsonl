@@ -1,0 +1,19 @@
+{"t_ms": 0.0, "tipo": "aviso", "texto": "rodando no MicroPython 1.29.0 do PC: a linguagem é a da placa; o hardware é o gêmeo do ESP32 (ESP32-D0WD-V3)", "codigo": "gemeo_micropython"}
+{"t_ms": 0.0, "tipo": "aviso", "texto": "ligado no circuito placa.txt (U1): 2 peças com modelo elétrico", "codigo": "circuito"}
+{"t_ms": 0.0, "tipo": "aviso", "texto": "D1 apagado", "codigo": "led"}
+{"t_ms": 0.005, "tipo": "modo", "pino": "GPIO2", "modo": "saida"}
+{"t_ms": 0.005, "tipo": "pino", "pino": "GPIO2", "valor": 0, "origem": "firmware"}
+{"t_ms": 0.015, "tipo": "pino", "pino": "GPIO2", "valor": 1, "origem": "firmware"}
+{"t_ms": 0.015, "tipo": "aviso", "texto": "D1 aceso, 5,9 mA, luz 59% do anúncio", "codigo": "led"}
+{"t_ms": 0.015, "tipo": "serial", "dir": "tx", "texto": "acendeu", "porta": "uart0"}
+{"t_ms": 500.719, "tipo": "pino", "pino": "GPIO2", "valor": 0, "origem": "firmware"}
+{"t_ms": 500.719, "tipo": "aviso", "texto": "D1 apagado", "codigo": "led"}
+{"t_ms": 500.719, "tipo": "serial", "dir": "tx", "texto": "apagou", "porta": "uart0"}
+{"t_ms": 1001.337, "tipo": "pino", "pino": "GPIO2", "valor": 1, "origem": "firmware"}
+{"t_ms": 1001.337, "tipo": "aviso", "texto": "D1 aceso, 5,9 mA, luz 59% do anúncio", "codigo": "led"}
+{"t_ms": 1001.337, "tipo": "serial", "dir": "tx", "texto": "acendeu", "porta": "uart0"}
+{"t_ms": 1502.041, "tipo": "pino", "pino": "GPIO2", "valor": 0, "origem": "firmware"}
+{"t_ms": 1502.041, "tipo": "aviso", "texto": "D1 apagado", "codigo": "led"}
+{"t_ms": 1502.041, "tipo": "serial", "dir": "tx", "texto": "apagou", "porta": "uart0"}
+{"t_ms": 2000.0, "tipo": "fim", "estado": "tempo", "motor": "gemeo", "placa": "esp32", "alvo": "esp32", "tempo_placa_ms": 2000.0, "tempo_pc_s": 0.047, "ram_mb": 2.6}
+{"t_ms": 2000.0, "tipo": "conferencias", "ok": 0, "falhas": []}

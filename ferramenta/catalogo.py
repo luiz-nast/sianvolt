@@ -103,6 +103,18 @@ def ler():
     return cat
 
 
+def spec(categoria):
+    """só as regras de uma categoria (sem as peças), lendo só o arquivo dela"""
+    d = json.loads((PASTA / f"{categoria}.json").read_text())
+    return {k: d[k] for k in CAMPOS_SPEC if k in d}
+
+
+def categoria_de(nome):
+    """o bloco do projeto vira a categoria de onde sai a peça dele (ldr -> sensor_luz); categoria fica como está"""
+    import blocos
+    return blocos.CATEGORIA.get(nome, nome)
+
+
 def numero(txt):
     """'4.7kΩ' -> 4700, '100nF' -> 1e-07, '3.3V' -> 3.3; pra ordenar"""
     m = re.match(r"\s*(\d+(?:\.\d+)?)\s*([pnuµmkM]?)", str(txt or ""))
@@ -174,7 +186,8 @@ def serve(cat, categoria, i):
 
 def nome_da_peca(cat, categoria, i):
     import blocos
-    if categoria in blocos.BLOCOS:   # as categorias que ja montam placa tem nome feito a mao
+    categoria = categoria_de(categoria)
+    if blocos.CATEGORIA.get(categoria) == categoria:   # pilha, botao, resistor, led: o nome e feito a mao (blocos.py)
         return blocos.nome_da_loja(categoria, i)
     spec = cat["categorias"][categoria]
     traducoes = {**TRADUCOES, **spec.get("traducoes", {})}
@@ -212,17 +225,27 @@ def entrada(cat, categoria, i):
 
 
 def adicionar(cat, categoria, itens):
-    """poe (ou atualiza) pecas da LCSC na lista; o conferido, outras lojas e a medida do desenho ficam. Devolve as novas"""
+    """poe (ou atualiza) pecas da LCSC na lista; o conferido, outras lojas e a medida do desenho ficam. Devolve as novas.
+    categoria pode ser o nome de um bloco do projeto (ldr vira sensor_luz). Quem ja estava numa categoria fica nela,
+    com o nome pelas regras dela; e nome generico de bloco ("Olho de luz") nunca passa por cima de um nome bom"""
+    import blocos
+    categoria = categoria_de(categoria)
+    if categoria not in cat["categorias"]:   # o salvar nao gravaria a peca, e ela sumiria calada
+        raise ValueError(f"a categoria '{categoria}' não existe no catálogo")
+    genericos = {b["nome"] for b in blocos.BLOCOS.values()}
     novas = 0
     for i in itens:
         velha = cat["pecas"].get(i["codigo"])
-        nova = {**entrada(cat, categoria, i), "categoria": categoria}
+        onde = velha["categoria"] if velha else categoria
+        nova = {**entrada(cat, onde, i), "categoria": onde}
         if velha:
             tamanho = velha.get("tamanho")
-            nova = {**velha, **nova, "categoria": velha["categoria"]}   # quem ja estava numa categoria fica nela
+            nova = {**velha, **nova}
             nova["montagem"] = velha.get("montagem_manual") or nova["montagem"]
             if not nova["tamanho"] and tamanho and tamanho != nova["pacote"]:   # a medida tirada do desenho fica
                 nova["tamanho"] = tamanho
+            if nova["nome"] in genericos and velha.get("nome"):
+                nova["nome"] = velha["nome"]
         else:
             novas += 1
         cat["pecas"][i["codigo"]] = nova
@@ -342,6 +365,8 @@ def limpar(cat, categoria):
 
 
 def do_bloco(cat, categoria):
+    """as pecas de uma categoria (ou da categoria de um bloco: ldr -> sensor_luz)"""
+    categoria = categoria_de(categoria)
     return [{"codigo": c, **e} for c, e in cat["pecas"].items() if e["categoria"] == categoria]
 
 

@@ -37,7 +37,8 @@ def sortear_com_esp32(rnd):
     pinos = {"GND": "GND", "3V3": rnd.choice(["N3V3", None])}
     for g in rnd.sample(["GPIO4", "GPIO13", "GPIO14", "GPIO25", "GPIO32", "GPIO34"], rnd.randint(1, 4)):
         pinos[g] = rnd.choice(nets + [None])
-    pecas = [mcu(pinos, {**MCU, "r_3v3": rnd.choice([MCU["r_3v3"], None])})]
+    sem_r_3v3 = {k: v for k, v in MCU.items() if k != "r_3v3"}   # com o 3V3 solto, o r_3v3 não faz falta
+    pecas = [mcu(pinos, MCU if pinos["3V3"] or rnd.random() < 0.5 else sem_r_3v3)]
     if rnd.random() < 0.4:   # outro GND, às vezes noutra net: o terra é o GND de nome menor, nos dois lados
         pecas[0]["pinos"].append({"n": str(len(pinos) + 1), "nome": "GND", "net": rnd.choice(["AGND", "GND", "N1", None])})
     for i in range(rnd.randint(2, 9)):
@@ -57,7 +58,7 @@ def sortear_com_esp32(rnd):
         else:
             pecas.append(peca(f"R{i}", RESISTOR, {"1": a, "2": b}, valor=rnd.choice([10, 220, 1000, 22000])))
     refs = [p["ref"] for p in pecas]
-    estado = {g: rnd.choice([1, 0, "pullup", None]) for g in pinos if g.startswith("GPIO")}
+    estado = {g: rnd.choice([1, 0, "pullup", None, True, False]) for g in pinos if g.startswith("GPIO")}
     aj = {"chave": {r: rnd.random() < 0.6 for r in refs if r.startswith("SW")},
           "ldr": {r: circuito.ohms_do_ldr(LDR, rnd.choice([None, 0.5, 1, 10, 23, 100]), rnd.choice(["min", "meio", "max"]))
                   for r in refs if r.startswith("LDR") and rnd.random() < 0.7},   # o resto fica em 10 lux
@@ -143,6 +144,8 @@ class ComOESP32(unittest.TestCase):
         self.assertTrue(s["pecas"]["D1"]["acende"])
 
     def test_led_C779439_no_gpio_em_1(self):
+        # o aceite da T2 no plano dizia 5,93 mA com o C779439, mas 5,93 é a conta do led_5mm (o teste de cima);
+        # o C779439 do catálogo tem o joelho mais alto e dá (3,3 − 1,90) ÷ 253,5 = 5,52 mA
         import catalogo
         led = catalogo.conferido("C779439")["eletrica"]   # vf 1,97, r_s 3,5, i_teste 20 mA: joelho 1,90 V
         s = self.led_no_gpio32(1, led)
@@ -150,8 +153,12 @@ class ComOESP32(unittest.TestCase):
         self.assertAlmostEqual(s["pecas"]["D1"]["i"], esperado, delta=1e-6)
         self.assertAlmostEqual(s["pecas"]["D1"]["i"] * 1000, 5.52, delta=0.01)
 
+    def test_true_e_false_valem_1_e_0(self):
+        self.assertEqual(self.led_no_gpio32(True), self.led_no_gpio32(1))
+        self.assertEqual(self.led_no_gpio32(False), self.led_no_gpio32(0))
+
     def test_gpio_em_0_ou_solto_nao_acende(self):
-        for estado in (0, None):
+        for estado in (0, None, False):
             s = self.led_no_gpio32(estado)
             self.assertEqual(s["pecas"]["D1"]["i"], 0.0, estado)
             self.assertFalse(s["pecas"]["D1"]["acende"])
@@ -183,8 +190,14 @@ class ComOESP32(unittest.TestCase):
                  peca("D1", LED, {"1": "N2", "2": "GND"})]
         s = com_esp32(pecas, {})
         self.assertAlmostEqual(s["pecas"]["D1"]["i"], (3.3 - 1.7) / (0.05 + 220 + 20), delta=1e-6)
-        sem = com_esp32([mcu({"GND": "GND", "3V3": "N1"}, {**MCU, "r_3v3": None})] + pecas[1:], {})
-        self.assertAlmostEqual(sem["pecas"]["D1"]["i"], (3.3 - 1.7) / (circuito.R_PILHA + 220 + 20), delta=1e-6)
+        for vazio in (None, "pendente", 0, -1, True):   # pendente recusa: nada de trocar calado pela R_PILHA
+            with self.assertRaises(ValueError, msg=vazio):
+                com_esp32([mcu({"GND": "GND", "3V3": "N1"}, {**MCU, "r_3v3": vazio})] + pecas[1:], {})
+        sem = {k: v for k, v in MCU.items() if k != "r_3v3"}
+        with self.assertRaises(ValueError):
+            com_esp32([mcu({"GND": "GND", "3V3": "N1"}, sem)] + pecas[1:], {})
+        solto = com_esp32([mcu({"GND": "GND", "3V3": None, "GPIO32": "N1"}, sem)] + pecas[1:], {"GPIO32": 1})
+        self.assertGreater(solto["pecas"]["D1"]["i"], 0, "com o 3V3 solto, o r_3v3 não faz falta")
 
     def test_terra_e_o_gnd_do_chip_e_o_vin_nao_entra(self):
         m = circuito.com_pinos({"pecas": [mcu({"GND": "G0", "3V3": "N1", "VIN": "N5", "EN": "N6", "GPIO32": "N2"})]},
@@ -209,8 +222,9 @@ class ComOESP32(unittest.TestCase):
 
     def test_numero_pendente_recusa_em_vez_de_inventar(self):
         pecas = [peca("R1", RESISTOR, {"1": "N1", "2": "N2"}, valor=220), peca("D1", LED, {"1": "N2", "2": "GND"})]
-        for falta, nivel in (("r_pino", 1), ("r_pino", 0), ("r_pull", "pullup"), ("vdd", 1), ("vdd", None)):
-            for vazio in (None, "pendente", 0):
+        for falta, nivel in (("r_pino", 1), ("r_pino", 0), ("r_pull", "pullup"), ("vdd", 1), ("vdd", None),
+                             ("r_3v3", None)):
+            for vazio in (None, "pendente", 0, -1, True):
                 e = {**MCU, falta: vazio}
                 with self.assertRaises(ValueError, msg=(falta, vazio)):
                     com_esp32([mcu({"GND": "GND", "3V3": "N3", "GPIO32": "N1"}, e)] + pecas, {"GPIO32": nivel})
@@ -220,6 +234,25 @@ class ComOESP32(unittest.TestCase):
         for vdd in (0, -3.3, "3.3"):
             with self.assertRaises(ValueError, msg=vdd):
                 com_esp32([mcu({"GND": "GND", "GPIO32": "N1"})] + pecas, {"GPIO32": 1}, vdd=vdd)
+
+    def test_frase_de_pendente_e_de_gente(self):
+        # a etapa 4 e o painel mostram a frase pro Luiz: a ref da peça e o nome de gente, sem o nome do campo
+        pecas = [mcu({"GND": "GND", "3V3": "N3", "GPIO32": "N1"}, {**MCU, "r_pino": "pendente"}),
+                 peca("R1", RESISTOR, {"1": "N1", "2": "GND"}, valor=220)]
+        with self.assertRaises(ValueError) as erro:
+            com_esp32(pecas, {"GPIO32": 1})
+        self.assertEqual(str(erro.exception), "U1: falta conferir a resistência do pino no datasheet")
+        pecas = [mcu({"GND": "GND", "3V3": "N3"}), peca("LDR2", {**LDR, "gama": None}, {"1": "N3", "2": "GND"})]
+        with self.assertRaises(ValueError) as erro:
+            com_esp32(pecas, {})
+        self.assertEqual(str(erro.exception), "LDR2: falta conferir quanto a resistência cai com a luz (gama) no datasheet")
+        with self.assertRaises(ValueError) as erro:
+            circuito.com_pinos({"pecas": [mcu({"GND": "GND", "GPIO32": "N1"})]}, {"GPIO32": "1"})
+        self.assertIn("o estado '1' não existe", str(erro.exception))
+        for campo in circuito.NOME_DO_CAMPO:
+            with self.assertRaises(ValueError) as erro:
+                circuito._da_eletrica({}, campo, "X1")
+            self.assertNotRegex(str(erro.exception), r"vdd|r_|r10_", "o nome do campo (r_pino, r10_min...) não aparece")
 
     def test_mcu_e_modelo_desconhecido_sao_ignorados(self):
         base = [peca("BT1", PILHA, {"1": "N1", "2": "GND"}), peca("R1", RESISTOR, {"1": "N1", "2": "N2"}, valor=100),
@@ -255,6 +288,17 @@ class LdrPiezoECapacitor(unittest.TestCase):
             self.assertLessEqual(r[1], r[2], lux)
         with self.assertRaises(ValueError):
             circuito.ohms_do_ldr(LDR, 10, "tipico")
+
+    def test_canto_e_lux_que_nao_existem_recusam_ate_no_escuro(self):
+        for lux in (None, 0, 10):
+            with self.assertRaises(ValueError, msg=lux):
+                circuito.ohms_do_ldr(LDR, lux, "tipico")
+        for lux in ("10", "0", True, False, -1, -0.5, float("nan"), [10]):   # o valor cru de um <input> é texto
+            with self.assertRaises(ValueError, msg=lux):
+                circuito.ohms_do_ldr(LDR, lux)
+            with self.assertRaises(ValueError, msg=lux):
+                circuito.divisor_do_ldr(LDR, 22000, 3.3, lux)
+        self.assertEqual(circuito.ohms_do_ldr(LDR, 10.0), circuito.ohms_do_ldr(LDR, 10))
 
     def test_divisor_da_luz_noturna(self):
         # 3V3 → 22 kΩ → GPIO34 → LDR → GND: 2,37 V em 1 lux, 1,20 V em 10, 0,83 V em 23 e 0,38 V em 100 (LDR do meio)

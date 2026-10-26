@@ -6,6 +6,7 @@ import json
 import math
 import re
 import sys
+import unicodedata
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,7 @@ from pathlib import Path
 import blocos
 import geometria
 from biblioteca import BIBLIOTECA
-from letras import tracos
+from letras import LETRAS, tracos
 
 BORDA_FURO = 3.5   # furos de fixacao a 3,5 mm das bordas
 TRILHA = 0.3       # largura das trilhas, mm
@@ -28,6 +29,11 @@ LETRA = 1.2        # altura da letra (>= 1,0 mm)
 LETRA_LINHA = 0.2  # traco da letra (proporcao 1:6 da altura)
 SILK_PAD = 0.15    # distancia minima entre serigrafia e pad
 COMANDOS = {"placa": (2, 2), "furos": (2, 2), "peca": (4, 5), "liga": (2, 2)}   # comando -> (mínimo, máximo) de valores
+DO_TIPO = ("serigrafia", "cuidados", "zonas", "confira", "acompanha")   # vão do tipo pra peça, quando o tipo tem (o DevKit)
+PROIBIDAS = ("antena",)   # zonas onde o roteador não passa trilha nem via, nas duas camadas
+DESVIO = FOLGA_ROTA + VIA_PAD / 2 + 0.05   # a trilha que contorna uma zona proibida passa a isso da borda dela (cabe uma via)
+FOLHA = "imprimir_1x1.svg"   # a placa em tamanho real pra imprimir; fica fora do fabrica.zip
+REGUA = 50                   # mm da régua da folha
 
 
 class ErroTxt(Exception):
@@ -134,6 +140,15 @@ def pinos_do_tipo(tipo):
             yield n, dx, dy, pad, tipo["furo"], net[0] if net else None
 
 
+def zona(peca, nome):
+    """(x0, y0, x1, y1) na placa, em mm, de uma zona da peça (ex: a 'antena' do DevKit); None se ela não tem.
+    No tipo e na peça a zona fica como os pinos no tipo: {"x": (de, até), "y": (de, até)} a partir do centro da peça"""
+    z = (peca.get("zonas") or {}).get(nome)
+    if not z:
+        return None
+    return (r(peca["x"] + z["x"][0]), r(peca["y"] + z["y"][0]), r(peca["x"] + z["x"][1]), r(peca["y"] + z["y"][1]))
+
+
 def montar(lido, bib=BIBLIOTECA):
     conferir_tipos(lido, bib)
     pecas, pinos = [], {}   # pinos: "R1.1" -> pino
@@ -152,6 +167,7 @@ def montar(lido, bib=BIBLIOTECA):
                 "juntos": tipo.get("juntos", []), "eletrica": tipo.get("eletrica"), "compra": tipo.get("compra"),
                 "loja": {k: loja.get(k) for k in ("codigo", "preco", "minimo", "link", "datasheet", "foto", "tamanho")} if loja else None,
                 "pinos": []}
+        peca.update({c: tipo[c] for c in DO_TIPO if c in tipo})   # as zonas ficam como no tipo: a partir do centro da peça
         for n, dx, dy, pad, furo, net in pinos_do_tipo(tipo):
             pino = {"n": n, "nome": tipo.get("nomes", {}).get(n), "x": r(p["x"] + dx), "y": r(p["y"] + dy),
                     "pad": forma(pad), "furo": furo, "net": net}
@@ -255,7 +271,8 @@ def montar(lido, bib=BIBLIOTECA):
         b = BORDA_FURO
         for x, y in ((b, b), (w - b, b), (b, h - b), (w - b, h - b)):
             furos.append({"x": r(x), "y": r(y), "d": f["d"], "linha": f["linha"]})
-    trilhas, vias = rotear(conexoes, pinos, furos, w, h)
+    proibidas = [zona(p, nome) for p in pecas for nome in PROIBIDAS if nome in (p.get("zonas") or {})]
+    trilhas, vias = rotear(conexoes, pinos, furos, w, h, proibidas=proibidas)
 
     # fabrica.zip so sai quando toda medida veio de datasheet (nenhum numero inventado vai pra fabrica)
     exemplo = [p["ref"] for p in pecas if p["exemplo"]]
@@ -267,7 +284,8 @@ def montar(lido, bib=BIBLIOTECA):
     # da pra ligar no papel? so se toda peca tem modelo eletrico e todo resistor tem valor
     falta = [p["ref"] for p in pecas if not p["eletrica"]]
     sem_valor = [p["ref"] for p in pecas if p["eletrica"] and p["eletrica"]["modelo"] == "resistor" and p["valor"] is None]
-    soltos = [p["ref"] for p in pecas if p["eletrica"] and any(q["net"] is None for q in p["pinos"])]
+    # o chip (modelo "mcu", o DevKit) tem 30 pinos e quase todos ficam sem net: pino dele sem nada não é pino solto
+    soltos = [p["ref"] for p in pecas if p["eletrica"] and p["eletrica"]["modelo"] != "mcu" and any(q["net"] is None for q in p["pinos"])]
     return {"placa": lido["placa"], "pecas": pecas, "trilhas": trilhas, "vias": vias, "furos": furos,
             "fabrica": {"pronta": not exemplo and not pendente, "falta_datasheet": exemplo, "falta_conferir": pendente},
             "simulacao": {"pode": not falta and not sem_valor and not soltos, "falta_modelo": falta,
@@ -279,9 +297,10 @@ def montar(lido, bib=BIBLIOTECA):
 LADOS = ("cima", "baixo")
 
 
-def caminhos(pa, pb, la, lb):
+def caminhos(pa, pb, la, lb, desvios=((), ())):
     """caminhos candidatos de pa a pb: [(segmentos [(p, q, lado)], vias [ponto])], do mais curto pro mais longo.
-    la/lb: os lados onde cada ponta tem cobre (pad de superficie so em cima). Trocar de lado custa uma via."""
+    la/lb: os lados onde cada ponta tem cobre (pad de superficie so em cima). Trocar de lado custa uma via.
+    desvios: (xs, ys) a mais pro trecho do meio do Z, pra dar a volta numa zona proibida rente a ela."""
     (x1, y1), (x2, y2) = pa, pb
     cands = []
 
@@ -302,6 +321,7 @@ def caminhos(pa, pb, la, lb):
     passo = [-9, -7, -5, -3, -1.5, 1.5, 3, 5, 7, 9]
     xs = [x1 + (x2 - x1) * k for k in (0.25, 0.5, 0.75)] + [min(x1, x2) + d for d in passo if d < 0] + [max(x1, x2) + d for d in passo if d > 0]
     ys = [y1 + (y2 - y1) * k for k in (0.25, 0.5, 0.75)] + [min(y1, y2) + d for d in passo if d < 0] + [max(y1, y2) + d for d in passo if d > 0]
+    xs, ys = xs + list(desvios[0]), ys + list(desvios[1])
     for l1 in LADOS:
         for l2 in LADOS:
             for l3 in LADOS:
@@ -313,14 +333,17 @@ def caminhos(pa, pb, la, lb):
     return [(segs, vias) for _, segs, vias in cands]
 
 
-def rotear(conexoes, pinos, furos_fix, w, h, tentativas=4):
+def rotear(conexoes, pinos, furos_fix, w, h, tentativas=4, proibidas=()):
     """conexoes: [(pino a, pino b, linha do txt)]. Pra cada uma, o caminho mais curto (reta, L ou Z, em cima, embaixo
     ou trocando de lado por via) que passa longe do cobre das outras nets, da borda e dos furos. Se alguma nao coube,
-    ela vai pro comeco da fila e tenta de novo; fica a tentativa com menos falhas. Falhou mesmo: fica a reta em cima,
-    e a etapa 3 acusa o curto. Devolve (trilhas, vias); cada trilha e um segmento de uma camada."""
+    ela vai pro comeco da fila e tenta de novo; fica a tentativa com menos falhas. Falhou mesmo: fica a reta em cima
+    (com zona proibida no caminho, o caminho mais curto que não entra nela), e a etapa 3 acusa o curto.
+    Devolve (trilhas, vias); cada trilha e um segmento de uma camada.
+    proibidas: [(x0, y0, x1, y1)] onde nenhuma trilha nem via entra, nas duas camadas (a antena do DevKit). Só a ligação
+    que tem a ponta encostada ou dentro da zona chega tão perto quanto essa ponta (a etapa 3 avisa)."""
     ordem, melhor = list(conexoes), None
     for _ in range(tentativas):
-        trilhas, vias, falhas = rotear_uma_vez(ordem, pinos, furos_fix, w, h)
+        trilhas, vias, falhas = rotear_uma_vez(ordem, pinos, furos_fix, w, h, proibidas)
         if melhor is None or len(falhas) < len(melhor[2]):
             melhor = (trilhas, vias, falhas)
         if not falhas:
@@ -332,7 +355,7 @@ def rotear(conexoes, pinos, furos_fix, w, h, tentativas=4):
     return trilhas, vias
 
 
-def rotear_uma_vez(conexoes, pinos, furos_fix, w, h):
+def rotear_uma_vez(conexoes, pinos, furos_fix, w, h, proibidas=()):
     obst = {l: [] for l in LADOS}   # lado -> [(net, miolo, raio)]
     for nome, p in pinos.items():
         miolo, raio = geometria.do_pad(p["x"], p["y"], p["pad"])
@@ -340,9 +363,22 @@ def rotear_uma_vez(conexoes, pinos, furos_fix, w, h):
             obst[l].append((p["net"] or nome, miolo, raio))
     furos = [((p["x"], p["y"]), p["furo"] / 2) for p in pinos.values() if p["furo"]]
     fixos = [((f["x"], f["y"]), f["d"] / 2) for f in furos_fix]
+    zonas = [("ret", *z) for z in proibidas]   # retângulos sem raio, valem pras duas camadas
+    desvios = ([v for z in proibidas for v in (z[0] - DESVIO, z[2] + DESVIO)],
+               [v for z in proibidas for v in (z[1] - DESVIO, z[3] + DESVIO)])
 
     def dentro_da_placa(pts, raio):
         return all(BORDA_ROTA + raio <= x <= w - BORDA_ROTA - raio and BORDA_ROTA + raio <= y <= h - BORDA_ROTA - raio for x, y in pts)
+
+    def limites(pa, pb):
+        """a folga que cada zona pede pra essa ligação: FOLGA_ROTA, ou a distância da ponta que já está mais perto
+        (peça encostada na antena: a trilha não chega mais perto que ela). Ponta dentro da zona: a trilha dessa ligação
+        pode passar na zona (a etapa 3 avisa da peça na antena); via nunca, porque o raio dela é maior"""
+        return [min(FOLGA_ROTA, *(geometria.distancia((("seg", p, p), TRILHA / 2), (z, 0)) for p in (pa, pb))) for z in zonas]
+
+    def fora_das_zonas(segs, vs, lims):
+        cobres = [(("seg", p, q), TRILHA / 2) for p, q, _ in segs] + [(("seg", v, v), VIA_PAD / 2) for v in vs]
+        return all(geometria.distancia(c, (z, 0)) >= lim - 1e-9 for z, lim in zip(zonas, lims) for c in cobres)
 
     def seg_livre(net, p, q, lado):
         c = (("seg", p, q), TRILHA / 2)
@@ -362,17 +398,25 @@ def rotear_uma_vez(conexoes, pinos, furos_fix, w, h):
             return False
         return all(n == net or geometria.distancia(c, (m, rr)) >= FOLGA_ROTA for l in LADOS for n, m, rr in obst[l])
 
+    def na_placa(segs):
+        return all(0 <= x <= w and 0 <= y <= h for s in segs for x, y in s[:2])
+
     trilhas, vias, falhas = [], [], []
     for conexao in conexoes:
         a, b, linha = conexao
         pa, pb, net = (pinos[a]["x"], pinos[a]["y"]), (pinos[b]["x"], pinos[b]["y"]), pinos[a]["net"]
         la = LADOS if pinos[a]["furo"] else ("cima",)
         lb = LADOS if pinos[b]["furo"] else ("cima",)
-        escolhido = next(((segs, vs) for segs, vs in caminhos(pa, pb, la, lb)
-                          if all(seg_livre(net, p, q, l) for p, q, l in segs) and all(via_livre(net, v) for v in vs)), None)
+        cands, lims = caminhos(pa, pb, la, lb, desvios), limites(pa, pb)
+        escolhido = next(((segs, vs) for segs, vs in cands if fora_das_zonas(segs, vs, lims)
+                          and all(seg_livre(net, p, q, l) for p, q, l in segs) and all(via_livre(net, v) for v in vs)), None)
         if escolhido is None:
             falhas.append(conexao)
-            escolhido = ([(pa, pb, "cima")], [])
+            # falhou mesmo: o caminho mais curto que menos estraga, nessa ordem: não entra na zona, fica na placa e passa
+            # longe da zona, mesmo encostando em outro cobre (a etapa 3 acusa o curto). Sem zona é a reta em cima
+            sem_entrar = [min(lim, 0) for lim in lims]
+            escolhido = min(cands, key=lambda c: (not fora_das_zonas(*c, sem_entrar), not na_placa(c[0]),
+                                                  not fora_das_zonas(*c, lims)), default=([(pa, pb, "cima")], []))
         for p, q, l in escolhido[0]:
             trilhas.append({"de": a, "ate": b, "x1": r(p[0]), "y1": r(p[1]), "x2": r(q[0]), "y2": r(q[1]), "largura": TRILHA,
                             "net": net, "linha": linha, "lado": l})
@@ -485,35 +529,128 @@ def recortar(a, b, obstaculos, folga, passo=0.05):
     return [(c[0], c[-1]) for c in pedacos if len(c) > 1 or a == b]
 
 
-def serigrafia(modelo):
-    """contorno de cada peca e o nome dela em cima, sem encostar nos pads nem sair da placa"""
-    g = Gerber("Legend,Top")
+def no_retangulo(a, b, x0, y0, x1, y1):
+    """o pedaço do segmento a-b que fica dentro do retângulo (o próprio a-b se ele já está dentro), ou None"""
+    if not (x0 <= x1 and y0 <= y1):
+        return None
+    if all(x0 <= x <= x1 and y0 <= y <= y1 for x, y in (a, b)):
+        return a, b
+    t0, t1 = 0.0, 1.0
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    for p, q in ((-dx, a[0] - x0), (dx, x1 - a[0]), (-dy, a[1] - y0), (dy, y1 - a[1])):   # Liang-Barsky
+        if p == 0:
+            if q < 0:
+                return None
+        elif p < 0:
+            t0 = max(t0, q / p)
+        else:
+            t1 = min(t1, q / p)
+    if t0 >= t1:
+        return None
+    return (a[0] + t0 * dx, a[1] + t0 * dy), (a[0] + t1 * dx, a[1] + t1 * dy)
+
+
+def so_letras(texto):
+    """o texto do jeito que a fonte da serigrafia escreve: maiúsculo, sem acento, e o que ela não tem vira espaço
+    ('VIN: não soldar' -> 'VIN NAO SOLDAR')"""
+    t = "".join(c for c in unicodedata.normalize("NFD", texto.upper()) if not unicodedata.combining(c))
+    return " ".join("".join(c if c in LETRAS else " " for c in t).split())
+
+
+def comprimento(texto):
+    """quantos mm o texto ocupa escrito com LETRA (cada letra anda LETRA; a última não tem o espaço depois)"""
+    t = so_letras(texto)
+    return len(t) * LETRA - LETRA / 3 if t else 0
+
+
+def texto_na_placa(texto, x, y, em_pe=False):
+    """as linhas (pontos em mm) do texto com o meio em (x, y); em pé = girado 90°, lido de baixo pra cima"""
+    linhas = tracos(so_letras(texto), 0, -LETRA / 2, LETRA)
+    if em_pe:
+        return [[(x - v, y + u) for u, v in pontos] for pontos in linhas]
+    return [[(x + u, y + v) for u, v in pontos] for pontos in linhas]
+
+
+def textos_da_peca(peca, placa=None):
+    """o que a serigrafia escreve numa peça com zonas (o DevKit): [(texto, x, y, em_pé)], com o meio do texto em (x, y).
+    O nome de cada zona vai no meio dela ('ANTENA', 'USB'), deitado se couber, em pé se não; se nem assim couber (a
+    peça passa da borda da placa), fica sem. O aviso do pino que não leva solda ('VIN NAO SOLDAR') vai em pé do lado
+    de fora do pino, entrando no corpo da peça. placa: (w, h), pra contar só a parte da zona que fica na placa"""
+    if not peca.get("zonas"):
+        return []
+    textos = []
+    cw, ch = peca["corpo"]["w"] / 2, peca["corpo"]["h"] / 2
+    px0, py0, px1, py1 = (0, 0, *placa) if placa else (-math.inf, -math.inf, math.inf, math.inf)
+    margem = LETRA_LINHA + 2 * (SILK + SILK_PAD)   # o traço da letra e a linha da zona, com a folga, dos dois lados
+    for nome in peca["zonas"]:
+        # só a parte em cima do corpo (o USB passa da borda dele) e dentro da placa (a antena pode passar da borda)
+        x0, y0, x1, y1 = zona(peca, nome)
+        x0, y0 = max(x0, peca["x"] - cw, px0), max(y0, peca["y"] - ch, py0)
+        x1, y1 = min(x1, peca["x"] + cw, px1), min(y1, peca["y"] + ch, py1)
+        deitado = comprimento(nome) + margem <= x1 - x0 and LETRA + margem <= y1 - y0
+        em_pe = comprimento(nome) + margem <= y1 - y0 and LETRA + margem <= x1 - x0
+        if deitado or em_pe:
+            textos.append((so_letras(nome), r((x0 + x1) / 2), r((y0 + y1) / 2), not deitado))
+    for pino in peca["pinos"]:
+        aviso = (peca.get("cuidados") or {}).get(pino["n"], "")
+        if "não soldar" not in aviso:
+            continue
+        bx0, _, bx1, _ = geometria.caixa(*geometria.do_pad(pino["x"], pino["y"], pino["pad"]))
+        folga = SILK_PAD + LETRA_LINHA / 2 + LETRA / 2 + 0.1   # da borda do pad até o meio da coluna de letras
+        x = bx1 + folga if pino["x"] >= peca["x"] else bx0 - folga
+        meio = comprimento(aviso) / 2 - LETRA / 2   # a ponta do texto fica na altura do pino
+        y = pino["y"] + meio if pino["y"] < peca["y"] else pino["y"] - meio
+        textos.append((so_letras(aviso), r(x), r(y), True))
+    return textos
+
+
+def tracos_da_serigrafia(modelo):
+    """[(largura, a, b)]: os pedaços de linha da serigrafia, já recortados longe dos pads e dentro da placa.
+    Contorno de cada peça e o nome dela em cima; nas peças com zonas (o DevKit), o retângulo e os textos de cada zona"""
     w, h = modelo["placa"]["w"], modelo["placa"]["h"]
     obstaculos = [(p["x"], p["y"], p["pad"]) for p in pads(modelo, "cima")]
     obstaculos += [(f["x"], f["y"], {"forma": "C", "d": f["d"]}) for f in modelo["furos"] + modelo.get("vias", [])]
+    saida = []
 
     def linha(largura, pontos):
         for a, b in zip(pontos, pontos[1:] or pontos):
             for c, d in recortar(a, b, obstaculos, SILK_PAD + largura / 2):
-                if all(largura / 2 <= v[0] <= w - largura / 2 and largura / 2 <= v[1] <= h - largura / 2 for v in (c, d)):
-                    g.risca(largura, [c, d])
+                dentro = no_retangulo(c, d, largura / 2, largura / 2, w - largura / 2, h - largura / 2)
+                if dentro:   # o pedaço que sai da placa (o DevKit rente à borda) fica de fora
+                    saida.append((largura, *dentro))
 
     for peca in modelo["pecas"]:
-        cw, ch, x, y = peca["corpo"]["w"], peca["corpo"]["h"], peca["x"], peca["y"]
+        ch, x, y = peca["corpo"]["h"], peca["x"], peca["y"]
         if peca.get("desenho"):   # peca da loja: o contorno oficial dela (EasyEDA)
             for traco in peca["desenho"]:
                 linha(SILK, [(x + dx, y + dy) for dx, dy in traco])
-            for pontos in tracos(peca["ref"], x, y + ch / 2 + 0.5, LETRA):
-                linha(LETRA_LINHA, pontos)
-            continue
-        if peca["corpo"]["redondo"]:
-            borda = [(x + cw / 2 * math.cos(i * math.pi / 24), y + ch / 2 * math.sin(i * math.pi / 24)) for i in range(49)]
         else:
-            borda = [(x - cw / 2, y - ch / 2), (x + cw / 2, y - ch / 2), (x + cw / 2, y + ch / 2),
-                     (x - cw / 2, y + ch / 2), (x - cw / 2, y - ch / 2)]
-        linha(SILK, borda)
+            linha(SILK, borda(peca))
         for pontos in tracos(peca["ref"], x, y + ch / 2 + 0.5, LETRA):
             linha(LETRA_LINHA, pontos)
+        for nome in peca.get("zonas") or {}:
+            x0, y0, x1, y1 = zona(peca, nome)
+            linha(SILK, [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)])
+        for texto, tx, ty, em_pe in textos_da_peca(peca, (w, h)):
+            for pontos in texto_na_placa(texto, tx, ty, em_pe):
+                linha(LETRA_LINHA, pontos)
+    return saida
+
+
+def borda(peca):
+    """o contorno do corpo da peça (retângulo ou círculo), em pontos"""
+    cw, ch, x, y = peca["corpo"]["w"], peca["corpo"]["h"], peca["x"], peca["y"]
+    if peca["corpo"]["redondo"]:
+        return [(x + cw / 2 * math.cos(i * math.pi / 24), y + ch / 2 * math.sin(i * math.pi / 24)) for i in range(49)]
+    return [(x - cw / 2, y - ch / 2), (x + cw / 2, y - ch / 2), (x + cw / 2, y + ch / 2),
+            (x - cw / 2, y + ch / 2), (x - cw / 2, y - ch / 2)]
+
+
+def serigrafia(modelo):
+    """contorno de cada peca e o nome dela em cima, sem encostar nos pads nem sair da placa"""
+    g = Gerber("Legend,Top")
+    for largura, a, b in tracos_da_serigrafia(modelo):
+        g.risca(largura, [a, b])
     return g.texto()
 
 
@@ -538,8 +675,62 @@ def furos_com_cobre(modelo):
            [{"x": v["x"], "y": v["y"], "d": v["furo"]} for v in modelo.get("vias", [])]
 
 
+# 5b. a folha pra imprimir: a placa em tamanho real (1 unidade do desenho = 1 mm)
+def folha_1x1(modelo):
+    """SVG da placa em tamanho real, vista de cima: contorno, pads (cinza), furos e serigrafia, com uma régua de 50 mm
+    embaixo. Imprime, mede a régua e espeta as peças (o DevKit) no papel antes de pedir a placa."""
+    w, h = modelo["placa"]["w"], modelo["placa"]["h"]
+    m, topo, frase = 10, 16, 100           # margem do papel, espaço do texto em cima e largura da frase, em mm
+    largura, altura = max(w, REGUA, frase) + 2 * m, topo + h + 26
+
+    def n(v):
+        return f"{round(v, 4):.10g}"
+
+    def X(x):
+        return n(m + x)
+
+    def Y(y):   # no placa.txt o y cresce pra cima; no SVG, pra baixo
+        return n(topo + h - y)
+
+    def figura(x, y, pad, estilo):
+        if pad["forma"] == "C":
+            return f'<circle cx="{X(x)}" cy="{Y(y)}" r="{n(pad["d"] / 2)}" {estilo}/>'
+        canto = min(pad["w"], pad["h"]) / 2 if pad["forma"] == "O" else 0
+        return (f'<rect x="{X(x - pad["w"] / 2)}" y="{Y(y + pad["h"] / 2)}" width="{n(pad["w"])}" '
+                f'height="{n(pad["h"])}" rx="{n(canto)}" {estilo}/>')
+
+    letra = 'font-family="sans-serif" fill="#000"'
+    partes = ['<?xml version="1.0" encoding="UTF-8"?>',
+              f'<svg xmlns="http://www.w3.org/2000/svg" width="{n(largura)}mm" height="{n(altura)}mm" '
+              f'viewBox="0 0 {n(largura)} {n(altura)}">',
+              '<title>Placa em tamanho real</title>',
+              f'<rect width="{n(largura)}" height="{n(altura)}" fill="#fff"/>',
+              f'<text x="{m}" y="7" font-size="3.5" textLength="{frase}" lengthAdjust="spacingAndGlyphs" {letra}>'
+              'imprima em 100%, sem ajustar à página; meça a régua antes</text>',
+              f'<text x="{m}" y="12" font-size="2.5" {letra}>placa de {n(w)} × {n(h)} mm, vista de cima</text>',
+              f'<rect id="placa" x="{X(0)}" y="{Y(h)}" width="{n(w)}" height="{n(h)}" fill="none" stroke="#000" '
+              f'stroke-width="{CONTORNO}"/>']
+    partes += [figura(p["x"], p["y"], p["pad"], 'fill="#d0d0d0"') for p in pads(modelo, "cima")]
+    partes += [figura(f["x"], f["y"], {"forma": "C", "d": f["d"]}, 'fill="#fff" stroke="#000" stroke-width="0.1"')
+               for f in furos_com_cobre(modelo) + modelo["furos"]]
+    silk = tracos_da_serigrafia(modelo)
+    for grossura in sorted({t[0] for t in silk}):
+        d = " ".join(f"M{X(a[0])} {Y(a[1])}L{X(b[0])} {Y(b[1])}" for g, a, b in silk if g == grossura)
+        partes.append(f'<path d="{d}" fill="none" stroke="#000" stroke-width="{n(grossura)}" stroke-linecap="round"/>')
+    yr = topo + h + 12   # a régua: traço a cada mm, maior a cada 5 e a cada 10, com o número
+    regua = [f'<line x1="{n(m)}" y1="{n(yr)}" x2="{n(m + REGUA)}" y2="{n(yr)}"/>']
+    regua += [f'<line x1="{n(m + i)}" y1="{n(yr)}" x2="{n(m + i)}" y2="{n(yr - (3 if i % 10 == 0 else 2 if i % 5 == 0 else 1))}"/>'
+              for i in range(REGUA + 1)]
+    partes.append(f'<g id="regua" stroke="#000" stroke-width="0.15">{"".join(regua)}</g>')
+    partes += [f'<text x="{n(m + i)}" y="{n(yr + 4)}" font-size="2.5" text-anchor="middle" {letra}>{i}</text>'
+               for i in range(0, REGUA + 1, 10)]
+    partes.append(f'<text x="{m}" y="{n(yr + 9)}" font-size="2.5" {letra}>régua de {REGUA} mm: se não der {REGUA} mm '
+                  'na régua de verdade, a impressão saiu fora do tamanho</text>')
+    return "\n".join(partes + ["</svg>"]) + "\n"
+
+
 def escrever(modelo, saida):
-    """escreve modelo.json e os arquivos da fabrica (nomes no padrao do KiCad)"""
+    """escreve modelo.json, os arquivos da fabrica (nomes no padrao do KiCad) e a folha pra imprimir em tamanho real"""
     saida.mkdir(parents=True, exist_ok=True)
     arquivos = {
         "modelo.json": json.dumps(modelo, ensure_ascii=False, indent=1),
@@ -557,6 +748,7 @@ def escrever(modelo, saida):
             (saida / nome).unlink(missing_ok=True)
         else:
             (saida / nome).write_text(texto)
+    (saida / FOLHA).write_text(folha_1x1(modelo), encoding="utf-8")   # pra imprimir: não vai no fabrica.zip
     (saida / "fabrica.zip").unlink(missing_ok=True)   # so o testar.py cria, depois que tudo passa
     return [nome for nome, texto in arquivos.items() if texto is not None and nome != "modelo.json"]
 

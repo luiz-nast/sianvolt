@@ -1,0 +1,38 @@
+{"t_ms": 0.0, "tipo": "aviso", "texto": "rodando no MicroPython 1.29.0 do PC: a linguagem é a da placa; o hardware é o gêmeo do ESP32 (ESP32-D0WD-V3)", "codigo": "gemeo_micropython"}
+{"t_ms": 0.0, "tipo": "aviso", "texto": "ligado no circuito placa_mistura.txt (U1): 5 peças com modelo elétrico", "codigo": "circuito"}
+{"t_ms": 0.0, "tipo": "aviso", "texto": "D1 apagado", "codigo": "led"}
+{"t_ms": 0.0, "tipo": "aviso", "texto": "D2 apagado", "codigo": "led"}
+{"t_ms": 0.005, "tipo": "modo", "pino": "GPIO23", "modo": "saida", "nome": "LED/PWM"}
+{"t_ms": 0.005, "tipo": "pino", "pino": "GPIO23", "valor": 0, "origem": "firmware", "nome": "LED/PWM"}
+{"t_ms": 0.01, "tipo": "modo", "pino": "GPIO4", "modo": "pullup", "nome": "BOTAO"}
+{"t_ms": 0.035, "tipo": "modo", "pino": "GPIO2", "modo": "pwm"}
+{"t_ms": 0.035, "tipo": "pwm", "pino": "GPIO2", "duty": 0.0, "freq_hz": 1000.0}
+{"t_ms": 100.245, "tipo": "pwm", "pino": "GPIO2", "duty": 0.1, "freq_hz": 1000.0}
+{"t_ms": 100.245, "tipo": "aviso", "texto": "D2 meia luz, 0,6 mA na média (5,9 mA quando liga), luz 6% do anúncio", "codigo": "led"}
+{"t_ms": 200.45, "tipo": "pwm", "pino": "GPIO2", "duty": 0.2, "freq_hz": 1000.0}
+{"t_ms": 200.45, "tipo": "aviso", "texto": "D2 meia luz, 1,2 mA na média (5,9 mA quando liga), luz 12% do anúncio", "codigo": "led"}
+{"t_ms": 300.655, "tipo": "pwm", "pino": "GPIO2", "duty": 0.3, "freq_hz": 1000.0}
+{"t_ms": 300.655, "tipo": "aviso", "texto": "D2 meia luz, 1,8 mA na média (5,9 mA quando liga), luz 18% do anúncio", "codigo": "led"}
+{"t_ms": 300.665, "tipo": "serial", "dir": "tx", "texto": "botao 0 300 ms", "porta": "uart0"}
+{"t_ms": 301.977, "tipo": "pino", "pino": "GPIO23", "valor": 1, "origem": "firmware", "nome": "LED/PWM"}
+{"t_ms": 301.977, "tipo": "aviso", "texto": "D1 aceso, 5,9 mA, luz 59% do anúncio", "codigo": "led"}
+{"t_ms": 402.162, "tipo": "pwm", "pino": "GPIO2", "duty": 0.4, "freq_hz": 1000.0}
+{"t_ms": 402.162, "tipo": "aviso", "texto": "D2 meia luz, 2,4 mA na média (5,9 mA quando liga), luz 24% do anúncio", "codigo": "led"}
+{"t_ms": 502.367, "tipo": "pwm", "pino": "GPIO2", "duty": 0.5, "freq_hz": 1000.0}
+{"t_ms": 502.367, "tipo": "aviso", "texto": "D2 meia luz, 3,0 mA na média (5,9 mA quando liga), luz 30% do anúncio", "codigo": "led"}
+{"t_ms": 602.572, "tipo": "pwm", "pino": "GPIO2", "duty": 0.6, "freq_hz": 1000.0}
+{"t_ms": 602.572, "tipo": "aviso", "texto": "D2 meia luz, 3,6 mA na média (5,9 mA quando liga), luz 36% do anúncio", "codigo": "led"}
+{"t_ms": 602.582, "tipo": "serial", "dir": "tx", "texto": "botao 1 602 ms", "porta": "uart0"}
+{"t_ms": 603.894, "tipo": "pino", "pino": "GPIO23", "valor": 0, "origem": "firmware", "nome": "LED/PWM"}
+{"t_ms": 603.894, "tipo": "aviso", "texto": "D1 apagado", "codigo": "led"}
+{"t_ms": 704.079, "tipo": "pwm", "pino": "GPIO2", "duty": 0.6999, "freq_hz": 1000.0}
+{"t_ms": 704.079, "tipo": "aviso", "texto": "D2 meia luz, 4,1 mA na média (5,9 mA quando liga), luz 41% do anúncio", "codigo": "led"}
+{"t_ms": 804.284, "tipo": "pwm", "pino": "GPIO2", "duty": 0.7999, "freq_hz": 1000.0}
+{"t_ms": 804.284, "tipo": "aviso", "texto": "D2 meia luz, 4,7 mA na média (5,9 mA quando liga), luz 47% do anúncio", "codigo": "led"}
+{"t_ms": 904.489, "tipo": "pwm", "pino": "GPIO2", "duty": 0.8999, "freq_hz": 1000.0}
+{"t_ms": 904.489, "tipo": "aviso", "texto": "D2 meia luz, 5,3 mA na média (5,9 mA quando liga), luz 53% do anúncio", "codigo": "led"}
+{"t_ms": 1004.694, "tipo": "pwm", "pino": "GPIO2", "duty": 0.9999, "freq_hz": 1000.0}
+{"t_ms": 1004.694, "tipo": "aviso", "texto": "D2 aceso, 5,9 mA, luz 59% do anúncio", "codigo": "led"}
+{"t_ms": 1104.894, "tipo": "serial", "dir": "tx", "texto": "fim", "porta": "uart0"}
+{"t_ms": 1105.241, "tipo": "fim", "estado": "acabou", "motor": "gemeo", "placa": "esp32", "alvo": "esp32", "tempo_placa_ms": 1105.241, "tempo_pc_s": 0.082, "ram_mb": 3.0}
+{"t_ms": 1105.241, "tipo": "conferencias", "ok": 0, "falhas": []}

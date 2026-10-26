@@ -19,7 +19,7 @@ NAVEGADOR = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gec
 BUSCA = "https://jlcpcb.com/api/overseas-pcb-order/v1/shoppingCart/smtGood/selectSmtComponentList"
 DESENHO = "https://easyeda.com/api/products/{}/components?version=6.4.19.5"
 FICHA = "https://www.lcsc.com/product-detail/{}.html"
-CODIGO = re.compile(r"C\d{1,12}$")
+CODIGO = re.compile(r"C\d{1,12}\Z")   # \Z: o $ aceitaria "C1\\n"
 UNIDADE = 0.254      # o EasyEDA desenha em unidades de 10 mil = 0,254 mm
 UM_DIA = 24 * 3600
 
@@ -220,6 +220,9 @@ def importar(codigo, bloco, pasta):
         raise SemLoja(f"'{codigo}' não é um código da LCSC (ex: C119304)")
     if bloco not in blocos.BLOCOS:
         raise SemLoja(f"bloco '{bloco}' não existe (tem: {', '.join(blocos.BLOCOS)})")
+    if blocos.BLOCOS[bloco].get("filtro", {}).get("tipo"):
+        raise SemLoja(f"o bloco '{bloco}' não vem da LCSC: é uma placa pronta de loja brasileira com o tipo da biblioteca "
+                      "(ex.: robocore:esp32-wifi-bluetooth), escolhida pelo catálogo")
     dados, des = ficha(codigo), desenho(codigo)
     try:
         pag = pagina(codigo)
@@ -230,9 +233,11 @@ def importar(codigo, bloco, pasta):
     tipo = blocos.tipo_da_loja(bloco, dados, des)
     import catalogo
     cat = catalogo.ler()
-    catalogo.adicionar(cat, bloco, [dados])   # toda peca escolhida fica na lista de compras
-    cat["pecas"][codigo]["tamanho"] = tipo["loja"]["tamanho"]   # a medida do desenho, quando o pacote nao diz
-    catalogo.salvar(cat, [cat["pecas"][codigo]["categoria"]])
+    catalogo.adicionar(cat, blocos.CATEGORIA[bloco], [dados])   # toda peca escolhida fica na lista de compras (ldr -> sensor_luz)
+    e = cat["pecas"][codigo]
+    if not e.get("tamanho") and tipo["loja"]["tamanho"] not in ("", "-", e["pacote"].strip()):
+        e["tamanho"] = tipo["loja"]["tamanho"]   # a medida do desenho, so quando a loja nao diz (a mesma regra do recalcular)
+    catalogo.salvar(cat, [e["categoria"]])
     destino = Path(pasta) / "pecas"
     destino.mkdir(parents=True, exist_ok=True)
     arq = destino / f"{codigo}.json"
