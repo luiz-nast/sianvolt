@@ -478,15 +478,16 @@ const mm = (v, casas = 2) => Number(v).toFixed(casas).replace('.', ',');
 const $ = sel => document.querySelector(sel);
 
 // ---------- leitura dos arquivos (polling de 1 s) ----------
-// o fabrica.json so existe depois da cotacao: sem ele, pergunta de novo a cada 20 s (cada 404 vira erro no console)
+// o fabrica.json so existe depois da cotacao: sem ele (o app responde 204), pergunta de novo a cada 20 s
 const FALTA_ATE = {}, DEVAGAR = { 'fabrica.json': 20000 };
 async function ler(caminho) {
   const url = BASE + caminho;
   if (FALTA_ATE[url] > Date.now()) return null;
   try {
     const r = await fetch(url, { cache: 'no-store' });
-    if (r.status === 404 && DEVAGAR[caminho]) FALTA_ATE[url] = Date.now() + DEVAGAR[caminho];
-    return r.ok ? await r.text() : null;
+    const falta = r.status === 404 || r.status === 204;
+    if (falta && DEVAGAR[caminho]) FALTA_ATE[url] = Date.now() + DEVAGAR[caminho];
+    return r.ok && !falta ? await r.text() : null;
   } catch { return null; }
 }
 
@@ -1650,9 +1651,9 @@ function temPrograma(m) {
 }
 
 // lê o programa: com o app, o GET /api/programa (o mais novo, ou 'rodando'); sem ele (python -m http.server), o
-// saida/programa.json. Só com a régua aberta, a cada 2 s. O 404 ('ainda não rodou', 'falta o main.py') espera 10 s pra
-// perguntar de novo (cada 404 é uma linha vermelha no console), menos com os testes rodando (o testes.json, lido a cada
-// 1 s, diz): aí a etapa 8 vai rodar o programa, e a régua pergunta a cada 2 s pra mostrar o 'rodando…' e o resultado
+// saida/programa.json. Só com a régua aberta, a cada 2 s. 'Ainda não rodou' e 'falta o main.py' esperam 10 s pra
+// perguntar de novo, menos com os testes rodando (o testes.json, lido a cada 1 s, diz): aí a etapa 8 vai rodar o
+// programa, e a régua pergunta a cada 2 s pra mostrar o 'rodando…' e o resultado
 async function lerPrograma(agora = false) {
   const P = S.prog, pressa = (!!S.testes?.rodando || !!P.espera) && Date.now() >= P.leu + (P.espera ? 1000 : 2000);
   if (!PLACA || P.lendo || (!agora && Date.now() < P.proxima && !pressa)) return;
@@ -1682,6 +1683,8 @@ async function lerPrograma(agora = false) {
   let d;
   try { d = JSON.parse(txt); } catch { return; }   // pela metade: lê de novo na próxima
   P.bruto = txt;
+  const vazio = !ok || !!d?.sem_programa || !!d?.ainda_nao_rodou;   // o app responde 200 com o porquê
+  if (vazio) P.proxima = P.leu + 10000;
   if (d?.rodando !== true) {   // chegou o resultado novo (ou o erro dele): a espera acaba e o recado velho (409, sem resposta) some
     if (depois) P.espera = null;
     if (P.recadoSome && P.recado === P.recadoSome) P.recado = '';
@@ -1694,7 +1697,7 @@ async function lerPrograma(agora = false) {
     Object.assign(P, { tem: null, rodando: false, falta: '', main: null, dado: arrumarPrograma(d), versao: P.versao + 1 });
     P.t = Math.min(P.t, P.dado.total);
     P.pedido ??= pedidoDoPrograma(P.dado);   // os chips começam com o que o app mandou da última vez
-  } else Object.assign(P, { tem: null, rodando: false, falta: d?.erro ? `${d.erro}${ok ? '' : '. Rode os testes: a etapa 8 roda o programa no gêmeo'}` : 'não consegui ler o programa desta placa' });
+  } else Object.assign(P, { tem: null, rodando: false, falta: d?.erro ? `${d.erro}${vazio ? '. Rode os testes: a etapa 8 roda o programa no gêmeo' : ''}` : 'não consegui ler o programa desta placa' });
   desenhar();
 }
 

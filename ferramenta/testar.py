@@ -265,6 +265,12 @@ def confere_ligacoes(ctx):
     if encostados:
         a, b = encostados[0]
         mais = f" (e mais {len(encostados) - 1})" if len(encostados) > 1 else ""
+        alto = next((p for p in modelo["pecas"] if p["ref"] in (a, b) and no_alto(p)), None)
+        if alto:   # sem a altura das peças, não dá pra saber se cabe embaixo da barra fêmea: só trilha e via
+            baixa = b if alto["ref"] == a else a
+            raise Falhou(f"{baixa} fica embaixo do {alto['ref']}, que é encaixado no alto: embaixo dele, só trilhas e "
+                         f"vias (a ferramenta ainda não sabe a altura das peças pra dizer se cabe){mais}", [a, b],
+                         "embaixo do DevKit")
         raise Falhou(f"{a} está em cima de {b}: os corpos das peças se encostam{mais}", [a, b], "uma em cima da outra")
     cobertos = pads_embaixo(modelo)   # o furo de uma peça embaixo do corpo de outra (o DevKit, no alto, não conta)
     if cobertos:

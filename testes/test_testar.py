@@ -90,6 +90,17 @@ class CadaDefeitoNaSuaEtapa(unittest.TestCase):
     def test_peca_em_cima_de_outra_para_na_3(self):
         self.confere(3, "em cima de", {"D1 led_5mm 43 7": "D1 led_5mm 43 15"}, rotulo="uma em cima da outra")
 
+    def test_peca_embaixo_do_devkit_para_na_3_e_diz_por_que(self):
+        pasta = copia("esp32", {"peca R3 resistor_axial 47.27 55 22k": "peca R3 resistor_axial 30 36 22k"})
+        try:
+            n, falha = parou(testar.rodar(pasta, "teste"))
+        finally:
+            apagar(pasta)
+        self.assertEqual(n, 3, falha)
+        self.assertIn("R3 fica embaixo do U1", falha["detalhe"])
+        self.assertIn("só trilhas e vias", falha["detalhe"])
+        self.assertEqual(falha["rotulos"]["R3"], "embaixo do DevKit")
+
     def test_pinos_de_pecas_diferentes_encostados_dao_curto_na_3(self):
         # dois resistores ponta com ponta: os corpos longe, nenhum pad embaixo de corpo, mas o R1.2 em cima do R2.1.
         # (o pad do LED fica dentro do corpo dele: LED com pino encostado em outro pino já cai no 'furo coberto')

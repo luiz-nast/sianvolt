@@ -168,20 +168,20 @@ class Bancada(SimpleHTTPRequestHandler):
                 return self.responder({"erro": str(e)}, 502)
         if url.path == "/api/foto":
             return self.foto(q.get("codigo", ""))
-        if url.path == "/api/programa":   # 'rodando', ou o último que rodou (o do app ou o do roteiro de teste)
+        if url.path == "/api/programa":   # 'rodando', ou o último que rodou (o do app ou o do roteiro de teste); sem
+            # programa ou sem rodada ainda é resposta normal (200 com o porquê), pra não sujar o console da bancada
             pasta = placa(q.get("placa", ""))
             if not pasta:
                 return self.responder({"erro": "placa não existe"}, 404)
             if not (pasta / "codigo" / "main.py").is_file():   # a lanterna: sem o ▶ Programa, nem com os testes rodando
-                return self.responder({"erro": "esta placa não tem programa (falta o codigo/main.py)", "sem_programa": True},
-                                      404)
+                return self.responder({"erro": "esta placa não tem programa (falta o codigo/main.py)", "sem_programa": True})
             with trava:   # o testar também roda o programa (a etapa 8): o resultado novo está vindo
                 ocupada = vivo(pasta.name)
             if ocupada or programa.ocupada(pasta):
                 return self.responder({"rodando": True})
             prog = ultimo_programa(pasta)
             if prog is None:
-                return self.responder({"erro": "o programa desta placa ainda não rodou"}, 404)
+                return self.responder({"erro": "o programa desta placa ainda não rodou", "ainda_nao_rodou": True})
             return self.responder({**prog, "rodando": False})
         if url.path == "/":
             self.send_response(302)
@@ -195,6 +195,11 @@ class Bancada(SimpleHTTPRequestHandler):
             return self.responder({"placas": nomes, "rodando": vivos, "raiz": str(RAIZ)})
         if not self.servido(url):
             return self.responder({"erro": "não existe"}, 404)
+        if url.path.endswith("/fabrica.json") and not Path(self.translate_path(url.path)).exists():
+            # só existe depois da cotação; a bancada pergunta de tempos em tempos, e cada 404 vira erro no console
+            self.send_response(204)
+            self.end_headers()
+            return
         super().do_GET()
 
     def no_catalogo(self, caminho, corpo):

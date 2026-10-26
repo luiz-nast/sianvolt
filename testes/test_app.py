@@ -74,8 +74,9 @@ class App(Servidor):
         self.assertEqual(status, 200)
         self.assertEqual([b["ref"] for b in proj["blocos"]][:2], ["U1", "D1"])
         self.assertEqual(self.json("GET", "/api/programa?placa=esp32"),
-                         (404, {"erro": "o programa desta placa ainda não rodou"}))
+                         (200, {"erro": "o programa desta placa ainda não rodou", "ainda_nao_rodou": True}))
         self.assertTrue(self.json("GET", "/api/programa?placa=lanterna")[1]["sem_programa"])
+        self.assertEqual(self.pedir("GET", "/placas/esp32/fabrica.json")[0], 204, "sem cotação: 204, não 404")
         self.assertFalse((PLACAS / "esp32" / "saida").exists())
 
     def test_nao_sai_da_bancada_e_das_placas(self):
@@ -224,7 +225,7 @@ class Programa(Servidor):
         self.assertIn("'D1' não é um botão da placa (botões: SW1)", self.post(ruins["aperto em quem não é botão"])[1]["erro"])
         self.assertEqual(self.post({}, "sem_programa"), (400, {"erro": "esta placa não tem programa (falta o codigo/main.py)"}))
         self.assertEqual(self.json("GET", "/api/programa?placa=sem_programa"),
-                         (404, {"erro": "esta placa não tem programa (falta o codigo/main.py)", "sem_programa": True}))
+                         (200, {"erro": "esta placa não tem programa (falta o codigo/main.py)", "sem_programa": True}))
         self.assertEqual(self.post({}, "nao_existe")[0], 404)
         self.assertEqual(self.post({}, "..")[0], 404)
         self.assertNotIn("esp32", app.rodando)   # nada disso rodou
@@ -253,7 +254,7 @@ class Programa(Servidor):
         finally:
             app.comando_do_programa, app.rodar_testes = comando, rodar_testes
         self.assertEqual(self.json("GET", "/api/programa?placa=esp32"),
-                         (404, {"erro": "o programa desta placa ainda não rodou"}))   # o de mentira não gravou nada
+                         (200, {"erro": "o programa desta placa ainda não rodou", "ainda_nao_rodou": True}))   # o de mentira não gravou nada
         self.assertEqual(self.json("GET", "/api/programa?placa=nao_existe")[0], 404)
 
     def test_com_os_testes_rodando(self):
@@ -264,7 +265,7 @@ class Programa(Servidor):
             app.o_que[nome] = "testes"
         try:
             self.assertEqual(self.json("GET", "/api/programa?placa=sem_programa"),
-                             (404, {"erro": "esta placa não tem programa (falta o codigo/main.py)", "sem_programa": True}))
+                             (200, {"erro": "esta placa não tem programa (falta o codigo/main.py)", "sem_programa": True}))
             self.assertEqual(self.json("GET", "/api/programa?placa=esp32"), (200, {"rodando": True}))
             self.assertEqual(self.post({}), (409, {"erro": "os testes estão rodando; tenta de novo em uns segundos"}))
             self.assertEqual(self.json("POST", "/api/testar?placa=esp32", {}, {"X-Bancada": "1"}),

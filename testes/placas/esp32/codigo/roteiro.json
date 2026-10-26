@@ -1,5 +1,5 @@
 {
- "sobre": "Placa de teste: o botão apertado de 0,5 a 1,2 s e de 2 a 2,3 s (gemeo.roteiro); a luz começa com 100 lux e vai pra 1 lux em 1,5 s (o Sianvolt troca o lux pelos volts do divisor no GPIO34). LED no GPIO32, piezo no GPIO26, botão no GPIO14.",
+ "sobre": "Placa de teste: o botão apertado de 0,5 a 1,2 s e de 2 a 2,3 s (gemeo.roteiro); a luz começa com 100 lux e vai pra 1 lux em 1,5 s (o gêmeo põe o LDR com essa luz no circuito, e o GPIO34 lê a tensão do divisor). LED no GPIO32, piezo no GPIO26, botão no GPIO14.",
  "tempo": 3,
  "precisa": ["pino_saida", "pino_entrada", "pwm", "adc", "serial"],
  "entradas": [
