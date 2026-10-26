@@ -57,16 +57,23 @@ main { flex: 1; min-height: 0; display: flex; }
 
 /* projeto */
 .area { flex: 1; min-width: 0; position: relative; overflow: hidden; background: var(--area); user-select: none; }
-.area .desenho { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* --topo: o que fica em cima do desenho sem cobrir a placa (o aviso da versão; no celular, as ferramentas deitadas) */
+.area .desenho { position: absolute; left: 0; top: var(--topo, 0px); width: 100%; height: calc(100% - var(--topo, 0px)); }
 .area.mao { cursor: grab; } .area.arrastando { cursor: grabbing; }
-.ferramentas { position: absolute; left: 16px; top: 16px; z-index: 5; display: flex; flex-direction: column; gap: 4px; background: var(--painel); border: 1px solid var(--borda); border-radius: 10px; padding: 4px; }
+/* tela baixa: as ferramentas rolam, nada fica escondido embaixo do painel */
+.ferramentas { position: absolute; left: 16px; top: 16px; z-index: 5; display: flex; flex-direction: column; gap: 4px; max-height: calc(100% - 32px); overflow-y: auto; background: var(--painel); border: 1px solid var(--borda); border-radius: 10px; padding: 4px; }
+.ferramentas > * { flex: none; }
 .ferramentas button { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: #C8CDD2; }
 .ferramentas button[aria-pressed="true"] { background: var(--ativo); color: #F4F4F2; }
 .ferramentas button:hover { background: #262C32; }
 .ferramentas .zoom { height: 32px; font-family: var(--mono); font-size: 11px; color: var(--sec); }
 .ferramentas hr { width: 32px; border: 0; border-top: 1px solid var(--borda); margin: 4px auto; }
-.aviso-versao { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); z-index: 5; padding: 6px 12px; border-radius: 999px; background: var(--painel); border: 1px solid var(--borda2); font-size: 12px; color: #C8CDD2; }
-.hud { position: absolute; z-index: 6; pointer-events: none; display: flex; flex-direction: column; gap: 2px; background: rgba(14,16,18,0.92); border: 1px solid var(--borda2); border-radius: 8px; padding: 6px 10px; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+/* o aviso da versão vista e a legenda do 'destacar o que mudou': em cima, e o desenho começa embaixo dele (--topo) */
+.aviso-versao { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: calc(100% - 200px); padding: 6px 14px; border-radius: 14px; background: var(--painel); border: 1px solid var(--borda2); font-size: 12px; line-height: 1.45; color: #C8CDD2; text-align: center; }
+.aviso-versao .legenda-mudou { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 12px; font-family: var(--mono); font-size: 11.5px; color: var(--sec); }
+.aviso-versao .cor-nova { color: var(--ok); } .aviso-versao .cor-movida { color: var(--destaque); } .aviso-versao .cor-saiu { color: var(--cobre); }
+.hud { position: absolute; z-index: 6; pointer-events: none; display: flex; flex-direction: column; gap: 2px; max-width: calc(100% - 16px); background: rgba(14,16,18,0.92); border: 1px solid var(--borda2); border-radius: 8px; padding: 6px 10px; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.hud > span { overflow: hidden; text-overflow: ellipsis; }
 .hud .xy { color: var(--sec); }
 .tamanho { position: absolute; right: 16px; bottom: 12px; z-index: 5; pointer-events: none; font-family: var(--mono); font-size: 11px; color: var(--sec); }
 .ferramentas button[data-ligar][aria-pressed="true"] { background: var(--ok); color: #0E2A1A; }
@@ -93,6 +100,7 @@ main { flex: 1; min-height: 0; display: flex; }
 .barra { position: relative; height: 8px; margin: 6px 0 2px; border-radius: 4px; background: #22272C; }
 .barra i { position: absolute; display: block; }
 .barra .faixa-b { top: 0; bottom: 0; background: rgba(111, 211, 155, 0.35); border-radius: 4px; }
+.barra .faixa-q { top: 0; bottom: 0; background: rgba(255, 138, 128, 0.55); border-radius: 0 4px 4px 0; }   /* o pedaço da faixa acima do limite */
 .barra .marca { top: -3px; width: 2px; height: 14px; background: var(--texto); }
 .barra .teste { top: 1px; width: 1px; height: 6px; background: var(--sec); }
 .barra .limite { top: -2px; width: 2px; height: 12px; background: var(--erro); }
@@ -117,9 +125,9 @@ main { flex: 1; min-height: 0; display: flex; }
 .ferramentas button[data-programa][aria-pressed="true"] { background: var(--cobre); color: #2A1A05; }
 .ferramentas button[data-programa][aria-pressed="true"]:hover { background: #EBB878; }
 .area.com-regua { --regua: 104px; }
-.area.com-regua .desenho { height: calc(100% - var(--regua)); }
+.area.com-regua .desenho { height: calc(100% - var(--topo, 0px) - var(--regua)); }
 .area.com-regua .tamanho { bottom: calc(var(--regua) + 8px); }
-.area.com-regua .ferramentas { max-height: calc(100% - var(--regua) - 24px); overflow-y: auto; }   /* tela baixa: as ferramentas rolam, a régua não cobre o ▶ */
+.area.com-regua .ferramentas { max-height: calc(100% - var(--regua) - 24px); }   /* tela baixa: as ferramentas rolam, a régua não cobre o ▶ */
 .regua { position: absolute; left: 0; right: 0; bottom: 0; height: var(--regua); z-index: 6; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 16px 8px; background: var(--painel); border-top: 1px solid var(--borda); }
 .regua .comandos { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .regua .botao-r { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: #C8CDD2; }
@@ -189,12 +197,25 @@ main { flex: 1; min-height: 0; display: flex; }
    instante não esconde) e nunca um pontinho */
 .trilho .m-aperto.pendente { top: 28px; height: 12px; min-width: 14px; background: rgba(111, 168, 220, 0.35); border: 1.5px dashed #F4F4F2; }
 .trilho .m-luz.pendente { top: 29px; width: 11px; height: 11px; background: rgba(255, 211, 78, 0.35); border: 1.5px dashed #F4F4F2; }
-@media (max-width: 720px) { .area.com-regua { --regua: 112px; } .regua { padding: 4px 12px 6px; } }
+/* as ferramentas deitadas numa linha em cima da placa (o desenho começa embaixo delas, --topo): quando a coluna não cabe
+   em pé (o painel do ▶ Ligar embaixo da placa, no celular), assim o ▶ Programa nunca fica escondido; e, no celular, quando
+   a placa fica maior assim (arrumarTopo decide) */
+.area.ferr-deitadas .ferramentas { top: 12px; flex-direction: row; flex-wrap: wrap; align-items: center; max-width: calc(100% - 32px); max-height: none; overflow: visible; }
+.area.ferr-deitadas .ferramentas hr { width: 0; height: 28px; border-top: 0; border-left: 1px solid var(--borda); margin: 0 2px; }
+.area.ferr-deitadas .ferramentas .zoom { width: 48px; height: 44px; }
+@media (max-width: 720px) {
+  .area.com-regua { --regua: 112px; } .regua { padding: 4px 12px 6px; }
+  .area.ferr-deitadas .ferramentas button { width: 40px; height: 40px; }
+  .area.ferr-deitadas .ferramentas .zoom { width: 48px; height: 40px; }
+  .aviso-versao { left: 16px; right: 16px; max-width: none; transform: none; }
+  /* com o ▶ Programa aberto, a placa (com a régua embaixo dela) fica com mais da tela; o painel rola */
+  main[data-aba="projeto"] > aside.inspetor.programa { max-height: 45%; }
+}
 
 aside.inspetor { flex: 0 0 340px; overflow: auto; padding: 20px; border-left: 1px solid var(--borda); display: flex; flex-direction: column; gap: 16px; font-size: 14px; }
 .inspetor .cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .inspetor .tipo { font-size: 12px; color: var(--sec); }
-.inspetor .titulo { font-family: var(--mono); font-size: 22px; font-weight: 500; word-break: break-all; }
+.inspetor .titulo { font-family: var(--mono); font-size: 22px; font-weight: 500; overflow-wrap: anywhere; }   /* só quebra a palavra que não cabe sozinha */
 .inspetor .fechar { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; color: var(--sec); border-radius: 8px; }
 .inspetor dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0; }
 .inspetor dt { color: var(--sec); }
@@ -267,7 +288,15 @@ svg.mini { width: 100%; height: auto; display: block; border-radius: 8px; backgr
 .item .sem-foto { width: 72px; height: 72px; border-radius: 8px; background: #22272C; }
 .item .info { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .item .info b { font-size: 15px; }
+.item .foto, .item .sem-foto { grid-row: span 2; }
+.item .mais { grid-column: 2; min-width: 0; display: flex; flex-direction: column; gap: 3px; }   /* a conta, os pendentes e os links */
 .item .opcoes { grid-column: 1 / -1; }
+/* tela estreita (celular): a foto encolhe e a conta (com a tabelinha do LDR) ganha a largura toda do cartão */
+@media (max-width: 640px) {
+  .item { grid-template-columns: 48px minmax(0, 1fr); gap: 6px 10px; padding: 10px; }
+  .item .foto, .item .sem-foto { width: 48px; height: 48px; grid-row: auto; }
+  .item .mais { grid-column: 1 / -1; }
+}
 .aviso { font-size: 13px; color: var(--cobre); line-height: 1.45; }
 .conta { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 8px; background: #1A2230; border: 1px solid #2C3A52; font-size: 13px; line-height: 1.5; }
 .conta .mono { font-size: 12px; color: #C8CDD2; }
@@ -276,7 +305,7 @@ svg.mini { width: 100%; height: auto; display: block; border-radius: 8px; backgr
 .opcoes > .sub, .opcoes > .vazio-op { grid-column: 1 / -1; }
 .opcao { display: flex; flex-direction: column; gap: 3px; padding: 10px; border: 1px solid var(--borda); border-radius: 10px; background: var(--painel); font-size: 12.5px; }
 .opcao.escolhida { border-color: #24583A; }
-.opcao b { font-size: 12.5px; word-break: break-all; }
+.opcao b { font-size: 12.5px; overflow-wrap: anywhere; }
 .opcao button { margin-top: 4px; min-height: 32px; border-radius: 8px; background: var(--ativo); font-size: 13px; }
 .opcao button:hover { background: #39424A; }
 .total { font-size: 14px; } .total b { font-family: var(--mono); }
@@ -312,7 +341,17 @@ table.lux { border-collapse: collapse; font-family: var(--mono); font-size: 12px
 table.lux th, table.lux td { padding: 4px 10px; text-align: right; border-bottom: 1px solid #2C3A52; white-space: nowrap; }
 table.lux th { color: var(--sec); font-weight: 500; } table.lux tbody th { text-align: left; } table.lux thead th { white-space: normal; }
 table.lux td.ok { color: var(--ok); } table.lux td.fora { color: var(--cobre); }
-table.lux .de-ate { display: block; font-size: 10.5px; opacity: 0.75; }   /* a faixa com o 3V3 de verdade, embaixo do número */
+table.lux .de-ate { display: block; font-size: 10.5px; opacity: 0.75; white-space: normal; }   /* a faixa com o 3V3 de verdade, embaixo do número; aperta em duas linhas se precisar */
+/* tela estreita (celular): a linha do tempo dos passos e a conta mais justas, pra tabelinha do LDR caber sem rolar de lado */
+@media (max-width: 640px) {
+  .processo { padding: 20px 12px 40px; }
+  .passo { gap: 10px; }
+  .passo .marca { width: 28px; height: 28px; font-size: 13px; }
+  .passo:not(:last-child)::before { left: 13px; top: 30px; }
+  .passo .conteudo { padding: 14px 12px; }
+  .conta { padding: 8px 10px; }
+  table.lux th, table.lux td { padding: 4px 6px; }
+}
 .acompanha { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; padding: 8px 10px; border-radius: 8px; border: 1px dashed var(--borda2); font-size: 13px; color: #C8CDD2; }
 .acompanha .links { gap: 0 12px; } .acompanha .links a { min-height: 28px; }
 .confira { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px; background: #2A2114; border: 1px solid #5A4527; }
@@ -342,7 +381,10 @@ table.lux .de-ate { display: block; font-size: 10.5px; opacity: 0.75; }   /* a f
 .cat-lado button[aria-pressed="true"] { background: var(--ativo); color: var(--texto); }
 .cat-miolo { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 .cat-explica { margin: 0; font-size: 14px; color: #C8CDD2; line-height: 1.5; }
-@media (max-width: 760px) { .cat-corpo { grid-template-columns: 1fr; } .cat-lado { position: static; flex-direction: row; flex-wrap: wrap; } .cat-lado .grupo { width: 100%; margin: 6px 0 0; } }
+/* tela estreita: a lista de categorias (quase 90) vira uma caixa de escolher em cima da busca, e os cartões vêm logo embaixo */
+.cat-escolha { display: none; align-items: center; gap: 8px; font-size: 13px; color: #C8CDD2; }
+.cat-escolha select { flex: 1; min-width: 0; min-height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--borda2); background: var(--painel); color: var(--texto); font: inherit; font-size: 14px; }
+@media (max-width: 760px) { .cat-corpo { grid-template-columns: 1fr; } .cat-lado { display: none; } .cat-escolha { display: flex; } }
 .inspetor .foto-peca { width: 100%; max-height: 180px; object-fit: contain; background: #F4F4F2; border-radius: 10px; }
 .inspetor .titulo.nome-peca { font-family: inherit; font-size: 19px; font-weight: 600; word-break: normal; }
 
@@ -419,6 +461,9 @@ table.lux .de-ate { display: block; font-size: 10.5px; opacity: 0.75; }   /* a f
 .erro { fill: none; stroke: #FF6B5E; stroke-width: 0.35; stroke-dasharray: 0.9 0.5; pointer-events: none; }
 .aviso-peca { fill: none; stroke: var(--cobre); stroke-width: 0.3; stroke-dasharray: 0.9 0.5; pointer-events: none; }   /* passou, com aviso */
 .novo { fill: none; stroke: var(--ok); stroke-width: 0.25; stroke-dasharray: 0.8 0.5; pointer-events: none; }
+.movida { fill: none; stroke: var(--destaque); stroke-width: 0.25; stroke-dasharray: 0.5 0.5; pointer-events: none; }   /* a mesma peça, noutro lugar */
+.zona { fill: none; stroke: #F4F4F2; stroke-width: 0.15; pointer-events: none; }   /* a antena e o USB do DevKit, como a serigrafia */
+.zona-txt { fill: #F4F4F2; font-family: var(--mono); font-size-adjust: cap-height 1; pointer-events: none; }
 .etiqueta rect { pointer-events: none; }
 .etiqueta text { font-family: var(--mono); font-weight: 500; pointer-events: none; }
 [data-alvo] { cursor: pointer; }
@@ -459,11 +504,15 @@ const S = {
   ajustes: novosAjustes(),   // o que o painel mudou
   prog: novoPrograma(),  // ▶ Programa (aba Projeto): o programa.json que a régua mostra e o instante dela
   api: false,            // true quando a pagina vem do app.py (da pra rodar os testes daqui)
+  apiSabido: false,      // já perguntou ao /api/placas se o app está aí (antes disso, 'sem app' ainda não é certeza)
+  projetoLido: false,    // o /api/projeto já respondeu (null = a placa não tem projeto.json)
   cotacao: null,         // fabrica.json: o que aconteceu no site da fabrica
   projeto: null,         // /api/projeto: objetivo, perguntas, blocos e carrinho (passos 1 a 3)
   opcoes: {},            // ref -> {carregando, erro, itens, busca}: o "Trocar" do carrinho
   mexendo: false,        // um pedido de escolher/responder em andamento
   recado: '',            // o que acabou de acontecer (ou deu errado) no carrinho
+  recadoDesde: 0,        // quando o pedido do recado deu certo (ms): os testes que ele disparou começam depois disso
+  recadoOnde: '',        // 'responder' (o recado fica no passo 1, perto da pergunta) ou o resto (no passo 3, o carrinho)
   modelo: null, testes: null, versoes: [],
   brutos: {},            // ultimo texto lido de cada arquivo, pra saber se mudou
   modelosVersao: {},     // v -> modelo daquela versao (versoes/vN.json)
@@ -478,8 +527,10 @@ const mm = (v, casas = 2) => Number(v).toFixed(casas).replace('.', ',');
 const $ = sel => document.querySelector(sel);
 
 // ---------- leitura dos arquivos (polling de 1 s) ----------
-// o fabrica.json so existe depois da cotacao: sem ele (o app responde 204), pergunta de novo a cada 20 s
-const FALTA_ATE = {}, DEVAGAR = { 'fabrica.json': 20000 };
+// o fabrica.json so existe depois da cotacao: sem ele (o app responde 204), pergunta de novo a cada 20 s. A placa nova
+// (copiada, que nunca rodou os testes) ainda não tem o modelo, o testes.json nem as versões: cada pergunta seria um 404
+// no console, então sem eles pergunta a cada 5 s (o 'Rodar os testes' zera a espera)
+const FALTA_ATE = {}, DEVAGAR = { 'fabrica.json': 20000, 'saida/modelo.json': 5000, 'testes.json': 5000, 'versoes/versoes.json': 5000 };
 async function ler(caminho) {
   const url = BASE + caminho;
   if (FALTA_ATE[url] > Date.now()) return null;
@@ -517,7 +568,7 @@ async function atualizar() {
     lerJson('saida/modelo.json', 'modelo'), lerJson('testes.json', 'testes'), lerJson('versoes/versoes.json', 'versoes'),
     lerJson('fabrica.json', 'cotacao'), lerProjeto(),
   ]);
-  if (projeto !== false) S.projeto = projeto;
+  if (projeto !== false) { S.projeto = projeto; S.projetoLido = true; }
   if (modelo) S.modelo = modelo;
   if (testes) {
     // os requisitos so sao gravados no fim da rodada; enquanto roda, fica o objetivo da rodada anterior
@@ -786,18 +837,49 @@ const ohmsTxt = o => (o >= 1000 ? `${(o / 1000).toString().replace('.', ',')} k�
 function estadoLed(r) { return r.queima ? 'queima' : r.forte ? 'forte' : r.acende ? 'aceso' : 'apagado'; }
 const TEXTO_LED = { queima: 'QUEIMA', forte: 'aceso forte', aceso: 'aceso', apagado: 'apagado' };
 
-// o que mudou da versao anterior pra esta (pra "destacar o que mudou")
+// o que mudou da versao anterior pra esta (pra "destacar o que mudou"): {pecas: Map ref -> 'nova' (não existia),
+// 'trocada' (outro tipo de peça no mesmo nome) ou 'movida' (a mesma, noutro lugar); trilhas: Set dos índices das
+// ligações novas; saiu: as refs que existiam e sumiram}. null sem a versão de antes
 function novidades(m, ant) {
-  const novos = new Set();
-  if (!ant) return novos;
+  if (!ant) return null;
+  const pecas = new Map(), trilhas = new Set();
   for (const p of m.pecas) {
     const a = ant.pecas.find(q => q.ref === p.ref);
-    if (!a || a.tipo !== p.tipo || a.x !== p.x || a.y !== p.y) novos.add('peca:' + p.ref);
+    if (!a) pecas.set(p.ref, 'nova');
+    else if (a.tipo !== p.tipo) pecas.set(p.ref, 'trocada');
+    else if (a.x !== p.x || a.y !== p.y) pecas.set(p.ref, 'movida');
   }
   m.trilhas.forEach((t, i) => {
-    if (!ant.trilhas.some(a => a.de === t.de && a.ate === t.ate)) novos.add('trilha:' + i);
+    if (!ant.trilhas.some(a => a.de === t.de && a.ate === t.ate)) trilhas.add(i);
   });
-  return novos;
+  const saiu = ant.pecas.filter(a => !m.pecas.some(p => p.ref === a.ref)).map(a => a.ref);
+  return { pecas, trilhas, saiu };
+}
+// a legenda do destaque, com as cores do desenho: [{classe, texto}]
+function legendaDasNovidades(nov) {
+  if (!nov) return [];
+  const de = tipo => [...nov.pecas].filter(([, t]) => t === tipo).map(([ref]) => ref);
+  const lista = refs => listaDeRefs(refs);
+  const novas = de('nova'), trocadas = de('trocada'), movidas = de('movida'), n = nov.trilhas.size;
+  return [
+    novas.length && { classe: 'cor-nova', texto: `verde: ${novas.length === 1 ? 'peça nova' : 'peças novas'} (${lista(novas)})` },
+    trocadas.length && { classe: 'cor-nova', texto: `verde: ${trocadas.length === 1 ? 'peça trocada' : 'peças trocadas'} por outro tipo (${lista(trocadas)})` },
+    movidas.length && { classe: 'cor-movida', texto: `azul: só ${movidas.length === 1 ? 'mudou' : 'mudaram'} de lugar (${lista(movidas)})` },
+    n && { classe: 'cor-nova', texto: `trilha verde: ${n === 1 ? 'ligação nova' : `${n} ligações novas`}` },
+    nov.saiu.length && { classe: 'cor-saiu', texto: `${nov.saiu.length === 1 ? 'saiu' : 'saíram'}: ${lista(nov.saiu)}` },
+  ].filter(Boolean);
+}
+// ['R1', 'R2', 'R3', 'R5'] -> 'R1 a R3 e R5': três ou mais seguidos (mesma letra, números em sequência) viram 'de a até'
+function listaDeRefs(refs) {
+  const chave = r => /^(\D*)(\d+)$/.exec(r), grupos = [];
+  const ordem = [...new Set(refs)].sort((a, b) => { const x = chave(a), y = chave(b); return x && y && x[1] === y[1] ? x[2] - y[2] : a.localeCompare(b); });
+  for (const r of ordem) {
+    const k = chave(r), g = grupos.at(-1), ultimo = g && chave(g.at(-1));
+    if (k && ultimo && ultimo[1] === k[1] && +k[2] === +ultimo[2] + 1) g.push(r);
+    else grupos.push([r]);
+  }
+  const txt = grupos.flatMap(g => (g.length >= 3 ? [`${g[0]} a ${g.at(-1)}`] : g));
+  return txt.length > 1 ? `${txt.slice(0, -1).join(', ')} e ${txt.at(-1)}` : txt.join('');
 }
 
 // ---------- desenho da placa em SVG ----------
@@ -876,6 +958,7 @@ function placaSVG(m, o = {}) {
   for (const p of m.pecas) {   // o nome onde o Gerber escreve: a base no y do nome_pos, a altura e o comprimento das letras dele
     const n = posDoNome(p);
     s += `<text class="ref${apaga(null, p.ref)}" x="${n.x}" y="${Y(n.y)}" font-size="${n.altura}" textLength="${n.largura}" text-anchor="middle">${esc(p.ref)}</text>`;
+    s += zonasSVG(p, W, H, Y, apaga(null, p.ref));   // o DevKit: ANTENA, USB e 'VIN NAO SOLDAR', como na serigrafia
   }
 
   // camadas por cima: selecao, novidades, erros
@@ -912,16 +995,62 @@ function placaSVG(m, o = {}) {
   }).join('');
   const erros = camada(o.erros, 'erro', 'var(--erro)', '#2A0B08');
   s += camada(o.avisos, 'aviso-peca', 'var(--cobre)', '#2A1A05', o.erros || {}) + erros;
-  for (const k of o.novos || []) {
-    const [tipo, id] = k.split(':');
-    if (tipo === 'peca') {
-      s += contorno(id, 'novo', 1.0);
-      const p = m.pecas.find(q => q.ref === id);
-      s += etiquetaAoLado(p, Y, W, '+ novo', fonte * 0.8, 'var(--ok)', '#0E2A1A');
-    } else {
-      const t = m.trilhas[+id];
-      s += `<line class="novo" x1="${t.x1}" y1="${Y(t.y1)}" x2="${t.x2}" y2="${Y(t.y2)}" stroke-width="${t.largura + 0.9}" stroke-opacity="0.8"/>`;
+  // o que mudou (novidades): a ligação nova em verde; a peça nova ou trocada com o contorno verde e uma etiqueta num lugar
+  // livre (sem empilhar nem cobrir outra peça); a que só mudou de lugar, só o contorno azul (a legenda em cima diz quais)
+  const nov = o.novos;
+  if (nov) {
+    for (const i of nov.trilhas) {
+      const t = m.trilhas[i];
+      if (t) s += `<line class="novo" x1="${t.x1}" y1="${Y(t.y1)}" x2="${t.x2}" y2="${Y(t.y2)}" stroke-width="${t.largura + 0.9}" stroke-opacity="0.8"/>`;
     }
+    for (const [ref, tipo] of nov.pecas) s += contorno(ref, tipo === 'movida' ? 'movida' : 'novo', 1.0);
+    for (const [ref, tipo] of nov.pecas) {
+      const p = m.pecas.find(q => q.ref === ref);
+      if (p && tipo !== 'movida') s += etiquetaLivre(m, p, Y, tipo === 'nova' ? '+ nova' : 'trocada', fonte * 0.8, 'var(--ok)', '#0E2A1A', ocupado);
+    }
+  }
+  return s;
+}
+
+// a serigrafia das zonas de uma peça (o DevKit), como o gerar.py (tracos_da_serigrafia e textos_da_peca): o contorno de
+// cada zona (a antena, o USB) dentro da placa, com o nome no meio da parte dela que fica em cima do corpo e da placa
+// (deitado se couber, em pé se não, sem nome se nem assim), e o aviso do pino que não leva solda ('VIN NAO SOLDAR'), em
+// pé, do lado de fora do pino. As medidas da letra e as folgas são as do gerar.py (LETRA, LETRA_LINHA, SILK, SILK_PAD)
+const SERIGRAFIA = { letra: 1.2, linha: 0.2, silk: 0.15, silkPad: 0.15 };
+const soLetras = t => String(t).normalize('NFD').replace(/\p{M}/gu, '').toUpperCase().replace(/[^+\-.0-9A-Z_]/g, ' ').split(/\s+/).filter(Boolean).join(' ');
+const comprimentoDaSerigrafia = t => (soLetras(t) ? soLetras(t).length * SERIGRAFIA.letra - SERIGRAFIA.letra / 3 : 0);
+function zonasSVG(p, W, H, Y, extra = '') {
+  if (!p.zonas && !Object.values(p.cuidados || {}).some(t => /não soldar/i.test(t))) return '';
+  const { letra, linha, silk, silkPad } = SERIGRAFIA, margem = linha + 2 * (silk + silkPad);
+  const texto = (t, x, y, emPe) => {   // (x, y) = o meio do texto, na placa (y pra cima); a base fica meia letra abaixo
+    const cx = +x.toFixed(3), cy = +Y(y).toFixed(3);
+    return `<text class="zona-txt${extra}" x="${cx}" y="${(cy + letra / 2).toFixed(3)}" font-size="${letra}" textLength="${comprimentoDaSerigrafia(t).toFixed(3)}" lengthAdjust="spacingAndGlyphs" text-anchor="middle"${emPe ? ` transform="rotate(-90 ${cx} ${cy})"` : ''}>${esc(soLetras(t))}</text>`;
+  };
+  let s = '';
+  const cw = p.corpo.w / 2, ch = p.corpo.h / 2;
+  for (const [nome, z] of Object.entries(p.zonas || {})) {
+    const [zx0, zx1, zy0, zy1] = [p.x + z.x[0], p.x + z.x[1], p.y + z.y[0], p.y + z.y[1]];
+    // o contorno: cada lado da zona, só o pedaço dentro da placa (o que passa da borda fica de fora, como no Gerber)
+    const lados = [[zx0, zy0, zx1, zy0], [zx1, zy0, zx1, zy1], [zx1, zy1, zx0, zy1], [zx0, zy1, zx0, zy0]].map(([a, b, c, d]) => {
+      if (a === c ? a < 0 || a > W : b < 0 || b > H) return '';
+      const [u0, u1] = a === c ? [Math.max(Math.min(b, d), 0), Math.min(Math.max(b, d), H)] : [Math.max(Math.min(a, c), 0), Math.min(Math.max(a, c), W)];
+      if (u1 <= u0) return '';
+      return a === c ? `M${a} ${Y(u0)}V${Y(u1)}` : `M${u0} ${Y(b)}H${u1}`;
+    }).join('');
+    if (lados) s += `<path class="zona${extra}" d="${lados}"/>`;
+    const x0 = Math.max(zx0, p.x - cw, 0), y0 = Math.max(zy0, p.y - ch, 0), x1 = Math.min(zx1, p.x + cw, W), y1 = Math.min(zy1, p.y + ch, H);
+    const c = comprimentoDaSerigrafia(nome);
+    const deitado = c + margem <= x1 - x0 && letra + margem <= y1 - y0, emPe = c + margem <= y1 - y0 && letra + margem <= x1 - x0;
+    if (deitado || emPe) s += texto(nome, (x0 + x1) / 2, (y0 + y1) / 2, !deitado);
+  }
+  for (const q of p.pinos) {
+    const aviso = p.cuidados?.[q.n] || '';
+    if (!/não soldar/i.test(aviso)) continue;
+    const meiaW = q.pad.forma === 'C' ? q.pad.d / 2 : q.pad.w / 2;
+    const folga = silkPad + linha / 2 + letra / 2 + 0.1;   // da borda do pad até o meio da coluna de letras (gerar.py)
+    const x = q.x >= p.x ? q.x + meiaW + folga : q.x - meiaW - folga;
+    const meio = comprimentoDaSerigrafia(aviso) / 2 - letra / 2;   // a ponta do texto fica na altura do pino
+    s += texto(aviso, x, q.y < p.y ? q.y + meio : q.y - meio, true);
   }
   return s;
 }
@@ -1024,6 +1153,15 @@ function etiqueta(x, y, texto, fonte, fundo, cor) {
     `<text x="${x + w / 2}" y="${y + fonte * 0.35}" font-size="${fonte}" text-anchor="middle" fill="${cor}">${esc(texto)}</text></g>`;
 }
 
+// o que a rodada não conferiu: as etapas que pularam (a 8, sem o gêmeo nesta máquina) e os requisitos sem resposta ('?'):
+// passar não é o mesmo que conferir tudo, e o selo verde sozinho diria que sim. {pulou, sem, txt}
+function naoConferido(t) {
+  const pulou = (t?.etapas || []).filter(e => e.estado === 'pulou'), sem = (t?.objetivo?.itens || []).filter(i => i.status === '?');
+  const txt = [pulou.length ? `${pulou.length} ${pulou.length === 1 ? 'etapa pulou' : 'etapas pularam'}` : '',
+    sem.length ? `${sem.length} ${sem.length === 1 ? 'requisito sem resposta' : 'requisitos sem resposta'}` : ''].filter(Boolean).join(' · ');
+  return { pulou, sem, txt };
+}
+
 // ---------- topo ----------
 function desenharTopo() {
   $('#nome').textContent = S.testes?.objetivo?.titulo || PLACA;
@@ -1033,9 +1171,9 @@ function desenharTopo() {
   if (!t) { st.textContent = 'sem testes'; st.style.color = 'var(--sec)'; }
   else if (t.rodando) { st.textContent = 'testes rodando…'; st.style.color = 'var(--cobre)'; }
   else {
-    const falhas = t.etapas.filter(e => e.estado === 'falhou').length;
-    st.textContent = falhas ? `✗ ${falhas} etapa falhou` : '✓ testes ok';
-    st.style.color = falhas ? 'var(--erro)' : 'var(--ok)';
+    const falhas = t.etapas.filter(e => e.estado === 'falhou').length, nc = naoConferido(t);
+    st.textContent = falhas ? `✗ ${falhas} etapa falhou` : `✓ testes ok${nc.txt ? ` · ${nc.txt}` : ''}`;
+    st.style.color = falhas ? 'var(--erro)' : nc.txt ? 'var(--cobre)' : 'var(--ok)';
   }
   const atual = versaoAtual(), vendo = S.ver ?? atual;
   $('#versao-label').textContent = vendo ? `v${vendo}` : 'v?';
@@ -1074,7 +1212,7 @@ function desenharProjeto(main) {
       </section>`;
     // o painel do ▶ Ligar (ou o inspetor) entra depois do zoom e muda o tamanho da área (no celular, a altura): refaz o zoom
     const nova = main.querySelector('.area');
-    new ResizeObserver(() => { if (nova.isConnected && S.cx !== null && nova.clientWidth > 150 && nova.clientHeight > 64) aplicarZoom(); }).observe(nova);
+    new ResizeObserver(() => { if (nova.isConnected && S.cx !== null && nova.clientWidth > 150 && nova.clientHeight > 64) { arrumarFerramentas(nova, modeloVisto()); aplicarZoom(); } }).observe(nova);
   }
   const area = main.querySelector('.area');
   area.querySelector('.tamanho').textContent = `${mm(m.placa.w, 0)} × ${mm(m.placa.h, 0)} mm · 2 camadas`;
@@ -1096,17 +1234,23 @@ function desenharProjeto(main) {
   area.classList.toggle('mao', S.modo === 'mao');
   area.querySelectorAll('[data-modo]').forEach(b => b.setAttribute('aria-pressed', b.dataset.modo === S.modo));
 
-  const vendoAntiga = S.ver && S.ver !== versaoAtual();
+  // em cima do desenho (que começa embaixo, sem cobrir a placa): a versão vista, se não é a atual, e a legenda do destaque
+  const vendoAntiga = S.ver && S.ver !== versaoAtual(), vista = S.ver ?? versaoAtual();
+  const novos = S.destacar && vista > 1 ? novidades(m, S.modelosVersao[vista - 1]) : null;
+  const legenda = legendaDasNovidades(novos);
+  const linhas = [vendoAntiga ? `<span>vendo a v${esc(S.ver)} · a atual é a v${esc(versaoAtual())}</span>` : '',
+    novos ? `<span>o que mudou da v${vista - 1} pra v${vista}${legenda.length ? ':' : ': nada no desenho'}</span>` : '',
+    legenda.length ? `<span class="legenda-mudou">${legenda.map(l => `<span class="${l.classe}">${esc(l.texto)}</span>`).join('')}</span>` : ''].join('');
   let aviso = area.querySelector('.aviso-versao');
-  if (vendoAntiga && !aviso) { aviso = document.createElement('div'); aviso.className = 'aviso-versao'; area.append(aviso); }
+  if (linhas && !aviso) { aviso = document.createElement('div'); aviso.className = 'aviso-versao'; area.append(aviso); }
   if (aviso) {
-    if (vendoAntiga) aviso.textContent = `vendo a v${S.ver} · a atual é a v${versaoAtual()}`;
-    else aviso.remove();
+    if (!linhas) aviso.remove();
+    else if (aviso.dataset.html !== linhas) aviso.innerHTML = aviso.dataset.html = linhas;
   }
 
-  const novos = S.destacar ? novidades(m, S.modelosVersao[(S.ver ?? versaoAtual()) - 1]) : null;
   area.querySelector('.desenho').innerHTML = placaSVG(m, { sel: S.sel, novos, interativo: true, sim, ajustes: S.ajustes, programa: agora });
   if (S.cx === null) centralizar();
+  arrumarFerramentas(area, m);
   aplicarZoom();
 
   let painel = main.querySelector('aside.inspetor');
@@ -1323,8 +1467,12 @@ function preencherPinos(m, c, sim, q) {
       if (adc) {
         const faixa = `da faixa boa do ADC (${mm(e.adc_min, 2)} a ${mm(e.adc_max, 2)} V)`, na = x => x >= e.adc_min && x <= e.adc_max;
         const meio = na(v), todos = cantos ? na(cantos.de) && na(cantos.ate) : meio;
-        partes.push(todos ? `dentro ${faixa}${cantos ? ', até nos cantos' : ''}` : meio ? `fora ${faixa} em algum canto: com o LDR que vier, a leitura pode não ser confiável`
-          : `fora ${faixa}: a leitura não é confiável`);
+        // fora da faixa o número sai torto, mas não troca de lado: o pino acima da faixa continua lendo alto (e abaixo,
+        // baixo). Com o LDR no GND (o divisor da luz noturna), alto é escuro; com ele no 3V3, alto é claro
+        const lado = ladoDoLdr(c, m, de('ldr')), alto = v > e.adc_max;
+        const quer = lado == null ? '' : `, e ${alto ? 'alto' : 'baixo'} aqui quer dizer ${alto === (lado === 'gnd') ? 'escuro' : 'claro'}`;
+        partes.push(todos ? `dentro ${faixa}${cantos ? ', até nos cantos' : ''}` : meio ? `fora ${faixa} em algum canto: com o LDR que vier, a leitura pode sair torta`
+          : `${alto ? 'acima' : 'abaixo'} ${faixa}: o número que o ADC lê sai torto (menos exato), mas continua ${alto ? 'alto' : 'baixo'}${quer}`);
         classe = todos ? 'ok' : 'fora';
       }
     } else if (g.papel === 'pullup' && so.has(g.nome)) {   // GPIO34 a 39: sem pull-up de dentro, o botão solto deixa o pino no ar
@@ -1345,6 +1493,15 @@ function preencherPinos(m, c, sim, q) {
     b.textContent = `${mA(soma)} mA${orc ? ` de ~${mA(orc)} mA que sobram pras peças` : ' (o que sobra pras peças está pendente)'}`;
     b.className = orc && soma > orc ? 'queima' : 'ok';
   }
+}
+
+// o LDR do pino do ADC liga a outra ponta no GND ('gnd': no escuro a tensão sobe) ou no 3V3 ('3v3': no escuro ela
+// desce)? null se não dá pra dizer (mais de um LDR, ou nenhum dos dois)
+function ladoDoLdr(c, m, ldrs) {
+  if (ldrs.length !== 1) return null;
+  const nets = m.pecas.find(p => p.ref === ldrs[0])?.pinos.map(q => q.net) || [];
+  const de = nome => c.u.pinos.filter(q => q.nome === nome && q.net).map(q => q.net);
+  return nets.some(n => de('GND').includes(n)) ? 'gnd' : nets.some(n => de('3V3').includes(n)) ? '3v3' : null;
 }
 
 // a conta de cada LED no pino, como a da pilha: (pino − LED) ÷ (resistor + pino). Só no caso clássico:
@@ -1419,7 +1576,7 @@ function painelHTML(m) {
       <span class="faixa"><i>${ohmsTxt(lista[0])}</i><i>${ohmsTxt(lista[lista.length - 1])}</i></span></label>`;
     }).join('')}
     ${leds.map(p => `<div class="leitura"><span>${COR_DE_TELA[p.eletrica.cor] ? `<span>LED · ${esc(p.ref)} ${bolinha(p.eletrica.cor)}</span>` : `LED · ${esc(p.ref)}`} <b data-led="${esc(p.ref)}"></b></span>
-      <div class="barra"><i class="faixa-b" data-faixa="${esc(p.ref)}"></i><i class="teste" data-teste="${esc(p.ref)}"></i><i class="limite" data-limite="${esc(p.ref)}"></i><i class="marca" data-marca="${esc(p.ref)}"></i></div>
+      <div class="barra"><i class="faixa-b" data-faixa="${esc(p.ref)}"></i><i class="faixa-q" data-faixa-q="${esc(p.ref)}"></i><i class="teste" data-teste="${esc(p.ref)}"></i><i class="limite" data-limite="${esc(p.ref)}"></i><i class="marca" data-marca="${esc(p.ref)}"></i></div>
       <span class="legenda" data-legenda="${esc(p.ref)}"></span></div>`).join('')}
     ${resistores.map(p => `<div class="leitura"><span>Resistor · ${esc(p.ref)} esquenta <b data-pot="${esc(p.ref)}"></b></span></div>`).join('')}
     ${pilhas.map(p => `<div class="leitura"><span>Pilha · ${esc(p.ref)} gasta <b data-gasto="${esc(p.ref)}"></b></span></div>`).join('')}
@@ -1460,7 +1617,7 @@ function preencherPainel(m, sim) {
     if (lista[+r.value] !== ohms) r.value = lista.indexOf(ohms);
     const pw = sim?.pecas[p.ref]?.p ?? 0, max = p.eletrica.potencia_max;
     const b = q(`[data-pot="${p.ref}"]`);
-    b.textContent = `${mW(pw)} mW, aguenta ${mW(max)}${pw > max ? ' · QUEIMA' : ''}`;
+    b.textContent = `${mW(pw)} mW, aguenta ${mW(max)} mW${pw > max ? ' · QUEIMA' : ''}`;
     b.className = pw > max ? 'queima' : 'ok';
   }
   for (const p of porModelo(m, 'led')) {
@@ -1471,14 +1628,18 @@ function preencherPainel(m, sim) {
     const est = estadoLed(r), brilho = brilhoDaCorrente(e, r.i);
     b.textContent = `${mA(r.i)} mA · ${TEXTO_LED[est]}${brilho !== null && r.i > 0 ? ` · ≈ ${Math.round(brilho * 100)}% do anúncio` : ''}`;
     b.className = est;
-    const iF = fraca?.pecas[p.ref]?.i ?? 0, iN = nova?.pecas[p.ref]?.i ?? 0;
-    const f = q(`[data-faixa="${p.ref}"]`);
-    f.style.left = pct(Math.min(iF, iN)); f.style.width = `calc(${pct(Math.max(iF, iN))} - ${pct(Math.min(iF, iN))})`;
+    const iF = fraca?.pecas[p.ref]?.i ?? 0, iN = nova?.pecas[p.ref]?.i ?? 0, de = Math.min(iF, iN), ate = Math.max(iF, iN);
+    // a faixa: verde até o limite do LED; o pedaço que passa do limite, vermelho (e a legenda diz)
+    const f = q(`[data-faixa="${p.ref}"]`), fq = q(`[data-faixa-q="${p.ref}"]`), corte = Math.min(ate, Math.max(de, e.i_max));
+    f.style.left = pct(de); f.style.width = `calc(${pct(corte)} - ${pct(de)})`;
+    fq.style.left = pct(corte); fq.style.width = `calc(${pct(ate)} - ${pct(corte)})`;
     q(`[data-marca="${p.ref}"]`).style.left = pct(r.i);
     q(`[data-teste="${p.ref}"]`).style.left = pct(e.i_teste);
     q(`[data-limite="${p.ref}"]`).style.left = pct(e.i_max);
-    const verde = c ? faixaNoPino(e, e3, iF, iN, pior?.pecas[p.ref]?.i) : `de ${mA(Math.min(iF, iN))} a ${mA(Math.max(iF, iN))} mA entre pilha fraca e nova`;
-    q(`[data-legenda="${p.ref}"]`).textContent = `faixa verde: ${verde} · risquinho: ${mA(e.i_teste)} mA, onde o datasheet mediu · vermelho: ${mA(e.i_max)} mA, acima disso queima`;
+    const faixa = ate < 1e-6 ? 'nenhuma agora, o LED está apagado'
+      : c ? faixaNoPino(e, e3, iF, iN, pior?.pecas[p.ref]?.i) : `de ${mA(de)} a ${mA(ate)} mA entre pilha fraca e nova`;
+    const passa = ate > e.i_max ? ` (o pedaço vermelho passa dos ${mA(e.i_max)} mA: queima)` : '';
+    q(`[data-legenda="${p.ref}"]`).textContent = `faixa: ${faixa}${passa} · risquinho: ${mA(e.i_teste)} mA, onde o datasheet mediu · vermelho: ${mA(e.i_max)} mA, acima disso queima`;
   }
   // a conta, quando o circuito e o classico pilha + botao + resistor + LED em serie
   const leds = porModelo(m, 'led'), resistores = porModelo(m, 'resistor');
@@ -1518,7 +1679,7 @@ function agoraDe(m, ref, sim) {
     case 'ldr': return `agora: ${ohmsCurto(r.ohms)} · ${mA(Math.abs(r.i))} mA passando`;
     case 'piezo': return `agora: ${r.fio ? `na virada do apito, ${mA(Math.abs(r.i))} mA` : 'parado, não passa corrente'}`;
     case 'led': return `agora: ${mA(r.i)} mA · ${TEXTO_LED[estadoLed(r)]}`;
-    case 'resistor': return `agora: ${mA(Math.abs(r.i))} mA passando · esquenta ${mW(r.p)} mW, aguenta ${mW(p.eletrica.potencia_max)}`;
+    case 'resistor': return `agora: ${mA(Math.abs(r.i))} mA passando · esquenta ${mW(r.p)} mW, aguenta ${mW(p.eletrica.potencia_max)} mW`;
     case 'pilha': return `agora: ${volts(r.v)} V · entrega ${mA(r.i)} mA`;
     case 'chave': return `agora: ${r.apertada ? 'apertado, passando ' + mA(Math.abs(r.i)) + ' mA' : 'solto, não passa nada'}`;
   }
@@ -1595,7 +1756,8 @@ function inspecionar(m, sel, sim) {
 // ou {rodando: true}. A régua vai de 0 ao tempo_ms; no instante t a placa mostra cada LED com a luz e a cor dele, e o
 // painel, o que cada GPIO fazia, a serial até t, os avisos, o erro (com a linha do main.py) e as conferências
 function novoPrograma() {
-  return { aberto: false, tem: null, temDe: null, dado: null, versao: 0, bruto: null, rodando: false, falta: '', lendo: false,
+  // aindaNao: o GET disse que o programa ainda não rodou (o porquê olha a etapa 8: faltaDoPrograma)
+  return { aberto: false, tem: null, temDe: null, dado: null, versao: 0, bruto: null, rodando: false, falta: '', aindaNao: false, lendo: false,
     proxima: 0, leu: 0, t: 0, tocando: false, vez: 0, vel: 1, main: null, desenhado: null, quando: 0,
     // Rodar de novo: o pedido (os chips), o POST indo, a espera do resultado novo e o recado (o erro do app, em português;
     // recadoSome: o recado que some quando chegar um resultado novo, o 409 e o 'não chegou')
@@ -1608,11 +1770,12 @@ const porCentoFino = x => !(x > 0) ? '0%' : x < 0.01 ? `${mm(x * 100, 2)}%` : x 
 const CODIGO_DO_PROGRAMA = { 0: 'rodou até o fim', 1: 'parou com erro no programa', 2: 'nem chegou a rodar (a placa, o roteiro ou as entradas têm erro)',
   3: 'travou', 4: 'rodou, mas uma conferência falhou', 5: 'não rodou: o gêmeo (laboratório e MicroPython) não está nesta máquina' };
 // o rótulo de cada aviso do gêmeo, com as palavras da etapa 8 (testar.py): 'ruim' reprova a etapa 8 (o REPROVA, o
-// flutuando, o sem circuito e o que para o programa no por_que_parou: travou, reset, wdt e sono), 'atencao' não reprova
+// flutuando, o sem circuito e o que para o programa no por_que_parou: travou, reset, wdt, sono e o gêmeo que quebrou,
+// o 'motor', que é defeito do laboratório e não do main.py), 'atencao' não reprova
 // mas merece o olho (o MOSTRA, e o roteiro forçando um pino: o 'curto' e o 'tensao' do contrato.py, que falam de
 // queimar o pino da placa de verdade), 'info' é conversa do laboratório (a versão do MicroPython, o Wi-Fi de mentira)
 const AVISO_RUIM = { queima: 'queima', corrente: 'corrente alta', boot: 'pino de boot', flash: 'pino da memória flash', travou: 'travou',
-  reset: 'reiniciou', wdt: 'reiniciou', sono: 'dormiu' };
+  reset: 'reiniciou', wdt: 'reiniciou', sono: 'dormiu', motor: 'gêmeo quebrou' };
 const AVISO_ATENCAO = { entrada: 'leitura incerta', serial: 'pino da serial', psram: 'pino da psram', placa: 'pino fora do DevKit',
   pull: 'sem pull de dentro', rapido: 'troca rápido', indisponivel: 'sem o gêmeo', curto: 'curto no roteiro', tensao: 'tensão alta no roteiro' };
 function tipoDoAviso(c, txt) {
@@ -1690,15 +1853,37 @@ async function lerPrograma(agora = false) {
     if (P.recadoSome && P.recado === P.recadoSome) P.recado = '';
   }
   if (d?.sem_programa) {   // a régua fica aberta com o porquê; o botão some quando fechar
-    Object.assign(P, { tem: false, temDe: S.testes?.inicio ?? null, dado: null, rodando: false,
+    Object.assign(P, { tem: false, temDe: S.testes?.inicio ?? null, dado: null, rodando: false, aindaNao: false,
       falta: `${d.erro || 'esta placa não tem programa (falta o codigo/main.py)'}. Quando ele existir, rode os testes: a etapa 8 roda o programa no gêmeo` });
   } else if (d?.rodando === true) Object.assign(P, { tem: null, rodando: true });
   else if (ok && typeof d?.tempo_ms === 'number') {
-    Object.assign(P, { tem: null, rodando: false, falta: '', main: null, dado: arrumarPrograma(d), versao: P.versao + 1 });
+    Object.assign(P, { tem: null, rodando: false, falta: '', aindaNao: false, main: null, dado: arrumarPrograma(d), versao: P.versao + 1 });
     P.t = Math.min(P.t, P.dado.total);
     P.pedido ??= pedidoDoPrograma(P.dado);   // os chips começam com o que o app mandou da última vez
-  } else Object.assign(P, { tem: null, rodando: false, falta: d?.erro ? `${d.erro}${vazio ? '. Rode os testes: a etapa 8 roda o programa no gêmeo' : ''}` : 'não consegui ler o programa desta placa' });
+  } else Object.assign(P, { tem: null, rodando: false, aindaNao: !!d?.ainda_nao_rodou,   // o porquê, com a etapa 8: faltaDoPrograma
+    falta: d?.erro || 'não consegui ler o programa desta placa' });
   desenhar();
+}
+
+// o comando que instala o gêmeo (o MicroPython do PC): o que o aviso 'indisponivel' do laboratório diz ('Pra resolver:
+// ...'), ou o do README
+const INSTALAR_GEMEO = 'python3 laboratorio/lab.py instalar gemeo';
+const comandoDoAviso = p => (p?.avisos || []).map(([, c, txt]) => c === 'indisponivel' && /python3? laboratorio\/lab\.py [\w -]*\w/.exec(txt)?.[0]).find(Boolean) || INSTALAR_GEMEO;
+// a etapa 8 do testes.json (a que roda o programa), ou null
+const etapaDoPrograma = () => S.testes?.etapas?.find(e => /programa/i.test(e.nome)) || null;
+
+// por que a régua não tem programa pra mostrar. 'Ainda não rodou' olha a etapa 8: rodando, ela vai rodar; pulada porque
+// o gêmeo não está nesta máquina, rodar os testes de novo não muda nada: o que resolve é instalar ele
+function faltaDoPrograma() {
+  const P = S.prog;
+  if (!P.aindaNao) return P.falta;
+  const e = etapaDoPrograma();
+  if (S.testes?.rodando) return 'O programa ainda não rodou: os testes estão rodando agora, e a etapa 8 roda ele no gêmeo';
+  if (e?.estado === 'pulou' && /laborat|gêmeo|micropython/i.test(e.detalhe || ''))
+    return `O programa ainda não rodou: a etapa 8 pulou, porque o gêmeo (o laboratório e o MicroPython do PC) não está nesta máquina. Rodar os testes de novo não muda isso; pra instalar: ${INSTALAR_GEMEO}`;
+  if (e?.estado === 'pulou') return `O programa ainda não rodou: a etapa 8 pulou (${e.detalhe || 'sem o porquê'})`;
+  if (e?.estado === 'falhou') return `O programa ainda não rodou: a etapa 8 falhou (${e.detalhe || 'sem o porquê'}); a aba Testes mostra o resto`;
+  return `${P.falta}. Rode os testes: a etapa 8 roda o programa no gêmeo`;
 }
 
 // o programa.json com as linhas do tempo em ordem (a busca do instante conta com isso), o fim da régua (total, em ms) e
@@ -1863,7 +2048,7 @@ function reguaHTML(p) {
     ...(typeof p.erro?.t === 'number' ? [marca('m-erro', p.erro.t, `${emSeg(p.erro.t)} · erro${p.erro.linha ? ` na linha ${p.erro.linha} do main.py` : ''}`)] : []),
     ...p.entradas.apertos.filter(a => a.de <= p.total).map(a => marca('m-aperto', a.de, `${a.ref} apertado de ${emSeg(a.de)} a ${emSeg(a.ate)}`,
       `;width:${(100 * (Math.min(a.ate, p.total) - a.de) / p.total).toFixed(3)}%`)),
-    ...p.entradas.luz.filter(x => x.t <= p.total).map(x => marca('m-luz', x.t, `${emSeg(x.t)} · ${x.ref} com ${milhar(x.lux)} lux${typeof x.volts === 'number' ? ` (${mm(x.volts, 2)} V no pino)` : ''}`)),
+    ...p.entradas.luz.filter(x => x.t <= p.total).map(x => marca('m-luz', x.t, `${emSeg(x.t)} · ${x.ref} com ${x.lux ? luxTxt(x.lux) : 'o quarto escuro'}${typeof x.volts === 'number' ? ` (${mm(x.volts, 2)} V no pino)` : ''}`)),
     ...chipsDoPedido().filter(x => !x.rodou && x.t <= p.total).map(x => marca(`${x.tipo === 'apertos' ? 'm-aperto' : 'm-luz'} pendente`, x.t,
       `${x.texto} (ainda não rodou: Rodar de novo)`, x.tipo === 'apertos' ? `;width:${(100 * (Math.min(x.ate, p.total) - x.t) / p.total).toFixed(3)}%` : '')),
   ];
@@ -1881,7 +2066,7 @@ function reguaHTML(p) {
 
 function preencherRegua(r) {
   const P = S.prog, p = P.dado, sem = r.querySelector('[data-sem-programa]');
-  if (sem) { sem.textContent = P.rodando ? 'rodando… quando o gêmeo acabar, a régua aparece aqui' : P.falta || 'lendo o programa…'; return; }
+  if (sem) { sem.textContent = P.rodando ? 'rodando… quando o gêmeo acabar, a régua aparece aqui' : faltaDoPrograma() || 'lendo o programa…'; return; }
   if (!p) return;
   const t = Math.min(Math.max(P.t, 0), p.total), faixa = r.querySelector('[data-regua]');
   if (+faixa.value !== t) faixa.value = t;
@@ -1891,6 +2076,7 @@ function preencherRegua(r) {
   const em = $('aside.programa [data-em-p]');   // o painel só muda quando a placa muda; o instante dele anda com a régua
   if (em) em.textContent = `em ${emSeg(t)}`;
   for (const x of document.querySelectorAll('aside.programa [data-em-mexer]')) x.textContent = emSeg(t);   // onde o clique entra
+  marcarLuzes(document, t);
   const tocar = r.querySelector('[data-tocar]'), estado = P.tocando ? 'pausa' : 'toca';
   if (tocar.dataset.estado !== estado) {
     tocar.dataset.estado = estado;
@@ -1923,7 +2109,7 @@ function gpiosDoPrograma(m, c, p) {
 
 // o que um GPIO fazia no instante: o valor da plaquinha (0, 1, PWM %, volts) e a frase de gente, com as peças dele (o LED
 // com a luz, o botão apertado ou solto, o som apitando, o olho de luz com a luz do quarto)
-function leituraDoGpio(m, u, x, a) {
+function leituraDoGpio(m, u, x, a, serial = '') {
   const e = u?.eletrica || {}, pin = a.pinos[x.nome] || {}, de = k => x.refs.filter(r => modeloDaPeca(m, r) === k);
   const partes = [];
   let valor = '–', classe = '', aviso = '';
@@ -1935,13 +2121,19 @@ function leituraDoGpio(m, u, x, a) {
     const duty = pin.pwm?.[1] ?? 0, hz = pin.pwm?.[2];
     [valor, classe] = [porCentoFino(duty), duty > 0 ? 'pwm' : ''];
     partes.push(duty > 0 ? `PWM: ligado ${porCentoFino(duty)} do tempo${hz ? `, em ${milhar(Math.round(hz))} Hz` : ''}` : 'PWM parado (0%)');
+    // a última linha da serial fala de outra porcentagem que, ao quadrado, dá este PWM (o main.py da luz noturna escreve
+    // 'brilho 60%' e manda 60% × 60% = 36% pro PWM): diz que é a mesma coisa, com a conta. Só quando os números batem
+    const pcts = [...serial.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)].map(k => [k[1], +k[1].replace(',', '.') / 100]);
+    const quad = duty > 0 && pcts.find(([, b]) => b > 0 && b < 1 && Math.abs(b * b - duty) < 0.005 && Math.abs(b - duty) > 0.01);
+    if (quad) partes.push(`os ${quad[0]}% da serial, ao quadrado, dão esse PWM (${quad[0]}% × ${quad[0]}% ≈ ${porCentoFino(duty)})`);
   } else if (pin.modo === 'adc') {
     const v = pin.volts;
     [valor, classe] = [v == null ? '?' : `${mm(v, 2)} V`, 'volts'];
     partes.push(v == null ? 'lê o ADC (ainda sem tensão no pino)' : `o ADC lê ${mm(v, 2)} V`);
     if (v != null && positivo(e.adc_min) && positivo(e.adc_max)) {
-      const dentro = v >= e.adc_min && v <= e.adc_max;
-      partes.push(`${dentro ? 'dentro' : 'fora'} da faixa boa do ADC (${mm(e.adc_min, 2)} a ${mm(e.adc_max, 2)} V)`);
+      const dentro = v >= e.adc_min && v <= e.adc_max, alto = v > e.adc_max, lado = u && ladoDoLdr({ u }, m, de('ldr'));
+      const quer = lado ? `, e ${alto ? 'alto' : 'baixo'} aqui quer dizer ${alto === (lado === 'gnd') ? 'escuro' : 'claro'}` : '';
+      partes.push(`${dentro ? 'dentro' : alto ? 'acima' : 'abaixo'} da faixa boa do ADC (${mm(e.adc_min, 2)} a ${mm(e.adc_max, 2)} V)${dentro ? '' : `: o número sai torto (menos exato), mas continua ${alto ? 'alto' : 'baixo'}${quer}`}`);
       aviso = dentro ? 'ok' : 'fora';
     }
   } else if (['pullup', 'pulldown', 'entrada'].includes(pin.modo)) {
@@ -1970,7 +2162,7 @@ function leituraDoGpio(m, u, x, a) {
     else partes.push(`${r} aceso bem fraquinho: menos de 1% da luz do anúncio, ${ma}${media}`);
   }
   for (const r of de('piezo')) partes.push(a.sons.has(r) ? `${r} apitando` : `${r} quieto`);   // a frequência já está no PWM
-  for (const r of de('ldr')) if (a.luz[r]) partes.push(`${r} com ${milhar(a.luz[r].lux)} lux no quarto`);
+  for (const r of de('ldr')) if (a.luz[r]) partes.push(a.luz[r].lux ? `${r} com ${luxTxt(a.luz[r].lux)} no quarto` : `${r} com o quarto escuro`);
   return { valor, classe, aviso, texto: partes.join(' · ') };
 }
 
@@ -1993,31 +2185,42 @@ function programaHTML(m, p, gpios) {
   const fechar = '<button type="button" class="fechar" data-programa aria-label="Fechar o programa"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
   const cab = `<div class="cab"><div><div class="tipo">${!p ? 'O main.py no gêmeo' : p.livre ? 'Rodado pelo app' : 'Roteiro de teste'}</div><div class="titulo">Programa</div></div>${fechar}</div>`;
   const mexer = podeMexer() ? '<div class="bloco-p mexer-p" data-mexer></div>' : '';   // os chips e o Rodar de novo (preencherMexer)
-  if (!p) return cab + `<p class="dica">${P.rodando ? '<span class="selo rodando">rodando…</span> O gêmeo está rodando o main.py desta placa. Quando acabar, a régua aparece aqui.' : esc(comMaiuscula(P.falta || 'lendo o programa…'))}</p>${mexer}`;
+  if (!p) return cab + `<p class="dica">${P.rodando ? '<span class="selo rodando">rodando…</span> O gêmeo está rodando o main.py desta placa. Quando acabar, a régua aparece aqui.' : esc(comMaiuscula(faltaDoPrograma() || 'lendo o programa…'))}</p>${mexer}`;
   const conf = p.conferencias, total = conf.ok.length + conf.falhas.length, quando = p.quando ? ` em ${dia(p.quando)} às ${hora(p.quando)}` : '';
   const leds = refs => refs.map(r => m.pecas.find(q => q.ref === r)).filter(q => q?.eletrica?.modelo === 'led')
     .map(q => `<span class="bolinha" style="background:${corDoLed(q)}" aria-hidden="true"></span>`).join('');
-  const avisos = p.avisos.map(([t, c, txt], i) => {
+  // os avisos que pedem o olho (os que reprovam e os que só avisam) à vista; a conversa do laboratório (a versão do
+  // MicroPython, o chip do gêmeo, o circuito ligado) fica fechada embaixo deles
+  const aviso = ([t, c, txt], i) => {
     const [rotulo, nivel] = tipoDoAviso(c, txt);
-    return `<li data-i="${i}" hidden class="${nivel}"><button type="button" data-ir="${t}" title="Ir pra ${emSeg(t)}">${emSeg(t)}</button><span>${rotulo ? `<span class="selo ${nivel}">${esc(rotulo)}</span>` : ''}${esc(txt)}</span></li>`;
-  }).join('');
+    return [nivel, `<li data-i="${i}" hidden class="${nivel}"><button type="button" data-ir="${t}" title="Ir pra ${emSeg(t)}">${emSeg(t)}</button><span>${rotulo ? `<span class="selo ${nivel}">${esc(rotulo)}</span>` : ''}${esc(txt)}</span></li>`];
+  };
+  const todos = p.avisos.map(aviso), avisos = todos.filter(([n]) => n !== 'info').map(([, h]) => h).join(''), conversa = todos.filter(([n]) => n === 'info').map(([, h]) => h).join('');
+  const naoRodou = p.codigo === 5, nemComecou = p.codigo === 2;   // sem o gêmeo / a placa, o roteiro ou as entradas com erro
+  const dica = naoRodou ? `O main.py não rodou: o gêmeo (o laboratório e o MicroPython do PC) não está nesta máquina, então não tem pino, serial nem LED pra mostrar. Pra instalar: <code>${esc(comandoDoAviso(p))}</code>. Depois, rode de novo (ou rode os testes: a etapa 8 roda o programa).`
+    : nemComecou ? 'O main.py não chegou a rodar no gêmeo: o porquê está logo abaixo.'
+    : 'O main.py rodou no gêmeo do ESP32, sem a placa. Arraste a régua embaixo da placa, ou use os botões ⏮ ⏭ pra pular de uma mudança pra outra (no teclado, as setas ← →): os LEDs acendem com a luz que o gêmeo calculou, na cor de cada um. Na régua, os risquinhos de cima são a serial; os de baixo, os botões apertados e a luz do quarto.';
+  const pwmComLed = gpios.some(x => p.pinos[x.nome]?.pwm?.length && x.refs.some(r => modeloDaPeca(m, r) === 'led'));
   return `${cab}
-    <p class="dica">O main.py rodou no gêmeo do ESP32, sem a placa. Arraste a régua embaixo da placa, ou use ◀ ▶ (e as setas do teclado) pra pular de uma mudança pra outra: os LEDs acendem com a luz que o gêmeo calculou, na cor de cada um. Na régua, os risquinhos de cima são a serial; os de baixo, os botões apertados e a luz do quarto.</p>
+    <p class="dica">${dica}</p>
     <div class="estado-p">
       ${P.rodando ? '<span><span class="selo rodando">rodando…</span> o gêmeo está rodando de novo: quando acabar, a régua troca pelo resultado novo</span>' : ''}
-      <span>${esc(comMaiuscula(CODIGO_DO_PROGRAMA[p.codigo] ?? `o laboratório saiu com o código ${p.codigo}`))}: ${mm(p.tempo_ms / 1000, 1)} s de placa${quando}.</span>
+      <span>${esc(comMaiuscula(CODIGO_DO_PROGRAMA[p.codigo] ?? `o laboratório saiu com o código ${p.codigo}`))}${naoRodou ? (quando ? ` (tentou${quando})` : '') : `: ${mm(p.tempo_ms / 1000, 1)} s de placa${quando}`}.</span>
       <span class="sub">${p.livre ? 'Rodado pelo app, só com os apertos e a luz que vieram de lá.' : 'O roteiro de teste da placa (codigo/roteiro.json e gemeo.roteiro), o mesmo da etapa 8.'}</span>
     </div>
     ${p.erro ? erroDoProgramaHTML(p) : ''}
     ${mexer}
-    <div class="bloco-p"><b>Os pinos <span class="sub" data-em-p></span></b>
+    ${naoRodou ? '' : `<div class="bloco-p"><b>Os pinos <span class="sub" data-em-p></span></b>
       <div class="gpios">${gpios.map(x => `<div class="gpio"><span class="quem">${leds(x.refs)}<b>${esc(x.quem)}</b><span class="mono">· ${esc(x.onde)}</span></span>
         <span class="linha-p"><span class="valor-p" data-valor-p="${esc(x.nome)}"></span><span class="le" data-le-p="${esc(x.nome)}"></span></span></div>`).join('')
-        || '<span class="sub">o programa não usou nenhum pino</span>'}</div></div>
+        || '<span class="sub">o programa não usou nenhum pino</span>'}</div>
+      ${pwmComLed ? '<span class="sub">PWM: o pino liga e desliga muito rápido, e a porcentagem é a parte do tempo em que ele fica ligado. O LED nele dá, na média, só essa parte da luz que daria ligado direto: por isso a luz do LED é menor que o PWM. O número que o main.py escreve na serial é o dele (ele pode chamar de brilho outra conta).</span>' : ''}</div>
     <div class="bloco-p"><b>Serial <span class="sub" data-serial-conta></span></b>
       ${p.serial.length ? `<ol class="serial-p" data-serial-p>${p.serial.map(([t, txt], i) => `<li data-i="${i}" hidden><button type="button" data-ir="${t}" title="Ir pra ${emSeg(t)}">${emSeg(t)}</button><span>${esc(txt)}</span></li>`).join('')}</ol>`
-        : '<span class="sub">o programa não escreveu nada na serial</span>'}</div>
-    ${avisos ? `<div class="bloco-p"><b>Avisos do gêmeo <span class="sub" data-avisos-conta></span></b><ul class="lista-p" data-avisos-p>${avisos}</ul></div>` : ''}
+        : '<span class="sub">o programa não escreveu nada na serial</span>'}</div>`}
+    ${avisos || conversa ? `<div class="bloco-p"><b>Avisos do gêmeo <span class="sub" data-avisos-conta></span></b>
+      ${avisos ? `<ul class="lista-p" data-avisos-p>${avisos}</ul>` : '<span class="sub">nenhum aviso que peça o olho</span>'}
+      ${conversa ? `<details class="fontes"><summary>O que o laboratório contou <span data-info-conta></span></summary><ul class="lista-p" data-info-p>${conversa}</ul></details>` : ''}</div>` : ''}
     <div class="bloco-p"><b>Conferências${!p.livre && total ? ` <span class="sub">${conf.ok.length} de ${total} ok</span>` : ''}</b>
       ${p.livre ? '<span class="sub">Só no roteiro de teste: este programa rodou pelo app, e as conferências (codigo/roteiro.json e confere.json) ficam pra etapa 8.</span>'
         : !total ? '<span class="sub">nenhuma: o roteiro.json e o confere.json não conferem nada</span>'
@@ -2032,18 +2235,24 @@ function preencherPrograma(m, c, p, gpios, a, painel) {
   const q = sel => painel.querySelector(sel);
   const em = q('[data-em-p]');
   if (em) em.textContent = `em ${emSeg(a.t)}`;
+  const serial = p.serial[a.serial - 1]?.[1] || '';   // a última linha da serial até o instante
   for (const x of gpios) {
-    const l = leituraDoGpio(m, c?.u, x, a), v = q(`[data-valor-p="${CSS.escape(x.nome)}"]`), le = q(`[data-le-p="${CSS.escape(x.nome)}"]`);
+    const l = leituraDoGpio(m, c?.u, x, a, serial), v = q(`[data-valor-p="${CSS.escape(x.nome)}"]`), le = q(`[data-le-p="${CSS.escape(x.nome)}"]`);
     if (!v || !le) continue;
     v.textContent = l.valor; v.className = `valor-p ${l.classe}`;
     le.textContent = l.texto; le.className = `le ${l.aviso}`;
   }
-  for (const [sel, n, total, conta, txt] of [['[data-serial-p]', a.serial, p.serial.length, '[data-serial-conta]', 'linhas'], ['[data-avisos-p]', a.avisos, p.avisos.length, '[data-avisos-conta]', 'avisos']]) {
+  // a serial, os avisos que pedem o olho e a conversa do laboratório: cada lista mostra o que veio até o instante
+  for (const [sel, n, conta, txt] of [['[data-serial-p]', a.serial, '[data-serial-conta]', 'linhas'], ['[data-avisos-p]', a.avisos, '[data-avisos-conta]', 'avisos'],
+    ['[data-info-p]', a.avisos, '[data-info-conta]', 'recados']]) {
     const lista = q(sel);
     if (!lista) continue;
-    for (const li of lista.children) { li.hidden = +li.dataset.i >= n; li.classList.toggle('ultima', +li.dataset.i === n - 1); }
+    let vistos = 0, ultima = null;
+    for (const li of lista.children) { li.hidden = +li.dataset.i >= n; if (!li.hidden) { vistos++; ultima = li; } li.classList.remove('ultima'); }
+    ultima?.classList.add('ultima');
     lista.scrollTop = lista.scrollHeight;   // a última até t fica à vista
-    q(conta).textContent = `${n} de ${total} ${txt} até aqui`;
+    const cont = q(conta);
+    if (cont) cont.textContent = `${vistos} de ${lista.children.length} ${txt} até aqui`;
   }
 }
 
@@ -2056,7 +2265,7 @@ function desenharPainelDoPrograma(main, m, painel, a) {
     ler('codigo/main.py').then(txt => { P.main = txt === null ? [] : txt.split('\n'); desenhar(); });
   }
   const c = pinosDoCerebro(m), gpios = p ? gpiosDoPrograma(m, c, p) : [];
-  const assinatura = `programa:${PLACA}:${m.versao}:${P.versao}:${P.rodando}:${P.falta}:${P.main?.length}:${podeMexer()}:${gpios.map(x => x.quem).join()}`;
+  const assinatura = `programa:${PLACA}:${m.versao}:${P.versao}:${P.rodando}:${faltaDoPrograma()}:${P.main?.length}:${podeMexer()}:${gpios.map(x => x.quem).join()}`;
   if (painel.dataset.assinatura !== assinatura) {
     painel.dataset.assinatura = assinatura;
     painel.className = 'inspetor painel programa';
@@ -2073,7 +2282,8 @@ function desenharPainelDoPrograma(main, m, painel, a) {
 // 0,2 s; o 1, 10 ou 100 lux muda a luz do quarto no instante da régua. 'Rodar de novo ↻' manda o pedido: o app roda o
 // main.py no gêmeo só com ele (sem nenhum chip, a placa roda sozinha), e a régua pergunta até o resultado novo chegar
 const APERTO_MS = 200;                  // quanto tempo o clique segura o botão
-const LUZES_DO_QUARTO = [1, 10, 100];   // lux
+const LUZES_DO_QUARTO = [0, 1, 10, 100];   // lux (0 = o escuro: o gêmeo aceita, e o LDR fica no r_escuro)
+const luxTxt = lux => (lux ? `${milhar(lux)} lux` : 'escuro');   // o espaço não quebra
 
 const podeMexer = () => S.api && S.prog.tem !== false;   // o POST é do app, e só na placa que tem programa
 const pedidoAtual = () => (S.prog.pedido ??= { apertos: [], luz: [] });
@@ -2126,7 +2336,7 @@ function chipsDoPedido() {
     texto: `aperta ${a.ref} de ${mm(a.de, 3)} a ${mm(a.ate, 3)} s` })),
   ...pedido.luz.map((x, i) => {
     const v = m && voltsDaLuz(m, x.ref, x.lux);
-    return { tipo: 'luz', i, x, t: x.t * 1000, texto: `${x.ref} = ${milhar(x.lux)} lux em ${mm(x.t, 3)} s`,
+    return { tipo: 'luz', i, x, t: x.t * 1000, texto: `${x.ref} = ${luxTxt(x.lux)} em ${mm(x.t, 3)} s`,
       volts: v?.v != null ? `o pino lê ${voltsComFaixa(v)}` : '' };
   })];
   for (const c of chips) c.rodou = rodou(c.tipo, c.x);
@@ -2144,6 +2354,19 @@ function apertarNoInstante(ref) {
     P.recado = '';
   }
   desenhar();
+}
+
+// a luz do quarto que o pedido deixa no LDR no instante t (ms): o último chip dele até t; antes de todos, a luz com que
+// o gêmeo começa (o LUX_PADRAO, os 10 lux do LDR do meio: o aviso 'luz' do laboratório diz)
+function luzDoPedido(ref, t) {
+  const antes = (S.prog.pedido?.luz || []).filter(x => x.ref === ref && x.t * 1000 <= t + FOLGA_T);
+  return antes.length ? antes.at(-1).lux : LUX_PADRAO;
+}
+
+// os botões da luz do quarto: marcado, o que vale no instante t (ms)
+function marcarLuzes(raiz, t) {
+  for (const b of raiz.querySelectorAll('[data-luz-quarto]'))
+    b.setAttribute('aria-pressed', +b.dataset.luxQuarto === luzDoPedido(b.dataset.luzQuarto, t));
 }
 
 // a luz do quarto no LDR muda no instante da régua (no mesmo instante, a escolha nova fica no lugar da outra)
@@ -2193,15 +2416,17 @@ async function rodarDeNovo() {
 function mexerHTML(m) {
   const P = S.prog, chaves = porModelo(m, 'chave').map(p => p.ref), ldrs = porModelo(m, 'ldr').map(p => p.ref);
   const ocupado = P.enviando || !!P.espera || P.rodando, agora = `<b class="mono" data-em-mexer>${emSeg(P.t)}</b>`;
-  const como = chaves.length ? `Clique no ${chaves.map(ref => esc(nomeDeGente(m, ref))).join(' ou no ')} desenhado na placa: ele fica apertado ${mm(APERTO_MS / 1000, 1)} s a partir de ${agora}, o instante da régua.` : '';
+  // apertar: o botão desenhado na placa ou o daqui (no celular, o desenhado fica pequeno pro dedo)
+  const como = chaves.length ? `Clique no ${chaves.map(ref => esc(nomeDeGente(m, ref))).join(' ou no ')} desenhado na placa, ou aqui embaixo: ele fica apertado ${mm(APERTO_MS / 1000, 1)} s a partir de ${agora}, o instante da régua.` : '';
+  const apertar = chaves.length ? `<div class="chips-p">${chaves.map(ref => `<button type="button" class="pilula" data-apertar="${esc(ref)}">Apertar ${esc(ref)}</button>`).join('')}</div>` : '';
   const luz = ldrs.map(ref => {   // o que o pino lê com cada luz, uma por linha, com a faixa (como a etapa 4)
     const vs = LUZES_DO_QUARTO.map(lux => [lux, voltsDaLuz(m, ref, lux)]), pend = vs.find(([, v]) => v?.erro)?.[1];
     const onde = vs.find(([, v]) => v)?.[1]?.onde, com3v3 = vs.every(([, v]) => v?.com3v3);
     const volts = pend ? `<span class="sub">Os volts ficam sem número: ${esc(pend.erro)}</span>` : onde ? `<div class="volts-p sub"><span>O ${esc(onde)} lê:</span>
-      ${vs.map(([lux, v]) => `<span>${milhar(lux)} lux: ${v?.v != null ? esc(voltsComFaixa(v)) : '?'}</span>`).join('')}
+      ${vs.map(([lux, v]) => `<span>${luxTxt(lux)}: ${v?.v != null ? esc(voltsComFaixa(v)) : '?'}</span>`).join('')}
       <span>Entre parênteses, com o LDR${com3v3 ? ' e o 3V3' : ''} nos cantos, como a etapa 4${com3v3 ? '' : ' (a faixa do 3V3 está pendente)'}; o programa roda com o LDR do meio.</span></div>` : '';
-    return `<div class="luz-p"><span>Quanta luz chega no ${esc(nomeDeGente(m, ref))} a partir de ${agora}:</span>
-      <div class="escolhas mini" role="group" aria-label="Luz do quarto no ${esc(ref)}">${LUZES_DO_QUARTO.map(lux => `<button type="button" data-luz-quarto="${esc(ref)}" data-lux-quarto="${lux}">${milhar(lux)} lux</button>`).join('')}</div>
+    return `<div class="luz-p"><span>Quanta luz chega no ${esc(nomeDeGente(m, ref))} a partir de ${agora} (marcada: a que vale nesse instante; sem mudar, o gêmeo começa com ${luxTxt(LUX_PADRAO)}):</span>
+      <div class="escolhas mini" role="group" aria-label="Luz do quarto no ${esc(ref)}">${LUZES_DO_QUARTO.map(lux => `<button type="button" data-luz-quarto="${esc(ref)}" data-lux-quarto="${lux}">${luxTxt(lux)}</button>`).join('')}</div>
       ${volts}</div>`;
   }).join('');
   const chips = chipsDoPedido().map(c => {
@@ -2209,7 +2434,7 @@ function mexerHTML(m) {
     return `<span class="chip-p${c.rodou ? '' : ' a-rodar'}${erro ? ' recusado' : ''}"><i class="${c.tipo}" aria-hidden="true"></i><button type="button" data-ir="${c.t}" title="Ir pra ${emSeg(c.t)} na régua">${esc(c.texto)}${c.volts ? `<span class="v">${esc(c.volts)}</span>` : ''}</button><button type="button" class="tirar" data-tirar="${c.tipo}:${c.i}" aria-label="Tirar: ${esc(tudo)}" title="Tirar">✕</button></span>`;
   });
   return `<b>Mexer e rodar de novo</b>
-    ${como ? `<p class="dica">${como}</p>` : ''}${luz}
+    ${como ? `<p class="dica">${como}</p>${apertar}` : ''}${luz}
     ${chips.length ? `<div class="chips-p">${chips.join('')}</div>${chips.some(c => c.includes(' a-rodar')) ? '<span class="sub">tracejado: ainda não rodou</span>' : ''}`
       : '<span class="sub">nenhum aperto nem luz: rodando de novo assim, a placa roda sozinha, sem ninguém mexer</span>'}
     <div class="rodar-p"><button type="button" class="pilula" data-rodar-prog ${ocupado ? 'disabled' : ''}>Rodar de novo ↻</button>
@@ -2224,14 +2449,51 @@ function preencherMexer(m, painel) {
   if (el.dataset.assinatura === assinatura) return;
   el.dataset.assinatura = assinatura;
   el.innerHTML = mexerHTML(m);
+  marcarLuzes(el, Math.min(Math.max(P.t, 0), P.dado?.total ?? P.t));
 }
 
 // ---------- zoom e arrasto (mexem so no viewBox) ----------
+// as ferramentas em pé (uma coluna do lado da placa) ou deitadas (uma linha em cima dela, e o desenho começa embaixo):
+// deitadas quando a coluna não cabe na altura (o ▶ Programa ficaria escondido) ou, na tela estreita, quando a placa
+// fica maior assim. A altura da coluna em pé: os botões de 44 px, o 100% de 32, as linhas de 9 (4 de margem em cima e
+// embaixo), 4 entre eles e 10 de borda e respiro (o CSS do .ferramentas)
+function arrumarFerramentas(area, m) {
+  const ferr = area.querySelector('.ferramentas');
+  if (!ferr || !m) return;
+  const itens = [...ferr.children].filter(x => !x.hidden);
+  const emPe = itens.reduce((t, x) => t + (x.tagName === 'HR' ? 9 : x.classList.contains('zoom') ? 32 : 44), 0) + 4 * (itens.length - 1) + 10;
+  const regua = area.classList.contains('com-regua') ? area.querySelector('.regua')?.offsetHeight || 0 : 0;
+  const aviso = area.querySelector('.aviso-versao'), alto = aviso ? aviso.offsetHeight + 20 : 0;
+  const w = area.clientWidth, h = area.clientHeight - regua;
+  const naoCabe = emPe + 32 > h, estreita = matchMedia('(max-width: 720px)').matches;
+  const linha = 12 + (estreita ? 50 : 54) + 8;   // a linha deitada, com o respiro embaixo
+  const baseEmPe = Math.min((w - 150) / m.placa.w, (h - alto - 64) / m.placa.h);
+  const baseDeitada = Math.min((w - 32) / m.placa.w, (h - linha - alto - 40) / m.placa.h);
+  area.classList.toggle('ferr-deitadas', naoCabe || (estreita && baseDeitada > baseEmPe));
+}
+
+// o desenho começa embaixo do que fica em cima dele (--topo): o aviso da versão e as ferramentas deitadas.
+// Devolve se as ferramentas estão deitadas (uma linha em cima) ou em pé (uma coluna do lado)
+function arrumarTopo(area) {
+  const ferr = area.querySelector('.ferramentas'), aviso = area.querySelector('.aviso-versao');
+  const deitadas = area.classList.contains('ferr-deitadas');
+  let topo = deitadas ? ferr.offsetTop + ferr.offsetHeight + 8 : 0;
+  if (aviso) {
+    const y = Math.max(topo, 12);
+    aviso.style.top = `${y}px`;
+    topo = y + aviso.offsetHeight + 8;
+  }
+  if (area.style.getPropertyValue('--topo') !== `${topo}px`) area.style.setProperty('--topo', `${topo}px`);
+  return deitadas;
+}
+
 function areaInfo() {
   const area = $('.area'), m = modeloVisto();
   if (!area || !m) return null;
-  const r = area.querySelector('.desenho').getBoundingClientRect();   // a área toda, menos a régua do ▶ Programa (o canto de cima é o mesmo)
-  const base = Math.min((r.width - 150) / m.placa.w, (r.height - 64) / m.placa.h);   // sobra espaco pras ferramentas
+  const deitadas = arrumarTopo(area);
+  const r = area.querySelector('.desenho').getBoundingClientRect();   // a área menos o topo e a régua do ▶ Programa
+  // sobra espaço pras ferramentas: em pé, 150 px de largura; deitadas, elas já estão fora do desenho (sobra a margem)
+  const base = Math.min((r.width - (deitadas ? 32 : 150)) / m.placa.w, (r.height - (deitadas ? 40 : 64)) / m.placa.h);
   return { area, r, base, m };
 }
 
@@ -2299,6 +2561,17 @@ async function lerDe(url) {
   } catch { return null; }
 }
 
+// a tela de projetos relê cada placa a cada 5 s: o arquivo que falta (a placa recém-copiada não tem o modelo nem o
+// testes.json) só é perguntado de novo depois de 30 s, em vez de virar um 404 no console a cada volta
+async function lerDoInicio(url) {
+  if (FALTA_ATE[url] > Date.now()) return null;
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok || r.status === 204) { FALTA_ATE[url] = Date.now() + 30000; return null; }
+    return await r.json();
+  } catch { return null; }
+}
+
 async function listarPlacas() {
   const api = await lerDe('/api/placas');
   if (api) { S.api = true; return api.placas; }
@@ -2320,8 +2593,8 @@ function selosDe(t, m, cotacao) {
   let testes = '<span class="selo">sem testes</span>';
   if (t?.rodando) testes = '<span class="selo rodando">testes rodando…</span>';
   else if (t) {
-    const falhas = t.etapas.filter(e => e.estado === 'falhou').length;
-    testes = falhas ? `<span class="selo falha">✗ ${falhas} etapa falhou</span>` : '<span class="selo ok">✓ testes ok</span>';
+    const falhas = t.etapas.filter(e => e.estado === 'falhou').length, nc = naoConferido(t);
+    testes = falhas ? `<span class="selo falha">✗ ${falhas} etapa falhou</span>` : `<span class="selo ok">✓ testes ok</span>${nc.txt ? `<span class="selo pend">${esc(nc.txt)}</span>` : ''}`;
   }
   let fabrica = '';
   const passou = t && !t.rodando && !t.etapas.some(e => e.estado === 'falhou');
@@ -2341,7 +2614,7 @@ async function desenharInicio() {
   const placas = await Promise.all(nomes.map(async nome => {
     const base = `../placas/${encodeURIComponent(nome)}/`;
     const [modelo, testes, versoes, cotacao] = await Promise.all(
-      ['saida/modelo.json', 'testes.json', 'versoes/versoes.json', 'fabrica.json'].map(c => lerDe(base + c)));
+      ['saida/modelo.json', 'testes.json', 'versoes/versoes.json', 'fabrica.json'].map(c => lerDoInicio(base + c)));
     return { nome, modelo, testes, versoes: versoes || [], cotacao };
   }));
   placas.sort((a, b) => (b.versoes.at(-1)?.quando || '').localeCompare(a.versoes.at(-1)?.quando || ''));
@@ -2375,9 +2648,21 @@ const dia = d => d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '?';
 const preco = (v, moeda) => v == null ? '?' : `${moeda === 'BRL' ? 'R$' : 'US$'} ${v < 0.1 ? v.toFixed(4) : v.toFixed(2)}`.replace('.', ',');
 const numeroDe = t => { const m = /^\s*([\d.]+)\s*([pnuµmkM]?)/.exec(t || ''); return m ? +m[1] * ({ p: 1e-12, n: 1e-9, u: 1e-6, 'µ': 1e-6, m: 1e-3, k: 1e3, M: 1e6 }[m[2]] || 1) : null; };
 
+// o que se sabe do datasheet da peça, sem dizer mais do que foi feito: conferido no PDF; conferido em parte (o catálogo
+// diz o que falta, como o PDF que não foi aberto); ou pronto pra placa pela ficha da loja (o resistor e o capacitor: a
+// loja já diz o que a placa precisa, mas ninguém abriu o PDF). As opções do carrinho não trazem o conferido (só o
+// 'conferida'): nelas, o resistor e o capacitor contam como da ficha da loja
+function seloDoDatasheet(e, conferida) {
+  const c = e.conferido, pend = [...(c?.eletrica?.pendentes || []), ...(c?.mecanica?.pendentes || []), ...(c?.pendentes || [])];
+  if (c && pend.length) return { txt: 'conferido em parte: falta o que está pendente aqui embaixo', pend };
+  if (c) return { txt: '✓ datasheet conferido', pend: [] };
+  if (conferida && /^(resistor|capacitor)/.test(e.categoria || '')) return { txt: '✓ pronto pra placa pela ficha da loja (o PDF não foi aberto)', pend: [] };
+  return { txt: conferida ? '✓ datasheet conferido' : 'datasheet ainda não conferido', pend: [] };
+}
+
 // um cartao de peca: o mesmo no carrinho e na aba Pecas
 function cartaoPeca(e, o = {}) {
-  const ruim = e.situacao && e.situacao !== 'ok';
+  const ruim = e.situacao && e.situacao !== 'ok', selo = seloDoDatasheet(e, o.conferida);
   const extra = (o.destaques || []).map(k => atrib(e, k)).filter(Boolean).map(v => emPt(v, e.categoria));
   const outras = (e.outras_lojas || []).filter(x => /^https:\/\//.test(x.link || ''));
   return `<div class="opcao${o.escolhida ? ' escolhida' : ''}${ruim ? ' ruim' : ''}">
@@ -2386,7 +2671,8 @@ function cartaoPeca(e, o = {}) {
       <span>${esc(e.tamanho || '')}${e.montagem ? ` · ${esc(MONTAGEM[e.montagem] || e.montagem)}` : ''}${extra.length ? ` · ${esc(extra.join(' · '))}` : ''}</span>
       <span class="sub">${preco(e.preco, e.moeda)} na ${esc(e.loja || 'LCSC')} · ${ruim ? `<span class="aviso">${esc(e.situacao)}</span>` : e.estoque != null ? `${milhar(e.estoque)} em estoque` : 'estoque não informado'} · visto ${dia(e.visto)}</span>
       ${outras.length ? `<span class="sub">também em: ${outras.map(x => `<a href="${esc(x.link)}" target="_blank" rel="noopener">${esc(x.loja)}${x.preco != null ? ' ' + preco(x.preco, x.moeda) : ''} ↗</a>`).join(', ')}</span>` : ''}
-      <span class="sub">${o.conferida ? '✓ datasheet conferido' : 'datasheet ainda não conferido'}${/^https:\/\//.test(e.link || '') ? ` · <a href="${esc(e.link)}" target="_blank" rel="noopener">loja ↗</a>` : ''}</span>
+      <span class="sub">${esc(selo.txt)}${/^https:\/\//.test(e.link || '') ? ` · <a href="${esc(e.link)}" target="_blank" rel="noopener">loja ↗</a>` : ''}</span>
+      ${selo.pend.map(pendenteHTML).join('')}
       ${o.usos?.length ? `<span class="selo ok">em uso: ${esc(o.usos.join(', '))}</span>` : ''}
       ${o.acao || ''}
     </div>`;
@@ -2430,6 +2716,7 @@ function desenharCatalogo() {
       <div><h1>Peças</h1><span class="sub" id="cat-resumo"></span></div>
       <div class="cat-corpo"><nav class="cat-lado" id="cat-lado" aria-label="Categorias"></nav>
         <div class="cat-miolo">
+          <label class="cat-escolha">Categoria <select id="cat-select" aria-label="Categoria"></select></label>
           <p class="cat-explica" id="cat-explica"></p>
           <div class="filtros"><input type="search" id="cat-texto" placeholder="Procurar: ESP32, 100nF, verde, 1N4007…" autocomplete="off">
             <label><input type="checkbox" data-cat-toggle="soEstoque"> com estoque</label>
@@ -2443,7 +2730,7 @@ function desenharCatalogo() {
     </div></section>`;
   }
   const todas = Object.values(C.dado.pecas), cats = C.dado.categorias;
-  $('#cat-resumo').textContent = `${todas.length} peças em ${Object.keys(cats).length} categorias · ${todas.filter(conferidaDe).length} prontas pra placa (datasheet conferido) · ${new Set(todas.map(e => e.loja || 'LCSC')).size} lojas · a loja online é o double check`;
+  $('#cat-resumo').textContent = `${todas.length} peças em ${Object.keys(cats).length} categorias · ${todas.filter(conferidaDe).length} prontas pra placa (datasheet conferido, ou resistor pela ficha da loja) · ${new Set(todas.map(e => e.loja || 'LCSC')).size} lojas · a loja online é o double check`;
   const grupos = {};
   for (const [id, s] of Object.entries(cats)) (grupos[s.grupo] ||= []).push([id, s]);
   const conta = id => todas.filter(e => e.categoria === id).length;
@@ -2451,6 +2738,10 @@ function desenharCatalogo() {
     Object.entries(grupos).sort((a, b) => (C.dado.grupos || []).indexOf(a[0]) - (C.dado.grupos || []).indexOf(b[0])).map(([g, lista]) => `<span class="grupo">${esc(g)}</span>` +
       lista.sort((a, b) => a[1].nome.localeCompare(b[1].nome)).map(([id, s]) =>
         `<button type="button" data-cat="${esc(id)}" aria-pressed="${C.cat === id}">${esc(s.nome)} <span class="sub">${conta(id)}</span></button>`).join('')).join('');
+  // na tela estreita, a mesma lista numa caixa de escolher (a do lado some): a busca e os cartões ficam logo embaixo
+  $('#cat-select').innerHTML = `<option value="tudo"${C.cat === 'tudo' ? ' selected' : ''}>Tudo (${todas.length})</option>` +
+    Object.entries(grupos).sort((a, b) => (C.dado.grupos || []).indexOf(a[0]) - (C.dado.grupos || []).indexOf(b[0])).map(([g, lista]) => `<optgroup label="${esc(g)}">` +
+      lista.map(([id, s]) => `<option value="${esc(id)}"${C.cat === id ? ' selected' : ''}>${esc(s.nome)} (${conta(id)})</option>`).join('') + '</optgroup>').join('');
   const spec = especDe(C.cat);
   $('#cat-explica').textContent = C.cat === 'tudo' ? 'Tudo que a gente já viu nas lojas. Escolha uma categoria do lado ou procure por nome, valor ou código.' : (spec.explica || '');
   document.querySelectorAll('[data-cat-toggle]').forEach(el => { el.checked = C[el.dataset.catToggle]; });
@@ -2483,6 +2774,13 @@ async function acaoCatalogo(caminho, corpo, durante) {
     : `A loja achou ${d.achadas} que servem; ${d.novas} eram novas e entraram no catálogo.`;
   await carregarCatalogo();
   C.ocupado = false; desenharCatalogo();
+}
+
+// as ligações (as linhas 'liga' do placa.txt) e os pedaços de trilha que o desenho fez pra elas: a etapa 3 conta os
+// pedaços, então o número dela é o segundo
+function ligacoesTxt(m) {
+  const ligas = new Set(m.trilhas.map(t => `${t.de}>${t.ate}`)).size, pedacos = m.trilhas.length;
+  return `${ligas} ${ligas === 1 ? 'ligação' : 'ligações'}${pedacos !== ligas ? ` (${pedacos} pedaços de trilha)` : ''}`;
 }
 
 // ---------- aba Processo: a historia do projeto, na ordem em que a gente pensa ----------
@@ -2599,7 +2897,7 @@ function contaDoDivisorHTML(c, peca, alvo) {
   return `<div class="conta">
     <span>3V3 → <b>${ohmsTxt(c.r_fixo)}</b> → ${esc(pinoDoBloco(alvo))} ← ${esc(comApelido(alvo, c.para))} → GND: o pino lê a tensão do meio. No escuro o olho de luz tem muitos ohms e a tensão sobe; no claro, ela cai.</span>
     <div class="rolo"><table class="lux"><thead><tr><th scope="col">luz</th>${cantos.map(([, t]) => `<th scope="col">${t}</th>`).join('')}</tr></thead><tbody>${linhas}</tbody></table></div>
-    <span class="sub">Verde: dentro da faixa boa do ADC (${mm(c.adc_min, 2)} a ${mm(c.adc_max, 2)} V); laranja: fora, onde a leitura não é confiável. Cada LDR sai um pouco diferente (o datasheet dá uma faixa), por isso as três colunas. O número grande é com o 3V3 do meio (${volts(c.vdd)} V); o pequeno embaixo, com o 3V3 de verdade, de ${mm(c.vdd_de, 3)} a ${mm(c.vdd_ate, 3)} V.</span>
+    <span class="sub">Verde: dentro da faixa boa do ADC (${mm(c.adc_min, 2)} a ${mm(c.adc_max, 2)} V); laranja: fora, onde o número que o ADC lê sai torto (menos exato). Cada LDR sai um pouco diferente (o datasheet dá uma faixa), por isso as três colunas. O número grande é com o 3V3 do meio (${volts(c.vdd)} V); o pequeno embaixo, com o 3V3 de verdade, de ${mm(c.vdd_de, 3)} a ${mm(c.vdd_ate, 3)} V.</span>
     ${c.faixa ? `<span>Pra esse olho de luz servem de ${ohmsTxt(c.faixa.de)} a ${ohmsTxt(c.faixa.ate)} (o LDR do meio na faixa boa de 1 a 100 lux e, em 10 lux, os dois cantos também)${c.padrao ? `: <b>${ohmsTxt(c.padrao)}</b>` : ''}.</span>` : ''}
     ${c.origem && c.padrao ? `<span class="sub">Por que ${ohmsTxt(c.padrao)}: ${esc(c.origem)}.</span>` : ''}
     ${um && p1 ? `<span class="sub">Em 1 lux a conta dá o LDR de ${ohmsCurto(um.cantos.min.ohms)} a ${ohmsCurto(um.cantos.max.ohms)}; o gráfico do datasheet dá de ${ohmsCurto(p1.r_min)} a ${ohmsCurto(p1.r_max)} (a página está em "De onde vêm os números").</span>` : ''}
@@ -2713,6 +3011,23 @@ function estrelaHTML(pj, corDe) {
       ${cards.join('')}</div>`;
 }
 
+// a lista embaixo da estrela: um item por papel (o tipo de peça e o porquê dele), com as peças que fazem esse papel. O
+// porquê do resistor muda com quem ele atende (o LED, o botão, o som, o olho de luz): cada um vira um item
+function tiposDeBlocoHTML(pj) {
+  const grupos = new Map();
+  for (const b of pj.blocos) {
+    const k = `${b.bloco}|${b.por_que}`;
+    grupos.set(k, [...(grupos.get(k) || []), b]);
+  }
+  return [...grupos.values()].map(bs => {
+    const b = bs[0], alvos = bs.map(x => pj.blocos.find(y => y.ref === (x.led || x.para))).filter(Boolean);
+    const nomes = [...new Set(alvos.map(x => minusculo(x.nome)))];
+    const onde = alvos.length !== bs.length || nomes.length !== 1 ? ''
+      : bs.length > 1 ? `, um em cada ${nomes[0]} (${listaDeRefs(alvos.map(x => x.ref))})` : `, no ${nomes[0]} ${alvos[0].ref}`;
+    return `<li><b>${esc(b.nome)}</b> (${esc(minusculo(b.funcao))}) · <span class="mono">${esc(listaDeRefs(bs.map(x => x.ref)))}</span>${esc(onde)}: ${esc(b.por_que)}</li>`;
+  }).join('');
+}
+
 // ---- passo 1 com o cérebro: a resposta de cada LED (o brilho geral pode ter ajuste por LED; a cor é sempre de um LED)
 function brilhoPorLedHTML(q, pj, corDe) {
   const nome = id => q.opcoes.find(o => o.id === id)?.nome || id;
@@ -2720,7 +3035,13 @@ function brilhoPorLedHTML(q, pj, corDe) {
   return `<ul class="por-led">${q.por_led.map(x => `<li><span class="mono">${esc(x.ref)}</span>${bolinha(corDe(x.ref))}<span>${esc(x.apelido || 'LED')}</span>
       ${x.resposta ? `<b>${esc(nome(x.resposta))}</b>` : '<span class="aviso">falta responder</span>'}<span class="sub">${x.do_led ? 'só dele' : 'a resposta geral'} · ${esc(quemDecidiu(x.quem))}</span>
       ${x.impossivel ? '<span class="nao-bate">impossível neste LED</span>' : conta(x.ref).passa_do_pino ? '<span class="nao-bate">passa da força padrão do pino</span>' : ''}</li>`).join('')}</ul>
-    <span class="sub">Os botões mudam a resposta geral; o ajuste de um LED só (o "só dele") fica, e quem grava é o Claude: é só pedir.</span>`;
+    <span class="sub">Os botões mudam a resposta geral; o ajuste de um LED só (o "só dele") fica, e quem grava é o Claude: é só pedir.${tetoDoPinoTxt(pj)}</span>`;
+}
+// no pino do ESP32 a luz tem teto: o pino só dá a força padrão dele. A escolha que passar fica gravada, mas a conta dá ✗
+// e o resistor do carrinho não muda (a conta de cada LED usa o pior caso: o 3V3 alto e o LED de vf baixo)
+function tetoDoPinoTxt(pj) {
+  const iPino = (pj?.blocos || []).map(b => b.bloco === 'resistor' && b.led && b.conta?.i_pino).find(positivo);
+  return iPino ? ` No pino do cérebro a corrente tem teto, a força padrão do pino (~${mA(iPino)} mA): a luz que passar dele fica com ✗ no passo 3 e o resistor do carrinho não muda.` : '';
 }
 function corPorLedHTML(q) {
   const conferidas = (q.opcoes || []).filter(o => o.conferidos?.length).map(o => o.id);
@@ -2839,7 +3160,7 @@ function desenharProcesso(main) {
   const ocupado = S.mexendo || t?.rodando;
 
   // 1. objetivo: o que a placa faz e o que a gente quer dela
-  const listaReqs = reqs.length ? `<ul class="reqs">${reqs.map(i => `<li class="${i.status === 'ok' ? 'ok' : 'falha'}">${i.status === 'ok' ? '✓' : '✗'} ${esc(i.id)} ${esc(i.titulo)}${i.status === 'ok' ? '' : ` · ${esc(i.motivo)}`}</li>`).join('')}</ul>` : '';
+  const listaReqs = reqs.length ? `<ul class="reqs">${reqs.map(i => `<li class="${i.status === 'ok' ? 'ok' : 'falha'}">${{ ok: '✓', '?': '?' }[i.status] || '✗'} ${esc(i.id)} ${esc(i.titulo)}${i.status === 'ok' ? '' : ` · ${esc(i.motivo)}`}</li>`).join('')}</ul>` : '';
   // a cor de cada LED (a da peça do carrinho, que é a que acende; sem peça, a pedida), pras bolinhas e pros ícones
   const porLedDaCor = Object.fromEntries(((pj?.perguntas || []).find(q => q.id === 'cor')?.por_led || []).map(x => [x.ref, x]));
   const corDe = ref => porLedDaCor[ref]?.da_peca || porLedDaCor[ref]?.resposta;
@@ -2852,10 +3173,12 @@ function desenharProcesso(main) {
       <div class="escolhas" role="group" aria-label="${esc(q.texto)}">${q.opcoes.map(o => `<button type="button" data-responder="${esc(q.id)}" data-resposta="${esc(o.id)}" aria-pressed="${q.resposta === o.id}" ${ocupado ? 'disabled' : ''}>${esc(o.nome)}</button>`).join('')}</div>
       <span class="sub">${escolhida ? esc(escolhida.explica) : 'Escolha uma: é daqui que sai o resistor.'}${quem}</span>${q.por_led ? brilhoPorLedHTML(q, pj, corDe) : ''}</div>`;
   }).join('');
-  const titulo = pj?.objetivo || obj?.titulo || PLACA, frase = pj?.frase || obj?.texto;
+  const lendo = !pj && (!S.apiSabido || (S.api && !S.projetoLido));   // o /api/projeto ainda não respondeu
+  const titulo = pj?.objetivo || obj?.titulo || (lendo ? 'lendo o projeto…' : PLACA), frase = pj?.frase || obj?.texto;
   const p1 = passo(1, reqs.length && reqs.every(i => i.status === 'ok') && (pj?.perguntas || []).every(q => q.respondida ?? q.resposta) ? 'ok' : 'falha', 'Objetivo', `
       <p class="destaque">${esc(titulo)}</p>${frase ? `<p>${esc(frase)}</p>` : ''}
       ${perguntas}
+      ${S.recado && S.recadoOnde === 'responder' ? `<p class="aviso" role="status">${esc(recadoAgora())}</p>` : ''}
       ${obj?.erro ? `<p class="erro-req">${esc(obj.erro)}</p>` : ''}
       ${listaReqs}${reqs.length ? '<button type="button" class="link" data-aba="thinking">Ver os requisitos →</button>' : ''}`);
 
@@ -2867,7 +3190,7 @@ function desenharProcesso(main) {
     p2 = comCerebro ? passo(2, 'ok', 'Blocos', `
       <p>Antes de qualquer número: que tipo de peça faz cada parte do trabalho. O cérebro fica no meio: cada ramo sai de um pino dele, passa pelo freio e volta pro GND${pj.blocos.some(b => b.bloco === 'ldr') ? ' (o olho de luz pega a força no 3V3 do cérebro)' : ''}.</p>
       ${estrelaHTML(pj, corDe)}
-      <ul class="tipos-de-bloco">${[...new Map(pj.blocos.map(b => [b.bloco, b])).values()].map(b => `<li><b>${esc(b.nome)}</b> (${esc(minusculo(b.funcao))}): ${esc(b.por_que)}</li>`).join('')}</ul>`)
+      <ul class="tipos-de-bloco">${tiposDeBlocoHTML(pj)}</ul>`)
       : passo(2, 'ok', 'Blocos', `
       <p>Antes de qualquer número: que tipo de peça faz cada parte do trabalho.${classica ? ' A corrente sai do + da pilha, passa pelos blocos nessa ordem e volta pelo −.' : ''}</p>
       <div class="cadeia">${pj.blocos.map((b, i) => `${i ? '<span class="seta" aria-hidden="true">→</span>' : ''}<div class="bloco">
@@ -2889,7 +3212,8 @@ function desenharProcesso(main) {
         <b>${esc(pc?.nome || 'falta escolher')}</b>
         ${pc ? `<span class="sub">${esc(pc.marca)} ${esc(pc.modelo)} · ${esc(pc.tamanho)}</span>
         <span class="sub">${custa} · ${milhar(pc.estoque)} em estoque${b.quem ? ` · ${esc(b.quem === 'Luiz' ? 'você escolheu' : b.quem)}` : ''}</span>` : ''}
-        ${b.pino ? `<span class="sub">${esc(noPinoTxt(b))}</span>` : ''}
+        ${b.pino ? `<span class="sub">${esc(noPinoTxt(b))}</span>` : ''}</div>
+        <div class="mais">
         ${avisos.map(a => `<span class="aviso">${esc(a)}</span>`).join('')}
         ${(pc?.avisos || []).map(pendenteHTML).join('')}
         ${pc?.condicao_3v3 ? `<span class="sub">3V3 de verdade: ${esc(pc.condicao_3v3)}.</span>` : ''}
@@ -2907,9 +3231,13 @@ function desenharProcesso(main) {
       && Object.values(porLedDaCor).every(x => x.bate !== false);
     p3 = passo(3, cheio ? 'ok' : 'falha', 'Carrinho', `
       <p>Uma peça de verdade, que a loja tem em estoque, pra cada bloco. O desenho dela na placa é o oficial do fabricante, não um chute.</p>
-      ${S.recado ? `<p class="aviso">${esc(S.recado)}</p>` : ''}
+      ${S.recado && S.recadoOnde !== 'responder' ? `<p class="aviso">${esc(recadoAgora())}</p>` : ''}
       <ul class="carrinho">${itens}</ul>
       ${totalHTML(pj, extras)}`);
+  } else if (lendo) {
+    // o /api/projeto ainda não respondeu: não dá pra dizer que a placa é da ordem antiga
+    p2 = passo(2, 'pendente', 'Blocos', '<p class="sub">lendo o projeto…</p>');
+    p3 = passo(3, 'pendente', 'Carrinho', '<p class="sub">lendo o projeto…</p>');
   } else {
     // placa de antes da ordem nova: sem projeto.json, mostra a lista de compras antiga
     const compras = m?.compras || [];
@@ -2922,7 +3250,7 @@ function desenharProcesso(main) {
   const versoes = [...S.versoes].reverse();
   const forafora = pj ? pj.blocos.filter(b => b.peca && b.na_placa === false).map(b => b.ref) : [];
   const p4 = m ? passo(4, forafora.length ? 'falha' : 'ok', 'Placa', `<div class="placa-resumo">${miniatura(m)}<div style="display:flex;flex-direction:column;gap:10px">
-      <span class="sub mono">${mm(m.placa.w, 0)} × ${mm(m.placa.h, 0)} mm · ${m.pecas.length} peças · ${new Set(m.trilhas.map(t => t.de + '>' + t.ate)).size} ligações${m.vias?.length ? ` · ${m.vias.length} vias` : ''}</span>
+      <span class="sub mono">${mm(m.placa.w, 0)} × ${mm(m.placa.h, 0)} mm · ${m.pecas.length} peças · ${ligacoesTxt(m)}${m.vias?.length ? ` · ${m.vias.length} vias` : ''}</span>
       ${forafora.length ? `<span class="aviso">A placa ainda usa a peça antiga de ${esc(forafora.join(', '))}.</span>` : ''}
       <ol class="versoes-lista">${versoes.map(v => `<li><span class="mono">v${v.v}</span> ${esc(v.frase)} <span class="sub">· ${esc(v.quando)}</span></li>`).join('')}</ol>
       <button type="button" class="link" data-aba="projeto">Abrir a placa →</button></div></div>`)
@@ -2932,10 +3260,13 @@ function desenharProcesso(main) {
   const rodar = S.api ? '<button type="button" class="link" data-rodar>Rodar os testes de novo ↻</button>' : '';
   let p5 = passo(5, 'pendente', 'Testes', `<p>Ainda não rodou.</p><div class="links">${rodar}</div>`);
   if (t) {
+    const nc = naoConferido(t), passaram = t.etapas.filter(e => e.estado === 'ok');
     const texto = t.rodando ? 'Rodando agora…'
       : falha ? `Parou na etapa ${t.etapas.indexOf(falha) + 1}, ${esc(falha.nome.toLowerCase())}: ${esc(traduz(m, falha.detalhe))}`
+      : nc.pulou.length ? `${passaram.length} de ${t.etapas.length} etapas passaram (${esc(passaram.map(e => e.nome.toLowerCase()).join(', '))}), e nenhuma falhou. ${nc.pulou.map(e => `A etapa ${t.etapas.indexOf(e) + 1}, ${esc(e.nome.toLowerCase())}, pulou: ${esc(traduz(m, e.detalhe))}.`).join(' ')}`
       : `As ${t.etapas.length} etapas passaram: ${t.etapas.map(e => e.nome.toLowerCase()).join(', ')}.`;
-    p5 = passo(5, t.rodando ? 'rodando' : falha ? 'falha' : 'ok', 'Testes', `<p>${texto}</p>
+    const semResposta = !t.rodando && !falha && nc.sem.length ? `<p class="aviso">${nc.sem.length === 1 ? 'Um requisito ficou' : `${nc.sem.length} requisitos ficaram`} sem resposta (?): ${esc(nc.sem.map(i => `${i.id} ${i.titulo} · ${i.motivo}`).join('; '))}.</p>` : '';
+    p5 = passo(5, t.rodando ? 'rodando' : falha || nc.txt ? 'falha' : 'ok', 'Testes', `<p>${texto}</p>${semResposta}
       ${!t.rodando && t.resumo ? `<div class="explica"><b>Resumo do Claude</b><p>${esc(t.resumo)}</p></div>` : ''}
       <div class="links"><button type="button" class="link" data-aba="testes">Ver as etapas →</button>${rodar}</div>`);
   }
@@ -3016,23 +3347,56 @@ function viradaDeGente(m, ligas) {
     + papeis.map(([nome, de, ate]) => `o ${nome} era o furo ${de} e agora é o ${ate}`).join('; ') + '.';
 }
 
+const RODANDO_DE_NOVO = 'Os testes estão rodando de novo com a mudança.';
 async function mexer(caminho, corpo, recado) {
-  S.mexendo = true; S.recado = recado; desenhar();
+  S.mexendo = true; S.recado = recado; S.recadoDesde = 0; S.recadoOnde = caminho; desenhar();
+  let ok = false;
   try {
     const r = await fetch(`/api/${caminho}?placa=${encodeURIComponent(PLACA)}`, {
       method: 'POST', headers: { 'X-Bancada': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
     const d = await r.json().catch(() => ({}));
-    S.recado = r.ok ? [d.pendente?.length ? `Peça nova no carrinho. Falta o Claude conferir no datasheet: ${d.pendente.join('; ')}.` : 'Feito. Os testes estão rodando de novo com a mudança.',
+    ok = r.ok;
+    S.recado = r.ok ? [d.pendente?.length ? `Peça nova no carrinho. Falta o Claude conferir no datasheet: ${d.pendente.join('; ')}.` : `Feito. ${RODANDO_DE_NOVO}`,
       d.ligas?.length ? viradaDeGente(S.modelo, d.ligas) : '',   // o LED novo com o + no outro furo: o escolher virou as 'liga' dele
       ...[].concat(d.avisos || []).map(a => `Atenção: ${String(a).replace(/[.\s]+$/, '')}.`)].filter(Boolean).join(' ')
       : (d.erro || 'não deu certo');
+    if (r.ok) S.recadoDesde = Date.now();   // quando os testes que o pedido disparou acabarem, o recado diz (recadoAgora)
     return r.ok;
   } catch { S.recado = 'sem resposta do app (ele está aberto?)'; return false; }
   finally {
-    S.mexendo = false; S.brutos.projeto = null; await atualizar(); desenhar();
-    const este = S.recado, longo = este.length > 120;   // com virada ou aviso, dá tempo de ler
-    setTimeout(() => { if (S.recado === este) { S.recado = ''; desenhar(); } }, longo ? 30000 : 10000);   // o recado sai sozinho
+    S.mexendo = false; S.brutos.projeto = null; await atualizar();
+    const ruim = ok && caminho === 'responder' ? avisoDaResposta(S.projeto) : '';   // a resposta que a conta não aceita
+    if (ruim) S.recado = `${ruim} ${S.recado.replace(/^Feito\. /, '')}`;
+    desenhar();
+    // o recado sai sozinho (com virada ou aviso, dá mais tempo de ler); o 'rodando de novo' espera os testes acabarem e
+    // virar o 'Pronto' (recadoAgora), e aí fica mais 15 s
+    const este = S.recado, longo = este.length > 120, desde = Date.now();
+    const tirar = () => {
+      if (S.recado !== este) return;
+      if (este.includes(RODANDO_DE_NOVO) && recadoAgora() === este && Date.now() - desde < 600000) return setTimeout(tirar, 2000);
+      setTimeout(() => { if (S.recado === este) { S.recado = ''; desenhar(); } }, 15000);
+    };
+    setTimeout(tirar, longo ? 15000 : 5000);
   }
+}
+
+// depois de responder a luz: os LEDs em que a conta não dá (passa da força padrão do pino, ou o pino não tem força pra
+// essa luz). A resposta fica gravada, mas o resistor do carrinho não muda: o passo 3 mostra a conta com o ✗
+function avisoDaResposta(pj) {
+  const ruins = (pj?.blocos || []).filter(b => b.bloco === 'resistor' && b.led && (b.conta?.passa_do_pino || b.conta?.impossivel));
+  if (!ruins.length) return '';
+  const passa = ruins.filter(b => b.conta.passa_do_pino && !b.conta.impossivel).map(b => b.led), sem = ruins.filter(b => b.conta.impossivel).map(b => b.led);
+  const iPino = ruins.find(b => positivo(b.conta.i_pino))?.conta.i_pino;
+  const partes = [passa.length ? `${listaDeRefs(passa)} ${passa.length > 1 ? 'passam' : 'passa'} da força padrão do pino${iPino ? ` (~${mA(iPino)} mA)` : ''}` : '',
+    sem.length ? `o pino não tem força pra essa luz em ${listaDeRefs(sem)}` : ''].filter(Boolean).join(', e ');
+  return `A resposta mudou, mas com essa luz ${partes}: o resistor do carrinho fica como está, e o passo 3 mostra a conta. Escolha menos luz aqui, ou peça pro Claude menos luz só pra ${ruins.length > 1 ? 'esses LEDs' : 'esse LED'}.`;
+}
+
+// o recado na tela: o 'rodando de novo' vira 'já rodaram' quando a rodada que o pedido disparou acaba
+function recadoAgora() {
+  const t = S.testes;
+  if (!S.recado.includes(RODANDO_DE_NOVO) || !S.recadoDesde || !t || t.rodando || !(Date.parse(t.inicio) >= S.recadoDesde - 5000)) return S.recado;
+  return S.recado.replace(`Feito. ${RODANDO_DE_NOVO}`, RODANDO_DE_NOVO).replace(RODANDO_DE_NOVO, 'Pronto: os testes já rodaram de novo com a mudança (o passo 5 diz como foram).');
 }
 
 // ---------- aba Thinking ----------
@@ -3098,7 +3462,8 @@ function desenharTestes(main) {
     for (const [ref, rot] of Object.entries(umaVez(e.rotulos, avisos))) if (!avisos[ref]) avisos[ref] = rot;
   }
   const quando = t.rodando ? `começou ${hora(t.inicio)}` : `rodou ${hora(t.fim || t.inicio)}`;
-  const fotoOk = t.etapas.find(e => e.nome === 'Tira foto da placa')?.estado === 'ok';
+  const etapaFoto = t.etapas.find(e => e.nome === 'Tira foto da placa');
+  const fotoOk = etapaFoto?.estado === 'ok' && !etapaFoto.aviso;   // com aviso (o Chrome faltou ou falhou) não tem png
 
   const etapas = t.etapas.map(e => {
     const [icone, texto] = ESTADOS[e.estado] || ESTADOS.aguardando;
@@ -3116,7 +3481,8 @@ function desenharTestes(main) {
   }).join('');
 
   const placa = m ? miniatura(m, { erros, avisos }) : '';
-  const titulo = t.rodando ? 'Conferindo a placa…' : falha ? 'Onde está o problema' : Object.keys(avisos).length ? 'Placa sem problemas, com avisos' : 'Placa sem problemas';
+  const nc = naoConferido(t), resto = nc.txt ? ` (no que foi conferido: ${nc.txt})` : '';
+  const titulo = t.rodando ? 'Conferindo a placa…' : falha ? 'Onde está o problema' : Object.keys(avisos).length ? `Placa sem problemas, com avisos${resto}` : `Placa sem problemas${resto}`;
   const links = [...new Set([...Object.keys(erros), ...Object.keys(avisos)])].filter(ref => m?.pecas.some(p => p.ref === ref))
     .map(ref => `<button type="button" data-abrir="${esc(ref)}">Abrir ${esc(ref)} no Projeto →</button>`).join('');
 
@@ -3186,6 +3552,7 @@ document.addEventListener('click', async e => {
   }
   if ('rodar' in b.dataset) {
     b.disabled = true;
+    for (const k of Object.keys(FALTA_ATE)) delete FALTA_ATE[k];   // o testes.json e o modelo vão aparecer: pergunta já
     await fetch(`/api/testar?placa=${encodeURIComponent(PLACA)}`, { method: 'POST', headers: { 'X-Bancada': '1' } }).catch(() => null);
     return;
   }
@@ -3197,6 +3564,7 @@ document.addEventListener('click', async e => {
     S.opcoes[ref] = { carregando: 'Conferindo preço e estoque na loja agora…' }; desenhar();
     const d = await postar('/api/catalogo/checar', { codigos });
     S.recado = d.erro || `Conferi ${d.conferidas} na loja agora${d.mudaram?.length ? `: ${d.mudaram.length} mudaram` : ', nada mudou'}.`;
+    S.recadoOnde = 'carrinho';
     delete S.opcoes[ref];
     return abrirOpcoes(ref);
   }
@@ -3223,6 +3591,7 @@ document.addEventListener('click', async e => {
   if (b.dataset.ir) { pararDeTocar(); return irParaInstante(+b.dataset.ir); }   // uma marca da régua, uma linha da serial, um chip
   if (b.dataset.tirar) { const [tipo, i] = b.dataset.tirar.split(':'); return tirarChip(tipo, +i); }   // o ✕ de um chip
   if (b.dataset.luzQuarto) return luzNoInstante(b.dataset.luzQuarto, +b.dataset.luxQuarto);
+  if (b.dataset.apertar) return apertarNoInstante(b.dataset.apertar);   // o 'Apertar SW1' do painel do ▶ Programa
   if ('rodarProg' in b.dataset) return rodarDeNovo();
   if (S.prog.aberto && S.modo === 'seta' && !S.arrastou && podeMexer() && b.dataset.alvo?.startsWith('peca:')) {   // o botão desenhado
     const ref = b.dataset.alvo.slice(5);
@@ -3249,6 +3618,10 @@ document.addEventListener('click', async e => {
   }
 });
 
+document.addEventListener('change', e => {   // a caixa de escolher a categoria (aba Peças, tela estreita)
+  if (e.target.id === 'cat-select') { Object.assign(C, { cat: e.target.value, chip: null, todas: false }); desenharCatalogo(); }
+});
+
 document.addEventListener('input', e => {
   const el = e.target;
   if (el.id === 'cat-texto') { C.texto = el.value; C.todas = false; return desenharCatalogo(); }
@@ -3270,6 +3643,15 @@ document.addEventListener('mousedown', e => {
   }
 });
 
+// a etiqueta do mouse (HUD) é do mouse: o toque (celular) não tem 'passar por cima', e o mousemove que o navegador
+// inventa depois de um toque deixaria ela presa na tela. Some com o toque e não volta até o mouse mexer de verdade
+let ultimoToque = 0;
+document.addEventListener('touchstart', () => { ultimoToque = Date.now(); const hud = $('.hud'); if (hud) hud.hidden = true; }, { passive: true, capture: true });
+document.addEventListener('mouseout', e => {   // o mouse saiu da área (ou da janela): a etiqueta some
+  const hud = $('.hud');
+  if (hud && !hud.hidden && !e.relatedTarget?.closest?.('.area')) hud.hidden = true;
+});
+
 document.addEventListener('mousemove', e => {
   if (S.arrastando) {
     const a = areaInfo(), k = a.base * S.zoom;
@@ -3281,7 +3663,8 @@ document.addEventListener('mousemove', e => {
   }
   const area = e.target.closest('.area'), hud = $('.hud');
   if (!hud) return;
-  if (!area || S.modo !== 'seta' || e.target.closest('.ferramentas, .regua')) { hud.hidden = true; return; }
+  if (Date.now() - ultimoToque < 1500 || e.sourceCapabilities?.firesTouchEvents) { hud.hidden = true; return; }
+  if (!area || S.modo !== 'seta' || e.target.closest('.ferramentas, .regua, .aviso-versao')) { hud.hidden = true; return; }
   const m = modeloVisto(), svg = area.querySelector('.desenho');
   const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse());
   const dentro = pt.x >= 0 && pt.y >= 0 && pt.x <= m.placa.w && pt.y <= m.placa.h;
@@ -3289,12 +3672,14 @@ document.addEventListener('mousemove', e => {
   if (!dentro && !alvo) { hud.hidden = true; return; }
   const r = area.getBoundingClientRect();
   hud.hidden = false;
-  hud.style.left = (e.clientX - r.left + 18) + 'px';
-  hud.style.top = (e.clientY - r.top + 18) + 'px';
   let simHud = null;
   if (S.ligado && m.simulacao?.pode) try { simHud = simLigado(m); } catch { /* número pendente: o painel já diz qual */ }
   hud.querySelector('.nome-hud').textContent = nomeDoAlvo(m, alvo || 'placa', simHud);
   hud.querySelector('.xy').textContent = `x ${mm(pt.x, 1)}  y ${mm(m.placa.h - pt.y, 1)} mm`;
+  // do lado do mouse, sem passar da borda da área: perto da direita (ou de baixo), vai pro outro lado do mouse
+  const x = e.clientX - r.left, y = e.clientY - r.top, w = hud.offsetWidth, h = hud.offsetHeight;
+  hud.style.left = `${Math.max(8, x + 18 + w <= r.width - 8 ? x + 18 : x - 12 - w)}px`;
+  hud.style.top = `${Math.max(8, y + 18 + h <= r.height - 8 ? y + 18 : y - 12 - h)}px`;
 });
 
 document.addEventListener('mouseup', () => {
@@ -3307,7 +3692,7 @@ document.addEventListener('wheel', e => {
   const area = e.target.closest('.area');
   if (!area || e.target.closest('.regua')) return;
   e.preventDefault();
-  const r = area.getBoundingClientRect();
+  const r = area.querySelector('.desenho').getBoundingClientRect();   // o desenho pode começar abaixo do topo da área
   zoomEm(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
 }, { passive: false });
 
@@ -3325,10 +3710,10 @@ document.addEventListener('keydown', e => {
   if (e.key === 'p') alternarPrograma();
 });
 
-window.addEventListener('resize', aplicarZoom);
+window.addEventListener('resize', () => { const area = $('.area'); if (area) arrumarFerramentas(area, modeloVisto()); aplicarZoom(); });
 
 if (PLACA) {
-  lerDe('/api/placas').then(api => { S.api = !!api; desenhar(); });
+  lerDe('/api/placas').then(api => { S.api = !!api; S.apiSabido = true; if (S.api) atualizar(); desenhar(); });
   atualizar();
   setInterval(atualizar, 1000);
   setInterval(() => { if (S.prog.aberto && S.aba === 'projeto') lerPrograma(); }, 1000);   // a régua aberta: o programa novo, ou 'rodando'

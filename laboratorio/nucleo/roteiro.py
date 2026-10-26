@@ -1,6 +1,6 @@
 """roteiro.py: o que acontece do lado de fora da placa (roteiro.json) e as conferências.
 
-{"tempo": 3, "precisa": ["pino_saida"],                      tempo em SEGUNDOS de placa
+{"tempo": 3, "precisa": ["pino_saida"],                      tempo em SEGUNDOS de placa (0,001 a 600)
  "entradas": [{"t": 1.0, "pino": "BOTAO", "valor": 0},       pino por apelido ou nome físico
               {"t": 0, "pino": "POT", "volts": 1.0}, {"t": 0.5, "serial": "liga\\n"},
               {"t": 5, "luz": "LDR1", "lux": 1}],           a luz num LDR do --circuito (só o gemeo)
@@ -8,7 +8,7 @@
              {"t": 0.5, "pwm": "PWM", "duty": [0.2, 0.3]},   último duty até t
              {"serial": "olá", "ate": 1.5},                  alguma linha tx contém o texto (antes de 'ate')
              {"serial": "oi", "desde": 1, "ate": 2},         ... e saiu DEPOIS de 'desde' (os dois são opcionais)
-             {"trocas": "LED", "min": 4, "max": 7},          mudanças de nível vindas do firmware
+             {"trocas": "LED", "min": 4, "max": 7},          mudanças de nível vindas do firmware (min/max: números)
              {"estado": "acabou"}]}                          sem isso, vale acabou ou tempo
 Chaves que começam com "_" são comentário; "sobre" (no topo) descreve o roteiro.
 luz: a ref de uma peça com modelo 'ldr' no placa.txt do --circuito e a luz em lux (0 = escuro). O motor põe o LDR
@@ -25,11 +25,20 @@ from .contrato import ESTADOS, RECURSOS
 from .texto import fmt_t, num
 
 NUM = (int, float)
+TEMPO_MIN, TEMPO_MAX = 0.001, 600.0   # segundos de placa de uma rodada: o 'tempo' do roteiro e o --tempo do lab.py
 
 
 def _numero(v, o_que, minimo=0.0):
     if isinstance(v, bool) or not isinstance(v, NUM) or not math.isfinite(v) or v < minimo:
         raise ValueError("%s tem que ser um número >= %s, veio %r" % (o_que, minimo, v))
+    return float(v)
+
+
+def tempo_valido(v, o_que="tempo"):
+    """o tempo de uma rodada em segundos de placa, de TEMPO_MIN a TEMPO_MAX -> float; senão ValueError (0 não é
+    'sem tempo': vira erro, como no --tempo)"""
+    if isinstance(v, bool) or not isinstance(v, NUM) or not TEMPO_MIN <= v <= TEMPO_MAX:   # também pega nan e inf
+        raise ValueError("%s vai de %s a %s s de placa (veio %r)" % (o_que, num(TEMPO_MIN, 3), num(TEMPO_MAX), v))
     return float(v)
 
 
@@ -46,7 +55,7 @@ def validar(dados):
     _chaves(dados, {"tempo", "precisa", "entradas", "confere", "sobre"}, "roteiro")
     rot = {"tempo": None, "precisa": list(dados.get("precisa", [])), "entradas": [], "confere": []}
     if dados.get("tempo") is not None:
-        rot["tempo"] = _numero(dados["tempo"], "tempo")
+        rot["tempo"] = tempo_valido(dados["tempo"])
     falta = [r for r in rot["precisa"] if r not in RECURSOS]
     if falta:
         raise ValueError("precisa: recurso desconhecido %s (os que existem: %s)" % (falta, ", ".join(sorted(RECURSOS))))
@@ -97,6 +106,13 @@ def validar(dados):
                                                                                        num(c["ate"], 3)))
         elif "trocas" in c:
             _chaves(c, {"trocas", "min", "max"}, onde)
+            if not (isinstance(c["trocas"], str) and c["trocas"].strip()):
+                raise ValueError('%s: trocas é o nome do pino, como {"trocas": "LED", "min": 4, "max": 7}' % onde)
+            for k in ("min", "max"):
+                if k in c:
+                    _numero(c[k], onde + ": " + k)
+            if c.get("min", 0) > c.get("max", float("inf")):
+                raise ValueError("%s: min (%s) tem que ser até o max (%s)" % (onde, num(c["min"]), num(c["max"])))
         elif "estado" in c:
             _chaves(c, {"estado"}, onde)
             est = c["estado"] if isinstance(c["estado"], list) else [c["estado"]]

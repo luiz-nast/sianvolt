@@ -9,7 +9,8 @@ Uma rodada (rodar):
 1. pinos: o codigo/pinos.py sai do placa.txt (D1 = 32 ...), pro programa e a placa nunca discordarem
 2. preparar: a cópia saida/programa/sianvolt_<placa>_<hash8>/ com codigo/*.py, roteiro.json e gemeo.roteiro.
    O laboratório trabalha numa pasta com o NOME da cópia; o hash do caminho deixa cada placa com a sua.
-   No livre (o do app), só valem as entradas que vieram do app: sem nenhuma, a placa roda sozinha
+   No livre (o do app), só valem as entradas que vieram do app: sem nenhuma, a placa roda sozinha. O LDR que
+   ninguém acende em 0 s vai com a luz padrão (circuito.LUX_PADRAO, a do gêmeo), dita: o pino tem tensão desde 0 s
 3. o lab.py roda a cópia no gêmeo, ligado no placa.txt (--circuito), e devolve a linha do tempo (--json)
 4. normalizar: a linha do tempo vira o programa.json (tempos em ms), com os nomes do NOSSO placa.txt
 5. conferir: o codigo/confere.json (só no roteiro de teste; o livre roda sem conferências)
@@ -74,6 +75,7 @@ GPIO = re.compile(r"GPIO\d+$")
 EVENTO = re.compile(r"(GPIO\d+) (sobe|desce)$")
 _T = r"(\d+(?:[.,]\d+)?)\s*(s|ms|us|µs)"   # um tempo do gemeo.roteiro (o formato de laboratorio/.../roteiro.py)
 NOME_DO_MODELO = {"led": "LED", "chave": "botão", "ldr": "olho de luz", "piezo": "som"}
+PADRAO = "padrão"    # a origem da luz que ninguém pôs: a do circuito.LUX_PADRAO, em 0 s (luzes_padrao)
 
 
 class Ocupada(Exception):
@@ -414,11 +416,28 @@ def so_o_ambiente(extra):
     return "\n".join(fica)
 
 
+def luzes_padrao(pasta, luzes):
+    """[{ref, t: 0, lux, origem: 'padrão'}] pra cada LDR ligado num GPIO que começa sem luz nenhuma em 0 s (nem do
+    roteiro.json nem do app). A luz é a do circuito.LUX_PADRAO, a mesma que o gêmeo põe sozinho (o resolver do
+    circuito.py): dita no roteiro, o gêmeo manda a tensão do pino do LDR em 0 s. Sem ela, o pino fica sem tensão
+    nenhuma no programa.json até a primeira luz, e o painel do app dizia 'ainda sem tensão no pino' enquanto a
+    serial já mostrava o que o programa leu"""
+    try:
+        ldrs = sorted((r for r, m in modelos_das_pecas(pasta).items() if m == "ldr"), key=ordem)
+        ligados = por_peca(modelo_da_placa(pasta)) if ldrs else {}
+    except (OSError, ValueError):   # o placa.txt com erro: o lab.py diz o que é
+        return []
+    com_luz = {x["ref"] for x in luzes if x["t"] == 0}
+    return [{"ref": r, "t": 0.0, "lux": circuito.LUX_PADRAO, "origem": PADRAO}
+            for r in ldrs if r in ligados and r not in com_luz]
+
+
 def preparar(pasta, entradas=None, livre=False, isolada=False, lux=None):
     """monta a cópia que o lab.py roda -> (pasta da cópia, entradas usadas em ms, pro programa.json).
     A cópia tem os codigo/*.py, o roteiro.json e o gemeo.roteiro. Fora do livre: o roteiro de teste da placa, com o
     que o app mandou no fim. No livre (o do app): só as entradas do app; o roteiro.json vai sem entradas e sem
     'confere', e o gemeo.roteiro só com o mundo em volta (I2C, wifi): sem nada do app, a placa roda sozinha.
+    O LDR sem luz em 0 s ganha a luz padrão (luzes_padrao), com a origem 'padrão', nos dois laboratórios.
     lux: a luz vai em lux pro gêmeo (True) ou em volts no pino do LDR, pela nossa conta (False, o laboratório antigo);
     None pergunta pro laboratório (recursos_do_lab). Na luz em lux, os volts do programa.json saem do gêmeo
     (normalizar). A placa (codigo/) nunca é mudada"""
@@ -454,11 +473,14 @@ def preparar(pasta, entradas=None, livre=False, isolada=False, lux=None):
         else:
             outras.append(e)
     luzes += [{**x, "origem": "app"} for x in app["luz"]]
+    luzes += luzes_padrao(pasta, luzes)   # o LDR que ninguém acende em 0 s: a luz padrão, dita (a tensão desde 0 s)
     if luzes and lux:   # o gêmeo põe a luz no LDR do circuito: a ref tem que ser um LDR ligado num GPIO
         modelo = modelo_da_placa(pasta)
         for x in luzes:
             gpio_do_ldr(modelo, x["ref"])
-            outras.append({"t": x["t"], "luz": x["ref"], "lux": x["lux"], "_": "o gêmeo põe o LDR do meio no circuito"})
+            outras.append({"t": x["t"], "luz": x["ref"], "lux": x["lux"], "_": (
+                "a luz padrão do circuito.py: ninguém pôs luz nele em 0 s" if x["origem"] == PADRAO else
+                "o gêmeo põe o LDR do meio no circuito")})
             usadas["luz"].append({"ref": x["ref"], "t": round(x["t"] * 1000, 3), "lux": x["lux"], "volts": None,
                                   "origem": x["origem"]})
     elif luzes:   # o laboratório antigo não conhece a luz: vira a tensão do divisor no pino, pela nossa conta
@@ -732,6 +754,18 @@ def normalizar(linhas, pasta, codigo=None, livre=False, entradas=None, confere=N
         if x.get("volts") is None:   # a luz foi em lux: os volts são os que o gêmeo viu no pino do LDR naquela hora
             achou = [v for tl, p, v in do_circuito if abs(tl - x["t"]) <= FOLGA_T and p in gpios_de.get(x["ref"], [p])]
             x["volts"] = achou[-1] if achou else None
+    avisos_da_luz = []
+    for x in prog["entradas"].get("luz", []):
+        if x.get("origem") == PADRAO and x["ref"] in pecas:   # o gêmeo não avisa: a luz padrão foi dita no roteiro
+            gpio = (gpios_de.get(x["ref"]) or [None])[0]
+            tensao = f", {num(x['volts'], 3)} V no {gpio}" if numero(x.get("volts")) and gpio else ""
+            avisos_da_luz.append([x["t"], "luz", (
+                f"{x['ref']} ({nome_de_gente(proj, pecas[x['ref']])}) começa com {num(x['lux'])} lux (o padrão: o ponto "
+                f"da tabela do datasheet; com o LDR do meio{tensao}) e fica assim até " +
+                ("o app mudar a luz dele" if livre else "uma luz do codigo/roteiro.json mudar"))])
+    if avisos_da_luz:   # em 0 s, depois dos outros avisos de 0 s
+        i = next((i for i, a in enumerate(prog["avisos"]) if a[0] > 0), len(prog["avisos"]))
+        prog["avisos"][i:i] = avisos_da_luz
     if prog["entradas"].get("luz") and em_lux:   # pelo que o preparar mandou, e não pelo que coube na rodada
         prog["pendentes"].append("a luz do quarto entra em lux no LDR, com o LDR do meio do datasheet: cada LDR de "
                                  "verdade sai de um jeito, então os limites do main.py se calibram no quarto")

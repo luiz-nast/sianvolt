@@ -1,7 +1,10 @@
 """o app (app.py): só serve o que deve, só pra esta máquina, e só aceita pedido que veio dele mesmo"""
+import contextlib
 import http.client
+import io
 import json
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -9,15 +12,13 @@ import threading
 import time
 import unittest
 from functools import partial
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
 from apoio import PLACAS, RAIZ
 import app
 import programa
-
-HOST = "127.0.0.1:8765"   # o app confere o cabeçalho Host; a porta de verdade aqui é outra
-
 
 class Servidor(unittest.TestCase):
     """o app numa porta qualquer, com as placas de PASTA"""
@@ -39,7 +40,7 @@ class Servidor(unittest.TestCase):
     def pedir(self, metodo, caminho, corpo=None, cabecalhos=None):
         c = http.client.HTTPConnection("127.0.0.1", self.porta, timeout=20)
         c.putrequest(metodo, caminho, skip_host=True, skip_accept_encoding=True)   # caminho cru, sem normalizar
-        for k, v in {"Host": HOST, **(cabecalhos or {})}.items():
+        for k, v in {"Host": f"127.0.0.1:{self.porta}", **(cabecalhos or {})}.items():   # o app confere o Host
             c.putheader(k, v)
         dado = corpo.encode() if isinstance(corpo, str) else corpo
         if dado is not None:
@@ -88,7 +89,14 @@ class App(Servidor):
     def test_host_de_outro_site_e_barrado(self):
         for metodo in ("GET", "POST"):
             self.assertEqual(self.pedir(metodo, "/api/placas", cabecalhos={"Host": "evil.com"})[0], 403)
-        self.assertEqual(self.pedir("GET", "/api/placas", cabecalhos={"Host": "127.0.0.1:8765.evil.com"})[0], 403)
+        self.assertEqual(self.pedir("GET", "/api/placas", cabecalhos={"Host": f"127.0.0.1:{self.porta}.evil.com"})[0], 403)
+
+    def test_host_e_o_da_porta_de_verdade(self):
+        """o app pode estar fora da 8765 (outro programa nela): o Host que vale é o da porta em que ele está"""
+        self.assertEqual(self.pedir("GET", "/api/placas", cabecalhos={"Host": f"localhost:{self.porta}"})[0], 200)
+        if self.porta != app.PORTA:
+            self.assertEqual(self.pedir("GET", "/api/placas", cabecalhos={"Host": f"127.0.0.1:{app.PORTA}"})[0], 403)
+            self.assertEqual(self.pedir("HEAD", "/bancada/index.html", cabecalhos={"Host": f"127.0.0.1:{app.PORTA}"})[0], 404)
 
     def test_post_so_com_o_cabecalho_do_app(self):
         self.assertEqual(self.pedir("POST", "/api/testar?placa=lanterna", "{}")[0], 404)
@@ -303,6 +311,126 @@ class Programa(Servidor):
         self.assertTrue(any(x[1] > 0 for x in prog["leds"]["D1"]))
         self.assertEqual(prog["entradas"]["apertos"], [{"ref": "SW1", "de": 300.0, "ate": 500.0, "origem": "app"}])
         self.assertTrue((self.PASTA / "esp32" / "codigo" / "pinos.py").is_file())
+
+
+class OutroPrograma(BaseHTTPRequestHandler):
+    """um programa qualquer na porta (como o radar-vagas na 8765): responde 404 pra tudo"""
+
+    def do_GET(self):
+        self.send_response(404)
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+def porta_livre():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+class AbrirOApp(unittest.TestCase):
+    """o app não fica preso na 8765: outro programa nela, ele vai pra próxima; ele mesmo aberto, só abre a janela"""
+
+    def setUp(self):
+        self.addCleanup(setattr, app, "PLACAS", app.PLACAS)
+        app.PLACAS = PLACAS
+        self.outro = ThreadingHTTPServer(("127.0.0.1", 0), OutroPrograma)
+        threading.Thread(target=self.outro.serve_forever, daemon=True).start()
+        self.addCleanup(self.outro.server_close)
+        self.addCleanup(self.outro.shutdown)
+        self.ocupada = self.outro.server_address[1]
+
+    def servir(self, servidor):
+        threading.Thread(target=servidor.serve_forever, daemon=True).start()
+        self.addCleanup(servidor.server_close)
+        self.addCleanup(servidor.shutdown)
+
+    def test_portas_pedidas(self):
+        self.assertEqual(app.portas_do_app([], {}), list(range(8765, 8775)))
+        self.assertEqual(app.portas_do_app(["--sem-janela", "--porta", "8800"], {}), [8800])
+        self.assertEqual(app.portas_do_app([], {"SIANVOLT_PORTA": "8801"}), [8801])
+        self.assertEqual(app.portas_do_app(["--porta", "8800"], {"SIANVOLT_PORTA": "8801"}), [8800], "o --porta ganha")
+        for args, amb in ((["--porta"], {}), (["--porta", "x"], {}), ([], {"SIANVOLT_PORTA": "0"}),
+                          ([], {"SIANVOLT_PORTA": "70000"})):
+            with self.subTest(args=args, amb=amb), self.assertRaises(ValueError):
+                app.portas_do_app(args, amb)
+
+    def test_vai_pra_proxima_porta_e_depois_reaproveita(self):
+        livre = porta_livre()
+        servidor, aberto = app.subir([self.ocupada, livre])
+        self.assertIsNone(aberto)
+        self.assertEqual(servidor.server_address[1], livre, "a ocupada por outro programa fica pra trás")
+        self.servir(servidor)
+        self.assertIsNone(app.raiz_em(self.ocupada), "o outro programa não é o Sianvolt")
+        self.assertEqual(app.raiz_em(livre), str(RAIZ))
+        self.assertEqual(app.subir([self.ocupada, livre]), (None, livre), "o Sianvolt já aberto: a janela vai nele")
+        with contextlib.redirect_stdout(io.StringIO()) as saida:
+            self.assertEqual(app.main(["--sem-janela", "--porta", str(livre)], {}), 0)
+        self.assertIn(f"já está aberto em http://127.0.0.1:{livre}/bancada/", saida.getvalue())
+
+    def test_porta_so_com_outro_programa_avisa(self):
+        avisos = []
+        with mock.patch.object(app, "avisar", avisos.append):
+            self.assertEqual(app.main(["--sem-janela", "--porta", str(self.ocupada)], {}), 1)
+            self.assertEqual(app.main(["--sem-janela", "--porta", "x"], {}), 2)
+        self.assertIn(f"a porta {self.ocupada} está com outros programas", avisos[0])
+        self.assertIn("--porta 8800", avisos[0])
+        self.assertIn("não é um número", avisos[1])
+
+    def test_sem_terminal_o_aviso_vira_notificacao(self):
+        """o atalho do menu abre sem terminal: o erro não pode sumir calado"""
+        notificou = []
+        with mock.patch.object(app, "notificar", notificou.append), mock.patch.object(sys, "stderr", io.StringIO()):
+            app.avisar("o Sianvolt não abriu: teste")
+            self.assertIn("o Sianvolt não abriu: teste", sys.stderr.getvalue())
+        self.assertEqual(notificou, ["o Sianvolt não abriu: teste"])
+
+    def test_app_que_abriu_na_segunda_porta_funciona(self):
+        """o caminho da 1ª porta com outro programa e da 2ª livre: o app sobe inteiro (o 'vivo' do __main__ apagava a
+        função vivo() e o /api/programa caía com TypeError)"""
+        for _ in range(20):   # o outro programa numa porta com a seguinte livre
+            try:
+                with socket.socket() as s:
+                    s.bind(("127.0.0.1", self.ocupada + 1))
+                break
+            except OSError:
+                self.outro = ThreadingHTTPServer(("127.0.0.1", 0), OutroPrograma)
+                threading.Thread(target=self.outro.serve_forever, daemon=True).start()
+                self.addCleanup(self.outro.server_close)
+                self.addCleanup(self.outro.shutdown)
+                self.ocupada = self.outro.server_address[1]
+        else:
+            self.skipTest("nenhuma porta com a seguinte livre aqui")
+        livre = self.ocupada + 1
+        criados, subir = [], app.subir
+
+        def guarda(portas):
+            servidor, aberto = subir(portas)
+            criados.append(servidor)
+            return servidor, aberto
+        with mock.patch.object(app, "PORTA", self.ocupada), mock.patch.object(app, "subir", guarda), \
+                contextlib.redirect_stdout(io.StringIO()) as saida:
+            linha = threading.Thread(target=app.main, args=(["--sem-janela"], {}), daemon=True)
+            linha.start()
+            limite = time.monotonic() + 10
+            while not criados and time.monotonic() < limite:
+                time.sleep(0.02)
+            try:
+                self.assertEqual(criados[0].server_address[1], livre)
+                c = http.client.HTTPConnection("127.0.0.1", livre, timeout=20)
+                c.request("GET", "/api/programa?placa=esp32")
+                r = c.getresponse()
+                corpo = json.loads(r.read())
+                c.close()
+            finally:
+                criados[0].shutdown()
+                linha.join(10)
+        self.assertEqual((r.status, corpo), (200, {"erro": "o programa desta placa ainda não rodou", "ainda_nao_rodou": True}))
+        self.assertTrue(callable(app.vivo))
+        self.assertIn(f"bancada em http://127.0.0.1:{livre}/bancada/ (a {self.ocupada} está com outro programa)",
+                      saida.getvalue())
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
  "nome": "LDR (fotorresistor) 8kΩ~20kΩ",
  "bloco": "ldr",
  "explica": "Um resistor que muda com a luz: no claro fica com poucos ohms, no escuro com muitos. Junto com um resistor fixo, vira uma tensão que o pino do cérebro lê. Não tem lado certo.",
- "fonte": "desenho RES-TH_L5.1-W4.3-P3.40-D0.5 do EasyEDA; ficha LCSC C10081; datasheet https://datasheet.lcsc.com/datasheet/pdf/0ac3d43edf3703d98e2e4a16b4a936c8.pdf?productCode=C10081; conferido: datasheet JCHL GL55 (2 páginas), https://datasheet.lcsc.com/datasheet/pdf/0ac3d43edf3703d98e2e4a16b4a936c8.pdf?productCode=C10081: p. 1, tabela, linha GL5528: 150 V, 90 mW, −30 a 70 °C, 540 nm, 8–20 kΩ a 10 lux, 1 MΩ no escuro, γ 0,65, 30 ms; p. 2, 'Measuring Conditions': R10 medido a 10 lux de luz A (2854 K) depois de 2 h a 400–600 lux; escuro = 10 s depois de apagar os 10 lux; γ = lg(R10/R100) entre 10 e 100 lux, 'The error of γ is ± 0.1'; Vmax = a tensão no escuro que aguenta sem parar; Pmax a 25 °C. Sem polaridade (é um resistor). O ponto de 1 lux não é do JCHL: veio do gráfico da Senba C125626 (ponto_1lux)",
+ "fonte": "desenho RES-TH_L5.1-W4.3-P3.40-D0.5 do EasyEDA; ficha LCSC C10081; datasheet https://datasheet.lcsc.com/datasheet/pdf/0ac3d43edf3703d98e2e4a16b4a936c8.pdf?productCode=C10081; conferido: datasheet JCHL GL55 (2 páginas), https://datasheet.lcsc.com/datasheet/pdf/0ac3d43edf3703d98e2e4a16b4a936c8.pdf?productCode=C10081: p. 1, tabela, linha GL5528: 150 V, 90 mW, −30 a 70 °C, 540 nm, 8–20 kΩ a 10 lux, 1 MΩ no escuro, γ 0,65, 30 ms; p. 2, 'Measuring Conditions': R10 medido a 10 lux de luz A (2854 K) depois de 2 h a 400–600 lux; escuro = 10 s depois de apagar os 10 lux; γ = lg(R10/R100) entre 10 e 100 lux, 'The error of γ is ± 0.1'; Vmax = a tensão no escuro que aguenta sem parar; Pmax a 25 °C. Sem polaridade (é um resistor). O ponto de 1 lux não é do JCHL: veio do gráfico da Senba C125626 (ponto_1lux); tamanho 5,1 × 4,3 mm (e 2,4 mm de altura): Length, Width e Height da ficha LCSC, como no catálogo. O corpo 4,4 × 5,4 mm do desenho é o contorno da serigrafia do EasyEDA (RES-TH_L5.1-W4.3-P3.40-D0.5), um pouco maior que a peça",
  "corpo": [
   4.4,
   5.4
@@ -354,7 +354,7 @@
    "Wavelength - Peak": "540nm",
    "Width": "4.3mm"
   },
-  "tamanho": "4,4 × 5,4 mm",
+  "tamanho": "5,1 × 4,3 mm",
   "quando": "2026-10-26"
  },
  "nomes": {

@@ -26,7 +26,7 @@ from nucleo.texto import num  # noqa: E402
 PADRAO = ["gemeo", "qemu", "simavr", "nativo"]   # instalar sem nome: os motores das top 5
 VIRTUAIS = {"gemeo", "nativo", "simavr"}          # tempo virtual: o que o testar --rapido roda
 TEMPO_PADRAO = 5.0                                # segundos de placa sem --tempo nem roteiro
-TEMPO_MAX = 600.0                                 # o --tempo mais longo (10 min de placa)
+TEMPO_MAX = roteiro.TEMPO_MAX                     # o --tempo (e o 'tempo' do roteiro) mais longo: 10 min de placa
 EXEMPLOS = RAIZ / "exemplos"
 
 
@@ -48,14 +48,19 @@ def achar_programa(nome):   # de onde o Luiz está, ou de dentro de laboratorio/
 
 
 def tempo_valido(texto):
-    """--tempo: segundos de placa, de 0,001 a TEMPO_MAX (aceita vírgula)"""
+    """--tempo: segundos de placa, de 0,001 a TEMPO_MAX (aceita vírgula); a mesma faixa do 'tempo' do roteiro"""
     try:
         t = float(str(texto).replace(",", "."))
     except ValueError:
         raise argparse.ArgumentTypeError("'%s' não é um número de segundos" % texto) from None
-    if not 0.001 <= t <= TEMPO_MAX:   # também pega nan e inf
+    if not roteiro.TEMPO_MIN <= t <= TEMPO_MAX:   # também pega nan e inf
         raise argparse.ArgumentTypeError("o tempo vai de 0,001 a %s s de placa (veio %s)" % (num(TEMPO_MAX), texto))
     return t
+
+
+def tempo_da_rodada(tempo, rot):
+    """o --tempo, senão o 'tempo' do roteiro (já conferido: 0,001 a TEMPO_MAX), senão TEMPO_PADRAO"""
+    return next(t for t in (tempo, rot["tempo"], TEMPO_PADRAO) if t is not None)
 
 
 def rodar_um(placa, programa, lingua, motor, rot, tempo_s, circuito=None, detalhe=False):
@@ -70,7 +75,8 @@ def _rodar_em(trabalho, placa, programa, lingua, motor, rot, tempo_s, circuito, 
     pasta, principal = preparar.preparar(placa, lingua, programa, trabalho)
     pedido = contrato.Pedido(placa=placa, alvo=alvo, linguagem=lingua, pasta=pasta, principal=principal,
                              entradas=roteiro.entradas(rot, placa), tempo_ms=tempo_s * 1000, trabalho=trabalho,
-                             ferramentas=fer.pasta_ferramentas(), circuito=circuito, detalhe=detalhe)
+                             ferramentas=fer.pasta_ferramentas(), circuito=circuito, detalhe=detalhe,
+                             nomes=preparar.nomes_dos_pinos(placa, programa, lingua))
     extras = [contrato.aviso(0, aviso_alvo, "aproximado")] if aviso_alvo else []
     if circuito and "eletrica" not in motor.RECURSOS:
         extras.append(contrato.aviso(0, "o motor %s não usa o circuito (só o gemeo)" % motor.NOME, "circuito"))
@@ -110,7 +116,7 @@ def cmd_rodar(a):
     fer.esperar_memoria(400, diga=lambda m: print(m, file=sys.stderr))
     try:
         eventos, resultados, codigo = rodar_um(placa, programa, lingua, motor, rot,
-                                               a.tempo or rot["tempo"] or TEMPO_PADRAO, circuito, a.v)
+                                               tempo_da_rodada(a.tempo, rot), circuito, a.v)
     except ValueError as e:
         return erro(str(e), contrato.USO)
     titulo = "%s · %s · %s · motor %s" % (placa.nome, programa.name, lingua, motor.NOME)
@@ -194,7 +200,7 @@ def testar_um(ex, rot, placa, lingua, m, a):
         return "pulado (%s: sem %s)" % (m.NOME, ", ".join(falta)), "", ""
     fer.esperar_memoria(400, diga=diga)
     try:
-        eventos, resultados, codigo = rodar_um(placa, ex, lingua, m, rot, rot["tempo"] or TEMPO_PADRAO)
+        eventos, resultados, codigo = rodar_um(placa, ex, lingua, m, rot, tempo_da_rodada(None, rot))
     except ValueError as e:
         return "FALHA (%s)" % e, "", ""
     fim = eventos[-1]

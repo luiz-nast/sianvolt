@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import unittest
 
-from apoio import LED, PILHA, RAIZ, RESISTOR, CHAVE, peca
+from apoio import LED, PILHA, RAIZ, RESISTOR, CHAVE, apagar, peca
 import circuito
 from test_circuito import LDR, MCU, mcu, sortear_com_esp32
 
@@ -17,6 +17,34 @@ def js_do_app():
     """o pedaço do index.html com o simulador (de 'const GMIN' até antes de 'const mA')"""
     html = (RAIZ / "bancada" / "index.html").read_text()
     return html[html.index("const GMIN"):html.index("const mA =")]
+
+
+def funcao_do_app(nome):
+    """a definição de uma função do index.html que fica fora do trecho do simulador (as do painel do ▶ Ligar), pelo nome:
+    'function nome(' até o '}' sozinho na linha (ou a linha só, se ela fecha as chaves), ou 'const nome =' com as
+    linhas de recuo que continuam ela"""
+    html = (RAIZ / "bancada" / "index.html").read_text()
+    i = html.find(f"\nfunction {nome}(")
+    if i < 0:
+        i = html.index(f"\nconst {nome} =")
+    linhas = html[i + 1:].split("\n")
+    if linhas[0].startswith("function") and linhas[0].count("{") != linhas[0].count("}"):
+        fim = linhas.index("}") + 1
+    else:
+        fim = 1
+        while linhas[fim].startswith(" "):
+            fim += 1
+    return "\n".join(linhas[:fim]) + "\n"
+
+
+# o painel do ▶ Ligar com o cérebro: o papel de cada GPIO, o estado dos pinos e a faixa do LDR nos cantos (cópias em JS
+# da etapa 4: testar.papel_dos_pinos, a base do liga_com_esp32 e o testar.faixa_do_ldr)
+PAINEL = ("porModelo", "modeloDaPeca", "pinosDoCerebro", "estadoDosPinos", "ajustesDoSimular", "simLigado", "ouNada", "cantosDoLdr")
+
+
+def js_do_painel():
+    """as funções do painel, pra ir depois do trecho do simulador (o no_node já põe ele)"""
+    return "\n".join(funcao_do_app(n) for n in PAINEL)
 
 
 def sortear(rnd):
@@ -204,6 +232,86 @@ console.log(JSON.stringify([entrada.pinos.map(([m, estado, vdd, aj]) => tenta(()
         self.assertEqual(r.returncode, 0, r.stderr[-1000:])
         for i, b_js in zip(correntes, json.loads(r.stdout)):
             self.assertAlmostEqual(blocos.brilho_da_corrente(led, i), b_js, places=9, msg=str(i))
+
+
+@unittest.skipUnless(NODE, "precisa do node (brew install node)")
+class PainelIgualAEtapa4(unittest.TestCase):
+    """o painel do ▶ Ligar refaz em JS três contas da etapa 4; um desvio passaria calado (o botão parecendo funcionar no
+    painel e não na placa, ou o número do LDR diferente do da etapa 4)"""
+
+    def test_papel_e_estado_dos_pinos_sorteados(self):
+        """1500 circuitos sorteados com o ESP32 (GPIO34 só de entrada, LED, botão, LDR, piezo, capacitor, resistores):
+        o papel e o ramo de cada GPIO do pinosDoCerebro são os do testar.papel_dos_pinos, e o estadoDosPinos liga os
+        mesmos pinos da etapa 4 (a saída do painel começa em 0; a da etapa 4, em 1)"""
+        import testar
+        rnd = random.Random(11)
+        so = [f"GPIO{n}" for n in range(34, 40)]
+        casos = []
+        for _ in range(1500):
+            m, *_ = sortear_com_esp32(rnd)
+            m["pecas"][0]["eletrica"] = {**MCU, "so_entrada": so}
+            casos.append(m)
+        js = no_node(funcao_do_app("pinosDoCerebro") + funcao_do_app("estadoDosPinos") + """
+const S = { ajustes: { pinos: {} } };
+console.log(JSON.stringify(entrada.map(m => { const c = pinosDoCerebro(m);
+  return [Object.fromEntries(c.pinos.map(g => [g.nome, [g.papel, [...g.ramo].sort()]])), estadoDosPinos(c)]; })));""", casos)
+        vistos = {}
+        for k, (m, (papeis_js, estado_js)) in enumerate(zip(casos, js)):
+            u = m["pecas"][0]
+            papeis = testar.papel_dos_pinos(m, u)
+            self.assertEqual(papeis_js, {n: [p, sorted(ramo)] for n, (p, ramo, _) in papeis.items()}, f"caso {k}")
+            base = {n: 1 if p == "saida" else "pullup" for n, (p, _, _) in papeis.items()   # o liga_com_esp32
+                    if n not in so and p in ("saida", "pullup", "pullup_fora")}
+            self.assertEqual({n: 1 if v == 0 else v for n, v in estado_js.items()}, base, f"caso {k}")
+            for n, (p, _, _) in papeis.items():
+                vistos[(p, n in so)] = vistos.get((p, n in so), 0) + 1
+        # o sorteio passou pelos papéis todos, e pelo pino só de entrada como saída e como botão (o que o painel não liga)
+        for papel in ("saida", "pullup", "pullup_fora", "pulldown_fora", "analogica", "energia", None):
+            self.assertGreater(vistos.get((papel, False), 0) + vistos.get((papel, True), 0), 10, papel)
+        self.assertGreater(vistos.get(("saida", True), 0), 10)
+        self.assertGreater(vistos.get(("pullup", True), 0), 10)
+
+    def test_piezo_e_capacitor_no_pino_sao_saida(self):
+        """a placa da Largada: o apito (piezo atrás de um resistor) e o capacitor colado no pino fazem dele uma saída, com
+        o 0/1 no painel; o LDR no GPIO34 é analógico e fica solto"""
+        import testar
+        from test_testar import BOA, LDR as PLACA_LDR, etapa4
+        textos = [BOA + "peca R3 resistor_axial 60 50 1k\npeca BZ1 C128650 70 50\nliga U1.9 R3.1\nliga R3.2 BZ1.1\nliga BZ1.2 GND\n",
+                  PLACA_LDR, BOA]
+        modelos, py = [], []
+        for t in textos:
+            ctx, _ = etapa4(t, ["C128650", "C10081"])
+            apagar(ctx["pasta"])   # o apagar com trava: só o mkdtemp da cópia
+            u = next(p for p in ctx["modelo"]["pecas"] if p["ref"] == "U1")
+            modelos.append(ctx["modelo"])
+            py.append({k: v[0] for k, v in testar.papel_dos_pinos(ctx["modelo"], u).items()})
+        self.assertIn("saida", py[0].values())
+        js = no_node(funcao_do_app("pinosDoCerebro") + """
+console.log(JSON.stringify(entrada.map(m => Object.fromEntries(pinosDoCerebro(m).pinos.map(g => [g.nome, g.papel])))));""", modelos)
+        self.assertEqual(js, py)
+
+    def test_faixa_do_ldr_igual_a_etapa_4(self):
+        """o painel diz 'de X a Y V nos cantos do LDR e do 3V3': os mesmos números do testar.faixa_do_ldr, no escuro e em
+        1, 10 e 100 lux, com o resistor do divisor de 10k, 22k e 47k"""
+        import testar
+        from test_testar import LDR as PLACA_LDR, etapa4
+        for r in ("10k", "22k", "47k"):
+            ctx, det = etapa4(PLACA_LDR.replace("resistor_axial 64 54 22k", f"resistor_axial 64 54 {r}"), ["C10081"])
+            apagar(ctx["pasta"])   # o apagar com trava: só o mkdtemp da cópia
+            self.assertIsInstance(det, str, det)
+            info = ctx["sim"]["esp32"]
+            self.assertTrue(info["eletrica"].get("vdd_min") and info["eletrica"].get("vdd_max"), "o DevKit tem a faixa do 3V3")
+            luxes = [0, 1, 10, 100]
+            js = no_node(js_do_painel() + """
+const S = { ajustes: { pinos: {}, lux: {}, pilha: {}, resistor: {}, chave: {}, piezo: {} } };
+const m = entrada.modelo, c = pinosDoCerebro(m), g = c.pinos.find(x => x.papel === 'analogica');
+console.log(JSON.stringify(entrada.luxes.map(lux => { S.ajustes.lux = { LDR1: lux }; return cantosDoLdr(m, c, g, ['LDR1']); })));""",
+                         {"modelo": ctx["modelo"], "luxes": luxes})
+            for lux, painel in zip(luxes, js):
+                de, ate = testar.faixa_do_ldr(ctx["modelo"], info, "LDR1", lux)
+                self.assertAlmostEqual(painel["de"], de, delta=1e-9, msg=(r, lux))
+                self.assertAlmostEqual(painel["ate"], ate, delta=1e-9, msg=(r, lux))
+                self.assertTrue(painel["com3v3"], (r, lux))
 
 
 if __name__ == "__main__":

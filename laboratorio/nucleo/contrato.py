@@ -114,6 +114,8 @@ class Pedido:
     circuito: Path | None = None   # placa.txt do Sianvolt (só o gêmeo usa)
     detalhe: bool = False       # -v
     limite_pc_s: float = 0.0    # 0 = padrão: 15 + 3 x tempo em s
+    nomes: dict | None = None   # pino físico -> [nomes] que a linha do tempo mostra (preparar.nomes_dos_pinos: o
+                                # pinos.py do programa, os apelidos se ele usa o placa.py); None = os apelidos
 
     def __post_init__(self):
         if not self.limite_pc_s:
@@ -222,13 +224,22 @@ def executar(motor, pedido):
                                      _s(final["t_ms"]), final["estado"]), "roteiro"))
         eventos = roteiro + eventos   # no mesmo instante, o de fora vem antes (causa antes do efeito)
     eventos.sort(key=lambda e: e["t_ms"])
-    eventos = _conferir_entradas(eventos, placa)
+    nomes_do = nomes_dos_pinos(pedido)
+    eventos = _conferir_entradas(eventos, placa, nomes_do)
     eventos = _conferir_baud(eventos, motor.NOME)
     for ev in eventos:
-        nomes = placa.apelidos_do(ev["pino"]) if "pino" in ev else []
+        nomes = nomes_do(ev["pino"]) if "pino" in ev else []
         if nomes:
             ev["nome"] = "/".join(nomes)
     return eventos + [final]
+
+
+def nomes_dos_pinos(pedido):
+    """-> função pino físico -> [nomes] da linha do tempo: os do Pedido (o que o programa usa) ou os apelidos da
+    placa, quando quem montou o Pedido não disse"""
+    if pedido.nomes is None:
+        return pedido.placa.apelidos_do
+    return lambda pino: list(pedido.nomes.get(pino, ()))
 
 
 def _s(t_ms):
@@ -239,10 +250,12 @@ def _n(x):
     return ("%g" % x).replace(".", ",")
 
 
-def _conferir_entradas(eventos, placa):
+def _conferir_entradas(eventos, placa, nomes_do=None):
     """o que o roteiro faz e na placa de verdade daria problema, igual pra todo motor (cada motor resolve de um
     jeito diferente, então o laboratório avisa): forçar um pino que o programa usa como saída (curto) e pôr
-    mais tensão num pino do que a placa aguenta. -> eventos com os avisos no lugar certo"""
+    mais tensão num pino do que a placa aguenta. nomes_do: pino -> nomes (padrão: os apelidos da placa).
+    -> eventos com os avisos no lugar certo"""
+    nomes_do = nomes_do or placa.apelidos_do
     saida, modo, avisados, novos = {}, {}, set(), []
     for ev in eventos:
         p = ev.get("pino")
@@ -252,7 +265,7 @@ def _conferir_entradas(eventos, placa):
             saida[p] = True
         if ev.get("origem") != "roteiro":
             continue
-        nomes = placa.apelidos_do(p)
+        nomes = nomes_do(p)
         nome = "%s (%s)" % (p, "/".join(nomes)) if nomes else p
         if modo.get(p) in ("saida", "pwm") or (saida.get(p) and modo.get(p) not in ("entrada", "pullup", "pulldown",
                                                                                      "adc")):

@@ -182,6 +182,13 @@ class ContaComOCerebro(unittest.TestCase):
         self.assertGreater(c["pior"]["i"], c["faixa"]["ate"])
         self.assertIn("i_pino", c["fontes"])
 
+    def test_pior_caso_do_led_com_o_vf_minimo(self):
+        """o pior caso do LED é o 3V3 no máximo E o LED que menos segura (o vf mínimo), e não o vf típico"""
+        led = eletrica("C779439")
+        c = blocos.conta_do_led(DEVKIT, led, 0.5)
+        resto = c["padrao"] + led["r_s"] + DEVKIT["r_pino"]
+        self.assertAlmostEqual(c["pior"]["i"], (DEVKIT["vdd_max"] - (led["vf_min"] - led["r_s"] * led["i_teste"])) / resto)
+
     def test_verde_forte_e_impossivel(self):
         c = blocos.conta_do_led(DEVKIT, eletrica("C779443"), 1.0)
         self.assertTrue(c["impossivel"])
@@ -282,6 +289,13 @@ class ContaComOCerebro(unittest.TestCase):
         c = blocos.conta_do_piezo(piezo, 220, DEVKIT)
         self.assertEqual((c["bate"], c["padrao"]), (False, 1000), "a Murata pede de 1 a 2 kΩ")
         self.assertNotIn("bate", blocos.conta_do_piezo(piezo, None, DEVKIT), "sem resistor no carrinho não tem o que bater")
+
+    def test_piezo_no_pior_caso_com_o_3v3_no_maximo(self):
+        # 136 Ω: 3,3 / 166 = 19,9 mA no 3V3 do meio, mas 3,399 / 166 = 20,5 mA no pior caso (passa da força do pino)
+        c = blocos.conta_do_piezo(eletrica("C128650"), 136, DEVKIT)
+        self.assertAlmostEqual(c["pior"]["i"], DEVKIT["vdd_max"] / (136 + DEVKIT["r_pino"]))
+        self.assertEqual(c["pior"]["v"], DEVKIT["vdd_max"])
+        self.assertTrue(c["passa_do_pino"])
 
     def test_resistor_do_botao(self):
         c = blocos.conta_do_botao(1000, DEVKIT, "GPIO14")

@@ -39,10 +39,12 @@ DevKit de outra loja só com o tipo certo: a Usinainfo e a Eletrogate vendem Dev
 ## Importar a escolhida
 
 ```
-python3 ferramenta/loja.py importar C779439 led placas/lanterna
+python3 ferramenta/loja.py importar C779439 led placas/<nome>
 ```
 
 ou `blocos.escolher(pasta, ref, codigo, quem="Luiz", *, atualizar_catalogo=True)`, que também grava o `projeto.json` e troca o tipo no `placa.txt` quando ele já tem a linha `peca` daquele REF (sem ela, `na_placa: False`: a peça fica no carrinho e entra no `placa.txt` quando o Claude desenhar a placa; nunca escreva a linha antes do carrinho). O import pega o desenho oficial (pads, furos, serigrafia) do EasyEDA e a foto e o pdf da LCSC. Essas coisas ficam só na máquina (`placas/<nome>/pecas/` e `~/.cache/sianvolt/`), e a peça entra (ou se atualiza) na lista.
+
+O `<nome>` do `importar` é de uma placa que já existe (com `placa.txt`). O `importar` grava a peça, com o preço e o estoque que leu na loja (a busca fica guardada por um dia), no `ferramenta/catalogo/<categoria>.json`, que é do git: confira o `git status` depois.
 
 **`atualizar_catalogo=False`** (só pelo nome): nada é gravado em `ferramenta/catalogo/`. A peça sai do `conferido` que já existe no catálogo e vai só pro `pecas/C*.json` da placa. Use quando outra pessoa (ou outro agente) está mexendo no catálogo, ou pra testar uma troca sem mexer na lista. O `quem` é sempre um nome: `escolher(p, ref, codigo, False)` é erro.
 

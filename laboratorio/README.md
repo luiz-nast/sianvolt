@@ -93,8 +93,8 @@ Um **motor** é o jeito de rodar o programa. Cada placa tem os seus, em ordem de
 
 | Motor | Placas e linguagem | O que é de verdade | O que é de mentira | 3 s de placa levam | RAM |
 |---|---|---|---|---|---|
-| `gemeo` | esp32, c3, s3, c6 · MicroPython | a linguagem (MicroPython 1.29 compilado pro PC), as regras de pino do datasheet (só-entrada, boot, ADC2 com Wi-Fi), os timers que existem (4 no ESP32 e no S3, 2 no C3 e no C6), a serial nos dois sentidos, e com `--circuito` a corrente do `ferramenta/circuito.py` | o chip, o tempo (relógio virtual: o código Python não gasta tempo, só sleep, pino, relógio e serial), o Wi-Fi (faz de conta), o ADC (sem ruído), a memória (o heap tem o tamanho da placa: ESP32 e C3 medidos no qemu, S3 e C6 estimados; mas no PC cada objeto ocupa até 2x mais e o heap é um bloco só) | 0,01 s | 3 MB |
-| `qemu` | esp32, c3 · MicroPython (c6 roda como C3: sem o rádio, sem o núcleo LP, e o GPIO18/19 do C6 vira o 10/11 do C3) | o MicroPython oficial no chip emulado: CPU, memória, timers, UART; o PWM pelo LEDC emulado só no ESP32 | no C3 o PWM (o QEMU não emula o LEDC do C3: o laboratório remonta o duty das escritas nos registradores), ler pino (o GPIO do QEMU só tem o strap: entrada e pull-up vêm do roteiro), o ADC (faz de conta), Wi-Fi e Bluetooth (não existem); relógio do PC, não é preciso por ciclo; a serial não tem limite de baud (o laboratório avisa quando passa de 115200); o S3 não sobe (trava no boot, PSRAM) | 4,5 s (C3), 7 s (ESP32) | 48 MB (C3), 270 MB (ESP32) |
+| `gemeo` | esp32, c3, s3, c6 · MicroPython | a linguagem (MicroPython 1.29 compilado pro PC), as regras de pino do datasheet (só-entrada, boot, ADC2 com Wi-Fi), os timers que existem (4 no ESP32 e no S3, 2 no C3 e no C6), a serial nos dois sentidos, e com `--circuito` a corrente do `ferramenta/circuito.py` | o chip, o tempo (relógio virtual: o código Python não gasta tempo, só sleep, pino, relógio e serial), o Wi-Fi (faz de conta), o ADC (sem ruído), o float (de 64 bits, e na placa é de 32: abaixo), a memória (o heap tem o tamanho da placa: ESP32 e C3 medidos no qemu, S3 e C6 estimados; mas no PC cada objeto ocupa até 2x mais e o heap é um bloco só) | 0,01 s | 3 MB |
+| `qemu` | esp32, c3 · MicroPython (c6 roda como C3: sem o rádio, sem o núcleo LP, e o GPIO18/19 do C6 vira o 10/11 do C3) | o MicroPython oficial no chip emulado: CPU, memória, timers, UART, o float de 32 bits; o PWM pelo LEDC emulado só no ESP32 | no C3 o PWM (o QEMU não emula o LEDC do C3: o laboratório remonta o duty das escritas nos registradores), ler pino (o GPIO do QEMU só tem o strap: entrada e pull-up vêm do roteiro), o ADC (faz de conta), Wi-Fi e Bluetooth (não existem); relógio do PC, não é preciso por ciclo; a serial não tem limite de baud (o laboratório avisa quando passa de 115200); o S3 não sobe (trava no boot, PSRAM) | 4,5 s (C3), 7 s (ESP32) | 48 MB (C3), 270 MB (ESP32) |
 | `simavr` | nano · Arduino | o chip: o `.elf` do arduino-cli rodando no ATmega328P instrução por instrução; PWM lido dos timers | a tensão nos pinos; pino solto lê 0 (na placa fica no ar); o ADC arredonda pra baixo | ~1 s | 3 MB |
 | `nativo` | as 4 ESP e o nano · Arduino | o seu código C++ compilado pro PC (g++ + EpoxyDuino), os números do Arduino de cada placa (ADC de 12 bits a 3,3 V nas ESP, 10 bits a 5 V no Nano, o PWM do `analogWrite`) | o chip, o tempo (relógio virtual), o `int` (32 bits; no Nano é 16!), o Wi-Fi (`WiFi.h` "conecta" em 1,5 s); sem FreeRTOS, registrador nem biblioteca de fora | 0,2 s (com cache) | 4 MB |
 | `avr8js` | nano · Arduino (segundo motor, pra conferir o simavr) | o mesmo `.elf` no ATmega328P emulado em JavaScript (precisa de node) | o pull-up fomos nós que pusemos; o resto como no simavr | 2 s | 80 MB |
@@ -104,6 +104,27 @@ Fontes: [QEMU da Espressif](https://github.com/espressif/esp-toolchain-docs/blob
 (o que ele emula: a linha "LEDC" da tabela tem ✅ só no ESP32), [simavr](https://github.com/buserror/simavr), [EpoxyDuino](https://github.com/bxparks/EpoxyDuino),
 [avr8js](https://github.com/wokwi/avr8js), [rp2040js](https://github.com/wokwi/rp2040js). Os tempos e a RAM
 foram medidos aqui (PC de 8 núcleos) com o `pisca` (3 s de placa) no `lab.py testar`.
+
+**Float: o gêmeo conta com mais casas que a placa.** O MicroPython do PC usa float de 64 bits (`MICROPY_FLOAT_IMPL_DOUBLE` em `ports/unix/variants/mpconfigvariant_common.h`) e o das ESP, de 32 bits (`MICROPY_FLOAT_IMPL_FLOAT` em `ports/esp32/mpconfigport.h`, o mesmo pro ESP32, o C3, o S3 e o C6), no [código do MicroPython v1.29.0](https://github.com/micropython/micropython/blob/v1.29.0/ports/esp32/mpconfigport.h). O mesmo `main.py`, rodado em 2026-10-26 no `gemeo` e no `qemu` (do ESP32 e do C3):
+
+| Conta | `gemeo` | `qemu` (como na placa) |
+|---|---|---|
+| `print(0.1 + 0.2)` | `0.30000000000000004` | `0.3` |
+| `print(16777217.0)` | `16777217.0` | `16777216.0` (2²⁴ + 1 não cabe no float de 32 bits) |
+| `40 * 1.25` onze vezes (o freio do Dado: passou de 400 ms, ele para) | `465.66128730773926` | `465.6613` |
+
+Nas mesmas contas do Dado (11 faces) e da Luz noturna (duty 23592 no fim da subida) os dois motores deram igual, e a Largada não faz conta com float. Um programa que imprime float na serial, compara float com `==` ou soma tempo em float pode sair diferente na placa: confira no `qemu`, ou faça a conta em inteiros (`time.ticks_ms()`, mV, duty).
+
+**O que a placa recusa, o gêmeo recusa igual.** O `time` e o `PWM` do gêmeo seguem as regras do MicroPython 1.29
+das ESP ([`extmod/modtime.c`](https://github.com/micropython/micropython/blob/v1.29.0/extmod/modtime.c) e
+[`ports/esp32/machine_pwm.c`](https://github.com/micropython/micropython/blob/v1.29.0/ports/esp32/machine_pwm.c)),
+com as mesmas mensagens: `sleep_ms`, `sleep_us`, `ticks_add` e os números do PWM só aceitam int
+(`time.sleep_ms(40 * 1.25)` dá `TypeError: can't convert float to int`; o certo é `time.sleep_ms(int(espera))`);
+`duty_u16` vai de 0 a 65535, `duty` de 0 a 1023, `duty_ns` até o período e `freq` de 1 Hz a 40 MHz (fora disso,
+`ValueError`, e não um número cortado calado); `ticks_add` com o delta de 2²⁹ ou mais, pra frente ou pra trás, dá
+`OverflowError`; e o `duty_ns` dentro do `PWM(...)` novo dá `RuntimeError: PWM is inactive` (no 1.29 ele só
+funciona depois, com `pwm.duty_ns(...)`). O `ensaios/recusa` confere tudo isso, e o `testa.py` compara as linhas
+dele com o `qemu`, que roda o firmware oficial.
 
 **Nenhum motor testa**: Wi-Fi e Bluetooth de verdade, ADC de verdade (o ruído; no ESP32 clássico, "±6%
 differences in measured results between chips", segundo o
@@ -139,6 +160,8 @@ python3 laboratorio/lab.py instalar           # gemeo, qemu, simavr e nativo; o 
 python3 laboratorio/lab.py instalar nativo    # só um
 ```
 
+Pra experimentar sem compilar nada: `LAB_GEMEO=cpython python3 laboratorio/lab.py testar --rapido` roda o `gemeo` no Python do PC (o CPython), sem o MicroPython 1.29. É menos fiel: o CPython aceita coisa que o MicroPython recusa, e a linha do tempo avisa isso. `LAB_GEMEO=micropython` faz o contrário: exige o MicroPython do PC (sem ele, código 5). Sem a variável, o `gemeo` usa o MicroPython quando ele está instalado e, sem ele, fica "falta" (o `testar` pula). A etapa 8 do Sianvolt não usa o atalho: sem o MicroPython do PC, ela pula.
+
 | Motor | O que baixa | De onde | Ocupa (medido) | Tempo (medido) |
 |---|---|---|---|---|
 | `gemeo` | MicroPython v1.29.0 (fonte, [MIT](https://github.com/micropython/micropython/blob/master/LICENSE)), compila o port unix com `make -j2` e apaga a fonte | GitHub | 1,3 MB (mais ~176 MB de fonte durante a compilação) | ~68 s: clone 24,5 s, submódulos 21,9 s, mpy-cross 7,7 s, port unix 13,9 s |
@@ -172,8 +195,8 @@ python3 laboratorio/lab.py rodar esp32 exemplos/pisca --circuito laboratorio/mot
 O programa é um `.py`, um `.ino` ou uma pasta; ele e o `--circuito` são procurados a partir da pasta atual e,
 se não estiverem lá, a partir de `laboratorio/`. Sem `--motor`, usa o primeiro motor pronto da placa (de
 preferência um que tenha tudo que o roteiro `precisa`); sem `--lingua`, a primeira linguagem da placa que a
-pasta tiver. Opções: `--tempo s` (segundos de placa, de 0,001 a 600; sem ele vale o `tempo` do roteiro e,
-sem roteiro, 5 s), `--roteiro x.json`, `--json` (um evento por linha), `-v` (mostra tudo; sem ele, linhas do
+pasta tiver. Opções: `--tempo s` (segundos de placa, de 0,001 a 600; sem ele vale o `tempo` do roteiro, que
+tem a mesma faixa, e, sem roteiro, 5 s), `--roteiro x.json`, `--json` (um evento por linha), `-v` (mostra tudo; sem ele, linhas do
 tempo compridas perdem o meio, mas os avisos e erros do meio aparecem). A saída é a linha do tempo:
 
 ```
@@ -193,13 +216,19 @@ Código de saída: 0 ok, 1 erro no programa, 2 uso errado, 3 travou, 4 conferên
   pass`). Só os motores de relógio virtual percebem isso: o `gemeo` depois de 3 s de PC sem notícia do
   programa, o `nativo` depois de 3 s de CPU com o relógio parado. No `qemu`, `simavr`, `avr8js` e `rp2040js` o
   mesmo programa roda até o fim do `--tempo` e sai 0, como a placa faria (ela não "sabe" que travou).
-  Também é 3: `machine.reset()`/`ESP.restart()`, o WDT estourar e o emulador passar do limite de PC.
+  Também é 3: `machine.reset()`/`ESP.restart()`, o WDT estourar e o emulador passar do limite de PC. No `qemu`
+  o `--tempo` conta do começo do `main.py` (carregar os módulos leva segundos e não conta); se o `main.py` nem
+  começa até o limite de PC (15 s mais 3 vezes o `--tempo`), a rodada fica em 0 s de placa, as entradas do
+  roteiro depois do 0 não acontecem, e sai 3.
 
 **Pinos sem número.** Os exemplos nunca escrevem número de pino: usam `from placa import *` (MicroPython)
 ou `#include "placa.h"` (Arduino), que o laboratório escreve pra cada placa (`PINO_LED`, `PINO_BOTAO`,
 `PINO_POT`, `PINO_PWM`, `PINO_VERMELHO`, `PINO_AMARELO`, `PINO_VERDE`, `ADC_MAX`, `VREF_MV`, `NOME`).
 O mesmo programa roda nas 6 placas. No `placa.h`, `ADC_MAX` é o maior valor do `analogRead()` do core: 4095
 nas ESP, 1023 no Nano e no Pico (o arduino-pico começa em 10 bits até alguém chamar `analogReadResolution(12)`).
+Na linha do tempo, o nome entre parênteses é o que o programa usa: o apelido do `placa.py`/`placa.h` quando ele
+importa o placa (`GPIO4 (BOTAO)`), o nome do `pinos.py` da pasta quando tem (as placas do Sianvolt: o LED G do
+dado é `GPIO4 (D7)`), e nenhum quando o programa não usa nenhum dos dois.
 
 ### Roteiro: o que entra e o que conferir
 
@@ -234,6 +263,7 @@ Como as conferências contam:
   Entrada do roteiro depois do fim não acontece, e o laboratório avisa.
 - `trocas`: o pino começa em 0 e cada mudança de nível vinda do programa conta 1. Um LED que só acendeu (0 → 1)
   tem 1 troca; piscando 3 vezes (0 → 1 → 0, três vezes) são 6. Escrever o mesmo nível de novo não conta.
+  `min` e `max` são números (os dois opcionais, e o `min` até o `max`); `"min": "2"` é uso errado (código 2).
 - `serial` com `ate`: alguma linha até aquele instante contém o texto; quando falha, mostra a última linha
   que saiu **até lá**. Com `desde`, a linha tem que sair **depois** daquele instante (no mesmo instante não
   vale): `{"serial": "clareou", "desde": 15, "ate": 15.5}` só passa com um "clareou" novo, e não com um que já
@@ -294,7 +324,9 @@ roteiro), a serial e uma régua de tempo pra arrastar, ir e voltar (setas, Home/
 - Testes: `python3 laboratorio/nucleo/teste_nucleo.py`, `python3 laboratorio/motores/gemeo/ensaios/testa.py`,
   `python3 laboratorio/motores/nativo/teste_nativo.py`, `python3 laboratorio/motores/qemu/teste_qemu.py`, e o
   `lab.py testar`. O `testar` diz no fim o que ficou sem testar (pulado) e o comando que instala; se tudo foi
-  pulado, sai com 5.
+  pulado, sai com 5. No clone limpo (sem `.ferramentas`), o `testa.py` pula o modo micropython e o `teste_nativo`
+  pula a parte 2, os dois dizendo o comando que instala; com o `qemu` instalado, o `testa.py` também roda o
+  `ensaios/recusa` no chip emulado e compara.
 - **Vários Claudes ao mesmo tempo**: pode. Cada rodada pega uma vaga só dela em `build/<placa>/<motor>/<nome>`
   (ou `<nome>~2`, `<nome>~3`... se outra rodada estiver usando a mesma, com uma trava `flock` que solta
   sozinha quando o processo acaba). Programas diferentes com o mesmo nome (`codigo`) também não se pisam.

@@ -2,13 +2,21 @@
 
 Os exemplos fazem 'from placa import *' ou '#include "placa.h"' e nunca escrevem número de pino.
 A pasta do programa (exemplos/ ou a do Luiz) nunca é alterada: tudo vai pra build/.
+nomes_dos_pinos diz o nome de cada pino na linha do tempo: o do pinos.py (placas do Sianvolt) ou o apelido do
+placa.py, só quando o programa usa um deles.
 """
+import ast
+import re
 import shutil
 from pathlib import Path
 
 from .placas import APELIDOS
 
 EXTENSAO = {"micropython": ".py", "arduino": ".ino"}
+FONTES = {"micropython": (".py",), "arduino": (".ino", ".h", ".hpp", ".c", ".cpp")}
+USA_PLACA = {"micropython": re.compile(r"^[ \t]*(?:from[ \t]+placa[ \t]+import\b|import[ \t]+(?:[\w.]+[ \t]*,[ \t]*)*"
+                                       r"placa\b)", re.M),
+             "arduino": re.compile(r'^[ \t]*#[ \t]*include[ \t]*[<"]placa\.h[>"]', re.M)}
 
 
 def linguagens_de(programa):
@@ -50,6 +58,49 @@ def placa_h(placa):
     linhas += ["#define ADC_MAX %d   // o maior valor do analogRead() (sem analogReadResolution)"
                % (placa.adc_max_arduino or placa.adc_max), "#define VREF_MV %d" % placa.vref_mv]
     return "\n".join(linhas) + "\n"
+
+
+def _fontes(programa, linguagem):
+    """os arquivos de código que vão pra rodada (os mesmos que o preparar copia), sem o placa.py/placa.h"""
+    programa = Path(programa)
+    if programa.is_file():
+        return [programa]
+    achados = [a for a in sorted(programa.iterdir()) if a.is_file()]
+    if linguagem == "arduino" and (programa / "src").is_dir():
+        achados += sorted(a for a in (programa / "src").rglob("*") if a.is_file())
+    return [a for a in achados if a.suffix in FONTES[linguagem] and a.name not in ("placa.py", "placa.h")]
+
+
+def _constantes(arquivo):
+    """NOME = número, no nível de cima de um .py (o pinos.py que o Sianvolt gera), sem rodar o arquivo"""
+    try:
+        arvore = ast.parse(Path(arquivo).read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, ValueError):
+        return []
+    return [(no.targets[0].id, no.value.value) for no in arvore.body
+            if isinstance(no, ast.Assign) and len(no.targets) == 1 and isinstance(no.targets[0], ast.Name)
+            and isinstance(no.value, ast.Constant) and type(no.value.value) is int]
+
+
+def nomes_dos_pinos(placa, programa, linguagem):
+    """o nome que a linha do tempo põe junto de cada pino físico -> {pino: [nomes]}. Vem do que o programa usa: o
+    pinos.py da pasta (o Sianvolt gera do placa.txt: D7 = 4 -> 'GPIO4 (D7)') e, se ele importa o placa.py (ou
+    inclui o placa.h) do laboratório, os apelidos dele (LED, BOTAO...). Um programa que não usa nenhum dos dois fica
+    sem nome: o GPIO4 do dado é o LED G, e não o BOTAO dos exemplos"""
+    programa, nomes = Path(programa), {}
+    pinos_py = programa / "pinos.py"
+    if linguagem == "micropython" and programa.is_dir() and pinos_py.is_file():
+        for nome, n in _constantes(pinos_py):
+            p = placa.fisico(str(n), None)
+            if p and nome not in nomes.get(p, []):
+                nomes.setdefault(p, []).append(nome)
+    usa = USA_PLACA[linguagem]
+    if any(usa.search(a.read_text(encoding="utf-8", errors="replace")) for a in _fontes(programa, linguagem)):
+        for apelido in APELIDOS:
+            p = placa.apelidos[apelido]
+            if apelido not in nomes.get(p, []):
+                nomes.setdefault(p, []).append(apelido)
+    return nomes
 
 
 def preparar(placa, linguagem, programa, trabalho):

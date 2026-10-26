@@ -67,10 +67,14 @@ def _morre_junto():
 
 
 class Qemu:
-    """um QEMU rodando: serial e monitor em socket unix e o trace num FIFO, tudo dentro de 'pasta'"""
+    """um QEMU rodando: serial e monitor em socket unix e o trace num FIFO, tudo dentro de 'pasta'.
+    O endereço de um socket unix tem no máximo 107 bytes (sun_path); a pasta pode ser bem mais comprida (o
+    laboratório numa pasta funda). Por isso o QEMU roda DENTRO da pasta e cria os sockets pelo nome curto, e o
+    Python, quando o caminho inteiro não cabe, conecta pelo /proc/self/fd/<a pasta aberta>/<nome>, que é o mesmo
+    arquivo com um endereço curto. Nada sai da pasta (nem vai pro /tmp)."""
 
     def __init__(self, binario, maquina, flash, pasta, env=None, extra=()):
-        self.pasta = Path(pasta)
+        self.pasta = Path(pasta).resolve()
         self.pasta.mkdir(parents=True, exist_ok=True)
         self.sock_serial, self.sock_mon = self.pasta / "serial.sock", self.pasta / "monitor.sock"
         self.fifo = self.pasta / "trace.fifo"
@@ -78,22 +82,29 @@ class Qemu:
             p.unlink(missing_ok=True)
         os.mkfifo(self.fifo, 0o600)
         self.trace = os.open(self.fifo, os.O_RDONLY | os.O_NONBLOCK)   # antes do QEMU, senão ele trava no open
+        self.dir_fd = os.open(self.pasta, os.O_RDONLY | os.O_DIRECTORY)   # o endereço curto dos sockets
         cmd = [str(binario), "-machine", maquina, "-display", "none", "-nic", "none",
-               "-drive", "file=%s,if=mtd,format=raw" % flash,
-               "-serial", "unix:%s,server=on,wait=on" % self.sock_serial,
-               "-monitor", "unix:%s,server=on,wait=off" % self.sock_mon,
+               "-drive", "file=%s,if=mtd,format=raw" % Path(flash).resolve(),
+               "-serial", "unix:%s,server=on,wait=on" % self.sock_serial.name,      # relativo: o QEMU roda na pasta
+               "-monitor", "unix:%s,server=on,wait=off" % self.sock_mon.name,
                # liga o log de trace com um evento que nunca dispara; o de escrita só depois do boot
                # (no boot o SHA do bootloader faz ~500 mil escritas)
                "-trace", "esp_error_unhandled_command", "-msg", "timestamp=on", "-D", str(self.fifo)] + list(extra)
         self.erros = open(self.pasta / "qemu.err", "wb")
-        self.proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=self.erros,
-                                     env=env, preexec_fn=_morre_junto, start_new_session=True)
+        try:
+            self.proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=self.erros,
+                                         env=env, cwd=self.pasta, preexec_fn=_morre_junto, start_new_session=True)
+        except OSError:   # o binário não roda: solta o que já abriu
+            os.close(self.trace)
+            os.close(self.dir_fd)
+            self.erros.close()
+            raise
         self.serial = None
         limite = time.monotonic() + 10
         while self.serial is None:
             s = socket.socket(socket.AF_UNIX)
             try:
-                s.connect(str(self.sock_serial))
+                s.connect(self.endereco(self.sock_serial))
                 self.serial = Serial(s)
             except (FileNotFoundError, ConnectionRefusedError):
                 s.close()
@@ -101,6 +112,14 @@ class Qemu:
                     self.parar()
                     raise ErroQemu("o QEMU não subiu: " + self.texto_erros())
                 time.sleep(0.02)
+
+    def endereco(self, sock):
+        """o endereço pro connect: o caminho inteiro se ele cabe no socket unix (107 bytes), senão o mesmo arquivo
+        por /proc/self/fd/<pasta aberta>/<nome>"""
+        caminho = str(sock)
+        if len(os.fsencode(caminho)) <= 107:
+            return caminho
+        return "/proc/self/fd/%d/%s" % (self.dir_fd, Path(sock).name)
 
     def texto_erros(self):
         try:
@@ -114,7 +133,7 @@ class Qemu:
         try:
             with socket.socket(socket.AF_UNIX) as m:
                 m.settimeout(0.3)
-                m.connect(str(self.sock_mon))
+                m.connect(self.endereco(self.sock_mon))
                 m.sendall((comando + "\n").encode())
                 m.settimeout(0.005)
                 limite = time.monotonic() + (3 if ler else 0.05)
@@ -168,6 +187,9 @@ class Qemu:
         if self.trace is not None:
             os.close(self.trace)
             self.trace = None
+        if self.dir_fd is not None:
+            os.close(self.dir_fd)
+            self.dir_fd = None
         self.erros.close()
         for p in (self.sock_serial, self.sock_mon, self.fifo):
             p.unlink(missing_ok=True)

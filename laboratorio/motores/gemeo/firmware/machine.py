@@ -1,6 +1,6 @@
 # machine.py do gêmeo: a mesma cara do machine do MicroPython no ESP32/C3/S3/C6 (Pin, PWM, ADC, I2C, SoftI2C, Timer,
 # Signal, WDT, UART), mas quem responde é o motor do gêmeo. Roda igual no CPython e no MicroPython.
-from _ponte import rpc, registrar, dormir_ate
+from _ponte import rpc, registrar, dormir_ate, inteiro
 
 PWRON_RESET = 1
 HARD_RESET = 2
@@ -83,54 +83,115 @@ class Signal:
         self.value(0)
 
 
+_PWM_FREQ_MAX = 40000000   # check_freq_ranges(self, freq, 40000000) no machine_pwm.c
+
+
+def _faixa(ok, texto):
+    if not ok:
+        raise ValueError(texto)
+
+
 class PWM:
-    def __init__(self, dest, freq=None, duty=None, duty_u16=None, duty_ns=None, invert=False):
+    # As regras do MicroPython 1.29 nas ESP (ports/esp32/machine_pwm.c), com as mesmas mensagens: todo número é int
+    # (float dá TypeError "can't convert float to int"); freq de 1 Hz a 40 MHz, duty_u16 de 0 a 65535 (65535 é
+    # ligado direto), duty de 0 a 1023 e duty_ns até o período, senão ValueError. No init, -1 (ou um duty negativo)
+    # é "não mexe", e o duty_u16 ganha do duty_ns, que ganha do duty; sem freq, vale a do canal que o pino já tem
+    # ou 5 kHz. O duty_ns no PWM(...) novo dá RuntimeError "PWM is inactive" (o 1.29 confere com a freq de um canal
+    # que ainda não existe), e depois do deinit() todo método também.
+    def __init__(self, dest, freq=-1, duty=-1, duty_u16=-1, duty_ns=-1, invert=False):
         self._id = _gpio(dest)
-        self._freq = 5000
-        self._u16 = 32768
-        self._inv = invert
-        self.init(freq=freq, duty=duty, duty_u16=duty_u16, duty_ns=duty_ns, primeira=True)
+        self._freq = None                     # None = sem canal (antes do 1º init e depois do deinit)
+        self._escala, self._valor = None, 0   # o duty como foi pedido: "u16", "u10" ou "ns" (o machine_pwm.c
+        self._inv = False                     # guarda assim: o duty_ns muda de fração quando a freq muda)
+        self.init(freq=freq, duty=duty, duty_u16=duty_u16, duty_ns=duty_ns, invert=invert)
 
-    def init(self, freq=None, duty=None, duty_u16=None, duty_ns=None, invert=None, primeira=False):
-        if freq is not None:
-            self._freq = int(freq)
+    def _ativo(self):
+        if self._freq is None:
+            raise RuntimeError("PWM is inactive")
+
+    def _ns_max(self):   # duty_to_ns(MAX_16_DUTY): o período em ns
+        return (65536 * 1000000000 + self._freq * 32768) // (self._freq * 65536)
+
+    def _u16(self, freq=None):
+        """o duty em 16 bits (65535 = ligado direto) a partir da escala em que ele foi pedido"""
+        if self._escala == "ns":   # ns_to_duty
+            d = (self._valor * 65536 * (freq or self._freq) + 500000000) // 1000000000
+            return min(65535, 1 if self._valor > 0 and d == 0 else d)
+        if self._escala == "u10":   # duty << 6, e o 1023 vira ligado direto
+            return 65535 if self._valor == 1023 else self._valor << 6
+        return self._valor
+
+    def init(self, freq=-1, duty=-1, duty_u16=-1, duty_ns=-1, invert=None):
+        freq, duty, duty_u16, duty_ns = inteiro(freq), inteiro(duty), inteiro(duty_u16), inteiro(duty_ns)
+        if freq != -1:
+            _faixa(0 < freq <= _PWM_FREQ_MAX, "frequency must be from 1Hz to 40MHz")
+        if duty_u16 >= 0:
+            _faixa(duty_u16 <= 65535, "duty_u16 must be from 0 to 65536")
+            escala = ("u16", duty_u16)
+        elif duty_ns >= 0:
+            self._ativo()
+            _faixa(duty_ns <= self._ns_max(), "duty_ns must be from 0 to %d ns" % self._ns_max())
+            escala = ("ns", duty_ns)
+        elif duty >= 0:
+            _faixa(duty <= 1023, "duty must be from 0 to 1023")
+            escala = ("u10", duty)
+        else:
+            escala = (self._escala, self._valor) if self._escala else ("u16", 32768)   # PWM_DUTY: a metade
         if invert is not None:
-            self._inv = invert
-        if duty is not None:
-            self._u16 = int(duty) * 65535 // 1023
-        if duty_u16 is not None:
-            self._u16 = int(duty_u16)
-        if duty_ns is not None:
-            self._u16 = int(duty_ns) * 65535 * self._freq // 1000000000
-        rpc("pwm_init", self._id, self._freq, self._eletrico())
+            self._inv = bool(invert)
+        self._escala, self._valor = escala
+        nova = freq if freq != -1 else self._freq
+        self._freq = rpc("pwm_init", self._id, nova, self._eletrico(nova))   # sem freq: o motor diz qual ficou
 
-    def _eletrico(self):
-        return 65535 - self._u16 if self._inv else self._u16
+    def _eletrico(self, freq=None):
+        u = self._u16(freq)
+        return 65535 - u if self._inv else u
 
     def deinit(self):
         rpc("pwm_deinit", self._id)
+        self._freq, self._escala, self._valor, self._inv = None, None, 0, False
 
-    def freq(self, f=None):
-        if f is None:
+    def freq(self, *f):
+        if not f:
+            self._ativo()
             return self._freq
-        self._freq = int(f)
-        rpc("pwm_freq", self._id, self._freq)
+        f = inteiro(f[0])
+        self._ativo()
+        _faixa(0 < f <= _PWM_FREQ_MAX, "frequency must be from 1Hz to 40MHz")
+        mudou, self._freq = f != self._freq, f
+        rpc("pwm_freq", self._id, f)   # sempre, como antes: o custo no relógio do gêmeo fica o mesmo
+        if mudou and self._escala == "ns":   # o duty em ns é outra fração do período novo
+            rpc("pwm_duty", self._id, self._eletrico())
 
-    def duty_u16(self, d=None):
-        if d is None:
-            return self._u16
-        self._u16 = max(0, min(65535, int(d)))
+    def duty_u16(self, *d):
+        if not d:
+            self._ativo()
+            return self._u16()
+        d = inteiro(d[0])
+        _faixa(0 <= d <= 65535, "duty_u16 must be from 0 to 65536")
+        self._ativo()
+        self._escala, self._valor = "u16", d
         rpc("pwm_duty", self._id, self._eletrico())
 
-    def duty(self, d=None):
-        if d is None:
-            return self._u16 * 1023 // 65535
-        self.duty_u16(int(d) * 65535 // 1023)
+    def duty(self, *d):
+        if not d:
+            self._ativo()
+            return self._u16() >> 6
+        d = inteiro(d[0])
+        _faixa(0 <= d <= 1023, "duty must be from 0 to 1023")
+        self._ativo()
+        self._escala, self._valor = "u10", d
+        rpc("pwm_duty", self._id, self._eletrico())
 
-    def duty_ns(self, ns=None):
-        if ns is None:
-            return self._u16 * 1000000000 // (65535 * self._freq)
-        self.duty_u16(int(ns) * 65535 * self._freq // 1000000000)
+    def duty_ns(self, *ns):
+        if not ns:
+            self._ativo()
+            return (self._u16() * 1000000000 + self._freq * 32768) // (self._freq * 65536)   # duty_to_ns
+        ns = inteiro(ns[0])
+        self._ativo()
+        _faixa(0 <= ns <= self._ns_max(), "duty_ns must be from 0 to %d ns" % self._ns_max())
+        self._escala, self._valor = "ns", ns
+        rpc("pwm_duty", self._id, self._eletrico())
 
 
 class ADC:

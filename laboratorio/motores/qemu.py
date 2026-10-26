@@ -137,11 +137,9 @@ def instalar(ferramentas, diga=print):
 
 
 def _pasta_emulador(trabalho):
-    """onde ficam imagem, sockets e FIFO: trabalho/emu (socket unix aceita no máximo 107 caracteres)"""
-    pasta = Path(trabalho) / "emu"
-    if len(str(pasta / "monitor.sock")) > 100:
-        pasta = fer.temporaria() / ("qemu%d" % os.getpid())
-    return pasta
+    """onde ficam imagem, sockets e FIFO: trabalho/emu, a vaga só desta rodada. Numa pasta funda o caminho dos
+    sockets passa dos 107 bytes do socket unix: o esp32emu.Qemu conecta por um endereço curto (/proc/self/fd)"""
+    return Path(trabalho) / "emu"
 
 
 def _preludio(pedido, chip):
@@ -285,17 +283,19 @@ def _executa(q, pedido, chip, inicio, tmp105):
         if t0 is None:
             t0 = next((h for h, c, _, _ in pinos.marcas if c == 1), None)
             r["mono_t0"] = time.monotonic() - (agora - t0) if t0 else None
-        base = t0 or r["enviado"]
         if queda_ate is not None:
             if agora > queda_ate or b"Rebooting" in r["queda"]:
                 r["estado"] = "travou"
                 break
-        elif agora >= base + tempo_s:
-            r["estado"], r["hora_fim"] = "tempo", base + tempo_s
+        elif t0 is not None and agora >= t0 + tempo_s:   # o --tempo conta do começo do main.py, e não do envio:
+            r["estado"], r["hora_fim"] = "tempo", t0 + tempo_s   # carregar os módulos leva segundos no QEMU
             break
         if time.monotonic() > inicio + pedido.limite_pc_s:
-            r["estado"], r["problema"] = "travou", "passou do limite de %.0f s de PC" % pedido.limite_pc_s
-            r["hora_fim"] = agora
+            r["estado"], r["hora_fim"] = "travou", agora
+            r["problema"] = ("passou do limite de %.0f s de PC" % pedido.limite_pc_s if t0 is not None else
+                             "o main.py não começou em %.0f s de PC (o limite): o QEMU ainda carregava o programa e os "
+                             "módulos, ou travou antes (o limite é 15 s mais 3 vezes o --tempo; rode com um --tempo "
+                             "maior)" % pedido.limite_pc_s)
             break
         while t0 and acoes and agora >= t0 + acoes[0]["t_ms"] / 1000:
             e = acoes.pop(0)
@@ -354,6 +354,8 @@ def _executa(q, pedido, chip, inicio, tmp105):
             except BlockingIOError:
                 pass
     r["t0"] = t0 or next((h for h, c, _, _ in pinos.marcas if c == 1), None)
+    if r["t0"] and not t0 and r.get("problema", "").startswith("o main.py não começou"):   # a marca veio atrasada
+        r["problema"] = "passou do limite de %.0f s de PC" % pedido.limite_pc_s
     r["mono_fim"] = time.monotonic()
     return r
 
@@ -387,7 +389,9 @@ def _eventos(r, pedido):
         return round(max(0.0, (hora - base) * 1000), 3)
 
     marca_fim = next((h for h, c, _, _ in pinos.marcas if c == 2), None)
-    if r["estado"] == "tempo":
+    if not r["t0"]:   # o main.py nem começou (erro de sintaxe, módulos ainda carregando, queda): 0 s de placa, e
+        t_fim = 0.0   # o lab.py diz que as entradas do roteiro depois do 0 não aconteceram
+    elif r["estado"] == "tempo":
         t_fim = pedido.tempo_ms
     elif r["estado"] in ("acabou", "erro") and marca_fim and r["t0"]:
         t_fim = t(marca_fim)
@@ -426,8 +430,9 @@ def _eventos(r, pedido):
             continue
         ev.append({"t_ms": min(t(h), t_fim), "tipo": "serial", "dir": "tx", "texto": x, "porta": "uart0"})
         i += 1
-    if not r["t0"] and r["estado"] != "erro":   # erro de sintaxe: o programa nem começou
-        ev.append(contrato.aviso(0, "não vi a marca de começo do programa: os tempos contam do envio", "qemu"))
+    if not r["t0"] and r["estado"] != "erro":   # erro (de sintaxe): o próprio erro já diz que nem começou
+        ev.append(contrato.aviso(0, "o main.py não chegou a começar (não vi a marca de começo do programa): a rodada "
+                                    "fica em 0 s de placa", "qemu"))
     if r.get("erro"):
         ev.append({"t_ms": t_fim, "tipo": "erro", "texto": _traceback(r["erro"])})
     if r["queda"]:

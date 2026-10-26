@@ -132,8 +132,15 @@ def teste_conferencias():
     for ruim in ({"tempo": -1}, {"precisa": ["voar"]}, {"entradas": [{"t": 0, "pino": "LED"}]},
                  {"confere": [{"t": 1, "pwm": "PWM", "duty": 0.5}]}, {"confere": [{"olha": 1}]}, {"extra": 1},
                  {"confere": [{"serial": "x", "desde": 2, "ate": 1}]}, {"confere": [{"serial": "x", "desde": -1}]},
-                 {"tempo": float("inf")}, {"entradas": [{"t": float("nan"), "serial": "x"}]}):
+                 {"tempo": float("inf")}, {"entradas": [{"t": float("nan"), "serial": "x"}]},
+                 {"tempo": 0}, {"tempo": 0.0005}, {"tempo": 600.5}, {"tempo": True}, {"tempo": "3"},   # 0,001 a 600 s
+                 {"confere": [{"trocas": "LED", "min": "2"}]}, {"confere": [{"trocas": "LED", "max": None}]},
+                 {"confere": [{"trocas": "LED", "min": -1}]}, {"confere": [{"trocas": "LED", "min": 5, "max": 2}]},
+                 {"confere": [{"trocas": ""}]}, {"confere": [{"trocas": 23}]}):
         certo(recusa(roteiro.validar, ruim), "roteiro devia recusar %r" % ruim)
+    for bom in ({"tempo": 0.001}, {"tempo": 600}, {"confere": [{"trocas": "LED", "min": 2, "max": 2}]}):
+        certo(not recusa(roteiro.validar, bom), "roteiro devia aceitar %r" % bom)
+    certo(roteiro.validar({"tempo": 600})["tempo"] == lab.TEMPO_MAX == 600.0, "o teto do roteiro é o do --tempo")
 
 
 def teste_luz_e_led():
@@ -285,6 +292,65 @@ def teste_codigos():
     certo(motores.conferir(m, "mentira") != [], "motor sem rodar é recusado")
 
 
+def teste_nomes():
+    """o nome do pino na linha do tempo é o que o programa usa: o pinos.py do Sianvolt, o apelido do placa.py, ou
+    nenhum (o GPIO4 do dado é o LED G, e não o BOTAO dos exemplos)"""
+    esp, base = placas.PLACAS["esp32"], AQUI / "nomes"
+
+    def prog(nome, main, pinos=None, ino=None):
+        pasta = base / nome
+        pasta.mkdir(parents=True, exist_ok=True)
+        (pasta / "main.py").write_text(main)
+        if pinos is not None:
+            (pasta / "pinos.py").write_text(pinos)
+        if ino is not None:
+            (pasta / (nome + ".ino")).write_text(ino)
+        return pasta
+    sianvolt = prog("sianvolt", "# modo: pisca\nfrom pinos import D7, SW1\n",
+                    "# pinos.py: gerado pelo Sianvolt\nD7 = 4  # LED G\nSW1 = 14  # botão\nD9 = 99\nLIGA = True\n")
+    (sianvolt / "roteiro.json").write_text('{"entradas": [{"t": 0.5, "pino": "GPIO4", "valor": 0}]}')
+    certo(preparar.nomes_dos_pinos(esp, sianvolt, "micropython") == {"GPIO4": ["D7"], "GPIO14": ["SW1"]},
+          "pinos.py: D7 = 4 vira GPIO4 (D7); pino que a placa não tem e o que não é número ficam de fora: %r"
+          % preparar.nomes_dos_pinos(esp, sianvolt, "micropython"))
+    exemplo = prog("exemplo", "# modo: pisca\nfrom placa import *\n", ino='// modo: pisca\n#include "placa.h"\n')
+    for lin in ("micropython", "arduino"):
+        n = preparar.nomes_dos_pinos(esp, exemplo, lin)
+        certo(n == {p: esp.apelidos_do(p) for p in esp.apelidos.values()}, "%s com o placa do laboratório: os "
+              "apelidos (%r)" % (lin, n))
+    certo(preparar.nomes_dos_pinos(esp, prog("os_dois", "import time, placa\n", "D1 = 23\n"), "micropython")
+          ["GPIO23"] == ["D1", "LED", "PWM"], "pinos.py e placa juntos: os dois nomes, o do pinos.py antes")
+    cru = prog("cru", "# from placa import *  (comentado)\nfrom machine import Pin\nPin(4, Pin.OUT)\n",
+               ino="// #include \"placa.h\"\nvoid setup() {}\n")
+    certo(preparar.nomes_dos_pinos(esp, cru, "micropython") == {} == preparar.nomes_dos_pinos(esp, cru, "arduino"),
+          "sem placa e sem pinos.py: nenhum nome")
+    ped = pedido(sianvolt, [], 1000, nomes=preparar.nomes_dos_pinos(esp, sianvolt, "micropython"))
+    ev = contrato.executar(mentira.motor(), ped)
+    led = [e for e in ev if e.get("pino") == "GPIO23"]
+    certo(led and all("nome" not in e for e in led), "o GPIO23 sem nome no pinos.py fica sem nome: %r" % led[:1])
+    ped = pedido(sianvolt, [{"t_ms": 500.0, "pino": "GPIO4", "valor": 0}], 1000, nomes={"GPIO4": ["D7"]})
+    ev = contrato.executar(mentira.motor(), ped)
+    certo([e["nome"] for e in ev if e.get("pino") == "GPIO4"] == ["D7"], "o roteiro no GPIO4 sai como D7")
+    ev = contrato.executar(mentira.motor(), pedido(sianvolt, [], 1000))
+    certo(any(e.get("nome") == "LED/PWM" for e in ev), "Pedido sem nomes: os apelidos da placa, como antes")
+    m = mentira.motor()
+    guardado = {p.id: p.motores for p in placas.PLACAS.values()}
+    for p in placas.PLACAS.values():
+        p.motores = {lin: ["mentira"] for lin in p.motores}
+    motores.usar({"mentira": m})
+    try:
+        codigo, out, err = main_quieto("rodar", "esp32", sianvolt, "--tempo", "1", "--json")
+        nomes = {e.get("nome") for e in map(json.loads, out.splitlines()) if e.get("pino") == "GPIO4"}
+        certo(codigo == 0 and nomes == {"D7"}, "lab.py rodar: o GPIO4 do programa do Sianvolt é D7, e não BOTAO "
+              "(%s, %r)\n%s" % (codigo, nomes, err))
+        codigo, out, err = main_quieto("rodar", "esp32", exemplo, "--tempo", "1")
+        certo(codigo == 0 and "GPIO23 (LED/PWM) = 1" in out, "lab.py rodar: o exemplo com placa.py mantém os "
+              "apelidos\n" + out + err)
+    finally:
+        for p in placas.PLACAS.values():
+            p.motores = guardado[p.id]
+        motores.usar({})
+
+
 def teste_vagas():
     base = AQUI / "vagas" / "codigo"
     with fer.vaga(base) as a, fer.vaga(base) as b, fer.vaga(base) as c:
@@ -298,6 +364,11 @@ def teste_vagas():
         except SystemExit as e:
             codigo = e.code
         certo(codigo == contrato.USO, "--tempo %s é uso errado (2), deu %s" % (ruim, codigo))
+    for nome, rot, texto in (("tempo_zero", {"tempo": 0}, "tempo vai de 0,001 a 600 s de placa (veio 0)"),
+                             ("trocas_texto", {"confere": [{"trocas": "LED", "min": "2"}]}, "min tem que ser um número")):
+        codigo, out, err = main_quieto("rodar", "esp32", programa(nome, "pisca", rot))
+        certo(codigo == contrato.USO and texto in err and "Traceback" not in err + out,
+              "roteiro %r: uso errado (2) com a explicação, sem traceback (%s)\n%s" % (rot, codigo, err))
 
 
 def teste_ferramentas():
@@ -348,7 +419,7 @@ if __name__ == "__main__":
     shutil.rmtree(AQUI, ignore_errors=True)
     AQUI.mkdir(parents=True)
     for teste in (teste_apelidos, teste_valida, teste_conferencias, teste_roteiro_e_fim, teste_luz_e_led,
-                  teste_codigos, teste_vagas, teste_ferramentas, teste_catalogo_e_exemplos):
+                  teste_codigos, teste_nomes, teste_vagas, teste_ferramentas, teste_catalogo_e_exemplos):
         antes = CONTA["falha"], teste()
         print("%-28s %s" % (teste.__name__, "ok" if CONTA["falha"] == antes[0] else "FALHOU"))
     for pasta in [AQUI] + [fer.BUILD / p / "mentira" for p in placas.PLACAS]:   # o que o motor de mentira deixou

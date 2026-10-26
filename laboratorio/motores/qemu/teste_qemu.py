@@ -1,9 +1,14 @@
 """teste_qemu.py: confere o motor qemu sem subir o QEMU (python3 laboratorio/motores/qemu/teste_qemu.py).
+Escreve só em laboratorio/build/teste_qemu/.
 
 As linhas de trace abaixo são de verdade (QEMU 9.2.2, MicroPython 1.29): PWM(Pin(23)) 25% -> 75% no ESP32,
 PWM(Pin(3)) no C3 (sem LEDC no QEMU: cada escrita leva um campo só) e Pin(3, OUT) piscando no C3.
 O teste com o QEMU de verdade é o 'lab.py testar --motor qemu'.
 """
+import os
+import shutil
+import socket
+import subprocess
 import sys
 from pathlib import Path
 
@@ -11,6 +16,7 @@ sys.dont_write_bytecode = True
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ))
 import motores  # noqa: E402
+from nucleo.placas import PLACAS  # noqa: E402
 
 qemu = motores.descobrir()["qemu"]
 emu = qemu.emu
@@ -112,6 +118,56 @@ def teste_modulos():
     pedido.pasta, pedido.principal = pasta, pasta / "main.py"
     confere(qemu._modulos(pedido) == ("placa", "time", "machine"), "módulos pra carregar antes do t = 0")
     confere([a.name for a in qemu._arquivos(pedido)] == ["main.py", "placa.py"], "arquivos que vão pro chip")
+
+
+def teste_sem_comeco():
+    """o main.py que nem começou (o QEMU ainda carregava os módulos quando o limite de PC chegou): a rodada fica em
+    0 s de placa e travou, e o lab.py diz que as entradas do roteiro depois do 0 não aconteceram"""
+    class P:
+        pass
+    pedido = P()
+    pedido.tempo_ms, pedido.placa = 1600.0, PLACAS["esp32"]
+    r = {"pinos": emu.Pinos("esp32"), "t0": None, "enviado": 100.0, "estado": "travou", "erro": "",
+         "linhas": [(103.0, "carregando o módulo")], "queda": bytearray(), "hora_queda": None, "hora_fim": 118.0,
+         "problema": "o main.py não começou em 20 s de PC (o limite): o QEMU ainda carregava o programa e os módulos"}
+    ev, t_fim = qemu._eventos(r, pedido)
+    confere(t_fim == 0.0 and all(e["t_ms"] == 0.0 for e in ev), "sem a marca de começo: 0 s de placa, e não o "
+            "tempo desde o envio (viu %s ms)" % t_fim)
+    confere(any("não chegou a começar" in e.get("texto", "") for e in ev) and
+            any("não começou em 20 s" in e.get("texto", "") for e in ev), "os avisos dizem que o main.py não rodou")
+
+
+def teste_socket_fundo():
+    """numa pasta funda o caminho do socket passa dos 107 bytes do socket unix: quem cria o socket roda dentro da
+    pasta (como o QEMU) e o Python conecta pelo endereço curto /proc/self/fd/<a pasta aberta>/<nome>"""
+    funda = RAIZ / "build" / "teste_qemu" / ("pasta_funda_" * 5) / ("mais_funda_" * 5)
+    shutil.rmtree(funda, ignore_errors=True)
+    funda.mkdir(parents=True)
+    servidor = subprocess.Popen(
+        [sys.executable, "-c", "import socket\ns = socket.socket(socket.AF_UNIX)\ns.bind('t.sock')\ns.listen(1)\n"
+         "print('pronto', flush=True)\nc, _ = s.accept()\nc.sendall(b'ok')\nc.close()"],
+        cwd=funda, stdout=subprocess.PIPE, text=True)
+    q = emu.Qemu.__new__(emu.Qemu)   # só o endereço: sem subir o QEMU
+    q.dir_fd = os.open(funda, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        servidor.stdout.readline()
+        endereco, resposta = q.endereco(funda / "t.sock"), b""
+        with socket.socket(socket.AF_UNIX) as c:
+            c.settimeout(5)
+            c.connect(endereco)
+            resposta = c.recv(10)
+    except OSError as e:
+        resposta = str(e).encode()
+    finally:
+        os.close(q.dir_fd)
+        servidor.kill()
+        servidor.wait()
+    confere(len(os.fsencode(str(funda / "t.sock"))) > 107 and endereco.startswith("/proc/self/fd/") and
+            resposta == b"ok", "socket numa pasta de %d caracteres: conecta pelo endereço curto (%s)" % (
+                len(str(funda / "t.sock")), resposta))
+    curto = Path("/x/serial.sock")
+    confere(q.endereco(curto) == str(curto), "caminho que cabe: o de sempre")
+    shutil.rmtree(RAIZ / "build" / "teste_qemu" / ("pasta_funda_" * 5), ignore_errors=True)
 
 
 if __name__ == "__main__":

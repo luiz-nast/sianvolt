@@ -11,6 +11,7 @@ US = 1_000_000
 CUSTO_US = {"pino_init": 5, "pino_escreve": 10, "pino_le": 10, "pwm_init": 20, "pwm_duty": 5, "pwm_freq": 10,
             "adc_init": 20, "adc_le": 40, "i2c_init": 20}
 US_POR_CARACTERE = {"uart0": 10 * US / 115200, "usb": 1.0}   # 115200 baud = 10 bits por caractere; USB é rápido
+PWM_FREQ_MAX = 40_000_000   # MicroPython 1.29, ports/esp32/machine_pwm.c: check_freq_ranges(self, freq, 40000000)
 ATTEN = ["0 dB", "2,5 dB", "6 dB", "11 dB"]
 
 
@@ -192,27 +193,43 @@ class Perifericos:
         self.niveis[g] = self._nivel(g, silencioso=True)
 
     # ---------- PWM ----------
+    @staticmethod
+    def _faixa_pwm(freq=None, duty_u16=None):
+        """as faixas e as mensagens do MicroPython 1.29 (ports/esp32/machine_pwm.c, check_freq_ranges e
+        check_duty_u16): fora delas é ValueError, e não um número cortado calado. O firmware/machine.py confere
+        antes; aqui é a garantia de que o circuito nunca recebe um duty fora de 0 a 1"""
+        if freq is not None and not 1 <= freq <= PWM_FREQ_MAX:
+            raise ValueError("frequency must be from 1Hz to 40MHz")
+        if duty_u16 is not None and not 0 <= duty_u16 <= 65535:
+            raise ValueError("duty_u16 must be from 0 to 65536")
+
     def c_pwm_init(self, g, freq, duty_u16):
+        """PWM(...) e init(): sem freq (None), vale a do canal que o pino já tem (outro PWM no mesmo pino) ou a
+        padrão, como no machine_pwm.c -> a freq que ficou"""
         self.custo(CUSTO_US["pwm_init"])
-        self._conferir(g, saida=True)
         p = self._pino(g)
-        p.update(modo="pwm", freq=freq or p.get("freq") or self.chip.PWM_FREQ,
+        if freq is None:
+            freq = p.get("freq") if p.get("modo") == "pwm" and p.get("freq") else self.chip.PWM_FREQ
+        self._faixa_pwm(freq, duty_u16)
+        self._conferir(g, saida=True)
+        p.update(modo="pwm", freq=freq,
                  duty=duty_u16 if duty_u16 is not None else p.get("duty", self.chip.PWM_DUTY_U16))
         self.emitido.pop(("nivel", g), None)   # depois do PWM, o próximo nível sempre vira evento
         self.janelas.pop(g, None)
         self._modo(g, "pwm")
         self._pwm_mudou(g)
+        return freq
 
     def c_pwm_freq(self, g, freq):
         self.custo(CUSTO_US["pwm_freq"])
-        if not 1 <= freq <= 40_000_000:
-            raise ValueError("freq tem que ser de 1 Hz a 40 MHz")
+        self._faixa_pwm(freq=freq)
         self.pinos[g]["freq"] = freq
         self._pwm_mudou(g)
 
     def c_pwm_duty(self, g, duty_u16):
         self.custo(CUSTO_US["pwm_duty"])
-        self.pinos[g]["duty"] = max(0, min(65535, int(duty_u16)))
+        self._faixa_pwm(duty_u16=duty_u16)
+        self.pinos[g]["duty"] = duty_u16
         self._pwm_mudou(g)
 
     def c_pwm_deinit(self, g):

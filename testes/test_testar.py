@@ -11,6 +11,7 @@ import time
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from apoio import PLACAS, RAIZ, apagar, copia
 import catalogo
@@ -280,6 +281,35 @@ class Esp32NaEtapa4(unittest.TestCase):
         ctx, r = self.reprova(BOA.replace("28 9 220", "28 9 22"), "a força padrão do pino é ~20 mA", "pino")
         self.assertIn("pino", r.rotulos["D1"])
         self.assertFalse(ctx["sim"]["esp32"]["seguro"])
+
+    def test_pino_que_so_passa_da_forca_no_pior_caso(self):
+        # GPIO32 → 33 Ω → LED → GND: (3,3 − 1,7) / (30 + 33 + 20) = 19,3 mA no 3V3 do meio (passa) e
+        # (3,399 − 1,7) / 83 = 20,5 mA com o 3V3 no máximo: a força do pino é a do pior caso
+        ctx, r = self.reprova(BOA.replace("28 9 220", "28 9 33"), "GPIO32 (D32) passa até 20,5 mA no pior caso: a "
+                              "força padrão do pino é ~20 mA", "pino")
+        self.assertAlmostEqual(ctx["sim"]["esp32"]["pinos"]["GPIO32"], 1.699 / 83, delta=1e-6)
+        self.assertFalse(ctx["sim"]["esp32"]["seguro"])
+
+    def test_pino_que_afunda_nao_soma_no_3v3(self):
+        # LED entre o GPIO32 e o GPIO33: a corrente sai de um pino e entra no outro; o regulador entrega uma vez só
+        ctx, r = etapa4(BOA.replace("liga D1.2 GND", "liga D1.2 U1.7"))
+        self.assertIsInstance(r, str, r)
+        led = 1.699 / (30 + 220 + 20 + 30)
+        self.assertAlmostEqual(ctx["sim"]["esp32"]["soma"], led + 3.399 / 46000, delta=1e-6)
+
+    def test_botao_que_so_passa_do_limite_no_pior_caso(self):
+        # 3V3 → 67 Ω → botão → GND: 3,3 / 67 = 49 mA com o 3V3 do meio (passa) e 3,399 / 67 = 51 mA no pior caso
+        # (o limite do botão é 50 mA)
+        _, r = etapa4(BOA + "peca R3 resistor_axial 60 50 67\npeca SW3 botao_6x6 72 50\nliga U1.16 R3.1\nliga R3.2 SW3.1\n"
+                            "liga SW3.3 GND\n")
+        self.assertIsInstance(r, testar.Falhou, r)
+        self.assertIn("SW3 passa 51 mA no pior caso, o limite dele é 50 mA", r.detalhe)
+
+    def test_piezo_entre_3v3_e_gnd_e_curto_sem_numero(self):
+        _, r = etapa4(BOA + "peca BZ3 C128650 70 50\nliga U1.16 BZ3.1\nliga BZ3.2 GND\n", ["C128650"])
+        self.assertIsInstance(r, testar.Falhou, r)
+        self.assertIn("curto: com BZ3 na borda do apito, o 3V3 do U1 vai direto pro GND", r.detalhe)
+        self.assertNotIn("orçamento", r.detalhe, "a corrente do curto só pararia no r_3v3, que é suposição: sem número")
 
     def test_led_no_gpio34_so_entra(self):
         ctx, r = self.reprova(BOA.replace("liga U1.6 R1.2", "liga U1.4 R1.2"), "GPIO34 (D34) só entra", "só entra")
@@ -762,6 +792,77 @@ class BrilhoDeCadaLed(unittest.TestCase):
         self.assertIsNone(testar.checar("brilho D1", m, sim, {}), "sem resposta não dá pra saber")
 
 
+SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" height="5mm" viewBox="0 0 10 5"><rect width="10" height="5"/></svg>'
+
+
+class PilhaDeMentira:
+    """o que a etapa 7 usa do LayerStack do gerbonara (a etapa 6 deixa ele no ctx['pilha'])"""
+    def to_pretty_svg(self, side):
+        return SVG
+
+
+class FotoDaPlaca(unittest.TestCase):
+    """a foto é só pra ver: o Chrome que falta ou que falha passa com aviso (e o motivo), sem segurar a fábrica"""
+
+    def setUp(self):
+        self.pasta = copia()
+        self.addCleanup(apagar, self.pasta)
+        (self.pasta / "saida").mkdir()
+        (self.pasta / "saida" / "foto.png").write_bytes(b"de uma rodada antiga")
+
+    def chrome(self, corpo):
+        """um 'Chrome' de mentira: um script de shell"""
+        exe = self.pasta.parent / "chrome"
+        exe.write_text("#!/bin/sh\n" + corpo)
+        exe.chmod(0o755)
+        return str(exe)
+
+    def foto(self, chrome):
+        ctx = {"pasta": self.pasta, "pilha": PilhaDeMentira()}
+        with mock.patch.object(testar, "achar_chrome", lambda: chrome):
+            return testar.tira_foto(ctx), ctx
+
+    def test_sem_chrome(self):
+        detalhe, ctx = self.foto(None)
+        self.assertEqual(detalhe, "sem a foto em png (sem o Chrome (ou o Chromium) nesta máquina): a placa desenhada "
+                                  "ficou em saida/foto.svg")
+        self.assertEqual(ctx["aviso"], {"texto": "a foto em png não saiu: sem o Chrome (ou o Chromium) nesta máquina",
+                                        "rotulos": {}})
+        self.assertTrue((self.pasta / "saida" / "foto.svg").is_file())
+        self.assertFalse((self.pasta / "saida" / "foto.png").exists(), "a foto antiga não fica parecendo desta placa")
+
+    def test_chrome_que_falha_diz_o_motivo(self):
+        casos = [("echo '[1026/101010.123:ERROR:chrome_main.cc(12)] Running as root without --no-sandbox is not "
+                  "supported.' >&2\necho 'outra linha' >&2\nexit 1\n",
+                  "o Chrome saiu com o código 1: Running as root without --no-sandbox is not supported."),
+                 ("echo 'Socket path too long: /um/caminho/SingletonSocket' >&2\nkill -ABRT $$\n",
+                  "o Chrome parou com o sinal 6: Socket path too long: /um/caminho/SingletonSocket"),
+                 ("exit 0\n", "o Chrome não gravou o png")]
+        for corpo, motivo in casos:
+            with self.subTest(motivo=motivo):
+                detalhe, ctx = self.foto(self.chrome(corpo))
+                self.assertEqual(detalhe, f"sem a foto em png ({motivo}): a placa desenhada ficou em saida/foto.svg")
+                self.assertEqual(ctx["aviso"]["texto"], f"a foto em png não saiu: {motivo}")
+                self.assertFalse((self.pasta / "saida" / "foto.png").exists())
+
+    def test_chrome_que_funciona(self):
+        detalhe, ctx = self.foto(self.chrome('for a in "$@"; do case "$a" in --screenshot=*) echo png > "${a#--screenshot=}";; '
+                                             'esac; done\n'))
+        self.assertEqual(detalhe, "saida/foto.png, desenhada a partir do Gerber")
+        self.assertNotIn("aviso", ctx)
+        self.assertEqual((self.pasta / "saida" / "foto.png").read_text(), "png\n")
+
+    def test_chrome_que_falha_nao_segura_a_fabrica(self):
+        if not _tem_gerbonara():
+            self.skipTest("gerbonara só no .venv")
+        with mock.patch.object(testar, "achar_chrome", lambda: self.chrome("echo 'quebrei' >&2\nexit 1\n")):
+            estado = testar.rodar(self.pasta, "teste")
+        e7 = estado["etapas"][6]
+        self.assertEqual([e["estado"] for e in estado["etapas"]], ["ok"] * 7)
+        self.assertEqual(e7["aviso"], "a foto em png não saiu: o Chrome saiu com o código 1: quebrei")
+        self.assertTrue((self.pasta / "saida" / "fabrica.zip").exists())
+
+
 class SaidaDoTestar(unittest.TestCase):
     def roda(self, texto):
         pasta = placa_temp(texto)
@@ -925,6 +1026,14 @@ class ProgramaNaEtapa8(unittest.TestCase):
         self.assertEqual((e8["rotulos"]["U1"], e8["rotulos"]["SW1"]), ("flutuando", "flutuando"))
         self.assertEqual(estado["requisitos"]["R4"], "falha", "sem o pull-up, o botão nunca lê apertado")
 
+    def test_pino_lido_sem_nada_e_sem_pull_reprova(self):
+        """o GPIO4 não liga em nada: no ESP32 de verdade a leitura é sorteio. Trava o texto do gêmeo e a regex juntos"""
+        _, e8, zip_ = rodar_esp32(main={'print("pronto")\n': 'print("pronto")\nlixo = Pin(4, Pin.IN).value()\n'})
+        self.assertEqual(e8["estado"], "falhou", e8["detalhe"])
+        self.assertIn("GPIO4 lido sem nada ligado e sem pull", e8["detalhe"])
+        self.assertEqual(e8["rotulos"]["U1"], "flutuando")
+        self.assertFalse(zip_)
+
     def test_programa_que_trava(self):
         _, e8, _ = rodar_esp32(main={"    time.sleep_ms(5)\n": "    while agora == 0:\n        pass\n    time.sleep_ms(5)\n"})
         self.assertEqual(e8["estado"], "falhou")
@@ -1071,8 +1180,8 @@ class Etapa8SemOLaboratorio(unittest.TestCase):
         finally:
             apagar(pasta)
         self.assertGreater(quando[0] - inicio, 0.4, "esperou a outra rodada soltar a trava")
-        self.assertEqual(detalhe, "rodou 3 s de placa: nenhum LED no circuito; nenhuma conferência (o roteiro.json e "
-                                  "o confere.json não conferem nada)")
+        self.assertEqual(detalhe, "rodou 3 s de placa: o gêmeo não disse o brilho de D1; nenhuma conferência (o "
+                                  "roteiro.json e o confere.json não conferem nada)")
 
     def test_acabou_cedo_com_codigo_0_so_avisa(self):
         """o roteiro sem 'estado': o lab.py sai com 0 e a etapa passa, mas diz que o resto do roteiro não rodou"""
@@ -1087,6 +1196,60 @@ class Etapa8SemOLaboratorio(unittest.TestCase):
         self.assertIn("aviso: o programa acabou em 0,001 s de placa, antes dos 3 s do roteiro", detalhe)
         self.assertEqual(ctx["aviso"]["rotulos"], {"U1": "acabou cedo"})
         self.assertTrue(ctx["programa"]["ok"])
+
+    def oito(self, codigo=0, avisos=(), erro=None, falhas=(), tempo_ms=3000.0):
+        """a etapa 8 com um programa.json feito à mão (o que o gêmeo daria): o detalhe ou a exceção, e o ctx"""
+        def rodar(p, *a, **k):
+            prog = {**programa.normalizar([], p, codigo), "tempo_ms": tempo_ms, "erro": erro}
+            prog["avisos"] += [list(x) for x in avisos]
+            prog["conferencias"]["falhas"] += list(falhas)
+            return prog
+        self.trocar(tem_laboratorio=lambda: True, rodar=rodar)
+        return so_a_8()
+
+    def test_avisos_que_reprovam_sem_o_laboratorio(self):
+        """cada aviso do gêmeo que reprova (os textos são os do laboratorio/motores/gemeo/motor/perifericos.py)"""
+        casos = [("entrada", "GPIO4 lido sem nada ligado e sem pull: no ESP32 de verdade sai aleatório; o gêmeo lê 0",
+                  {"U1": "flutuando"}),
+                 ("entrada", "GPIO4 está flutuando (nada segura a tensão: falta pull-up/pull-down ou o botão está "
+                             "solto sem resistor): no ESP32 de verdade a leitura sai aleatória; o gêmeo lê 0",
+                  {"U1": "flutuando"}),
+                 ("corrente", "GPIO32 fornece 47 mA, acima dos 20 mA seguros desse pino (DRIVE_2)",
+                  {"U1": "corrente alta", "D1": "corrente alta"}),   # o D1 do GPIO32 (pelo R1, que só é caminho)
+                 ("flash", "GPIO6 é da memória flash: mexer nele trava o ESP32 de verdade", {"U1": "pino da memória flash"}),
+                 ("circuito", "não deu pra ligar o circuito placa.txt: falta o r_pino", {"U1": "sem circuito"})]
+        for c, texto, rotulos in casos:
+            with self.subTest(c=c, texto=texto[:30]):
+                r, ctx = self.oito(avisos=[(100.0, c, texto)])
+                self.assertIsInstance(r, testar.Falhou, r)
+                self.assertEqual(r.rotulos, rotulos)
+                self.assertFalse(ctx["programa"]["ok"])
+        r, _ = self.oito(avisos=[(100.0, "entrada", "GPIO4 recebe 1,2 V, entre 0,8 e 2,5: nem 0 nem 1 garantido")])
+        self.assertIsInstance(r, str, "a leitura incerta só avisa")
+
+    def test_erro_com_o_codigo_4_aparece(self):
+        """o roteiro que confere o estado faz o lab.py sair com 4 mesmo com erro no programa: o erro vem na frente"""
+        r, _ = self.oito(codigo=4, erro={"t": 500.0, "texto": "Traceback\nNameError: name 'x' isn't defined", "linha": None},
+                         falhas=["GPIO32 = 1 em 0,800 s: viu 0"])
+        self.assertIsInstance(r, testar.Falhou, r)
+        self.assertTrue(r.detalhe.startswith("erro, em 0,500 s: NameError: name 'x' isn't defined · "), r.detalhe)
+        self.assertEqual(r.rotulos["U1"], "erro no programa")
+
+    def test_gemeo_que_quebra_nao_culpa_o_main(self):
+        """o lab.py pega a exceção do gêmeo (aviso 'motor'): a culpa é do laboratório, não do main.py; e sem o brilho
+        dos LEDs (o gêmeo quebrado não manda) a frase não diz que o circuito não tem LED"""
+        quebrou = [(0.0, "motor", "o motor gemeo quebrou: ZeroDivisionError: zero to a negative power")]
+        for codigo in (4, 3):   # 4: o roteiro confere o estado; 3: não confere (o lab.py diz 'travou')
+            with self.subTest(codigo=codigo):
+                r, ctx = self.oito(codigo=codigo, avisos=quebrou, tempo_ms=0.0)
+                self.assertIsInstance(r, testar.Falhou, r)
+                self.assertTrue(r.detalhe.startswith("o gêmeo do laboratório quebrou (ZeroDivisionError: zero to a "
+                                                     "negative power): é defeito do laboratório, não do main.py"), r.detalhe)
+                for errado in ("acabou cedo", "chegou no fim", "o programa travou", "nenhum LED no circuito"):
+                    self.assertNotIn(errado, r.detalhe)
+                self.assertIn("parou em 0 s de placa: o gêmeo não disse o brilho de D1 antes de parar", r.detalhe)
+                self.assertEqual(r.rotulos, {"U1": "gêmeo quebrou"})
+                self.assertEqual(ctx["programa"], {"ok": None, "acesos": None}, "do programa não dá pra dizer nada: '?'")
 
     def test_travou_em_portugues_de_gente(self):
         limite = "travou: o programa passou do limite de 60,0 s de PC sem chegar no fim do tempo de placa"

@@ -6,6 +6,7 @@ uso: python ferramenta/testar.py placas/estudo [-m "o que mudou"]
 """
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -61,6 +62,12 @@ def mm(v):
 
 def ma(amp):
     return f"{amp * 1000:.0f}" if amp >= 0.0095 else f"{amp * 1000:.1f}".replace(".", ",")
+
+
+def ma_acima(amp, limite):
+    """a corrente que passou do limite, sem o arredondamento esconder: 20,5 mA (e não '20') com o limite de 20 mA"""
+    txt = ma(amp)
+    return txt if txt != ma(limite) else f"{amp * 1000:.{2 if amp < 0.0095 else 1}f}".replace(".", ",")
 
 
 def mw(watt):
@@ -761,8 +768,8 @@ def liga_com_esp32(ctx, mcus):
                         f"curto: o 3V3 do {ref} está ligado direto no GND", [ref] + curto, "curto"))
     for n, i in i_pinos.items():
         if lim and i > lim:
-            limites.append((f"{ref} {nome_do_pino(u, n)} passa até {ma(i)} mA no pior caso: a força padrão do pino é "
-                            f"~{ma(lim)} mA (ponha um resistor maior)", [ref] + papeis[n][1], "puxa demais do pino"))
+            limites.append((f"{ref} {nome_do_pino(u, n)} passa até {ma_acima(i, lim)} mA no pior caso: a força padrão "
+                            f"do pino é ~{ma(lim)} mA (ponha um resistor maior)", [ref] + papeis[n][1], "puxa demais do pino"))
     if orc and soma > orc and curto is None:
         limites.append((f"o 3V3 do {ref} entrega até {ma(soma)} mA no pior caso, acima do orçamento de {ma(orc)} mA", [ref], "3V3 no limite"))
     ldr_gpio, leitura = {}, {}   # LDR -> (GPIO, net) onde o ADC lê; botão -> o que o pino lê com ele apertado
@@ -978,7 +985,14 @@ def rele_gerber(ctx):
     return f"{len(lidos)} arquivos lidos pelo gerbonara, nenhum aviso"
 
 
+def achar_chrome():
+    return next(filter(None, map(shutil.which, ["google-chrome", "chromium", "chromium-browser"])), None)
+
+
 def tira_foto(ctx):
+    """a foto da placa (o lado de cima do Gerber): o svg sempre, e o png pelo Chrome. A foto é só pra ver: o Chrome
+    que falta ou que falha (root sem sandbox, socket com caminho comprido demais, timeout) não segura a placa nem a
+    fábrica; a etapa passa com o aviso do motivo"""
     saida = ctx["pasta"] / "saida"
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")   # avisa das camadas que ainda nao existem (mascara, serigrafia)
@@ -988,13 +1002,40 @@ def tira_foto(ctx):
     altura = round(largura * vb[3] / vb[2])
     svg = re.sub(r'width="[^"]*" height="[^"]*"', f'width="{largura}" height="{altura}"', svg, count=1)
     (saida / "foto.svg").write_text(svg)
-    chrome = next(filter(None, map(shutil.which, ["google-chrome", "chromium", "chromium-browser"])), None)
+    png = saida / "foto.png"
+    png.unlink(missing_ok=True)   # a foto de uma rodada antiga não fica parecendo desta placa
+    chrome, motivo = achar_chrome(), None
     if not chrome:
-        return "sem Chrome pra virar png; salvei saida/foto.svg"
-    subprocess.run([chrome, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-                    f"--screenshot={(saida / 'foto.png').resolve()}", f"--window-size={largura},{altura}",
-                    (saida / "foto.svg").resolve().as_uri()], capture_output=True, timeout=60, check=True)
+        motivo = "sem o Chrome (ou o Chromium) nesta máquina"
+    else:
+        # como root (container, CI) o Chrome só abre sem a sandbox; a página é o nosso svg, sem nada de fora
+        raiz = ["--no-sandbox"] if hasattr(os, "geteuid") and os.geteuid() == 0 else []
+        try:
+            r = subprocess.run([chrome, "--headless=new", "--disable-gpu", "--hide-scrollbars", *raiz,
+                                f"--screenshot={png.resolve()}", f"--window-size={largura},{altura}",
+                                (saida / "foto.svg").resolve().as_uri()], capture_output=True, text=True,
+                               errors="replace", timeout=60)
+            if r.returncode != 0 or not png.is_file():
+                motivo = f"o Chrome {por_que_o_chrome_falhou(r.returncode, r.stderr)}"
+        except subprocess.TimeoutExpired:
+            motivo = "o Chrome passou de 60 s sem acabar"
+        except OSError as e:
+            motivo = f"o Chrome não abriu: {e}"
+    if motivo:
+        png.unlink(missing_ok=True)
+        ctx["aviso"] = {"texto": f"a foto em png não saiu: {motivo}", "rotulos": {}}
+        return f"sem a foto em png ({motivo}): a placa desenhada ficou em saida/foto.svg"
     return "saida/foto.png, desenhada a partir do Gerber"
+
+
+def por_que_o_chrome_falhou(codigo, stderr):
+    """a linha do stderr do Chrome que diz o motivo (a última com ERROR ou FATAL; senão a última), e o código"""
+    linhas = [x.strip() for x in (stderr or "").splitlines() if x.strip()]
+    erro = next((x for x in reversed(linhas) if re.search(r"\b(ERROR|FATAL)\b", x)), linhas[-1] if linhas else "")
+    erro = re.sub(r"^\[[^\]]*\]\s*", "", erro)[:300]   # tira o '[1026/101010.123:ERROR:arquivo.cc(12)]' da frente
+    como = (f"parou com o sinal {-codigo}" if codigo < 0 else f"saiu com o código {codigo}" if codigo else
+            "não gravou o png")
+    return f"{como}: {erro}" if erro else como
 
 
 # ---------- etapa 8: o programa da placa no gêmeo ----------
@@ -1012,6 +1053,7 @@ MOSTRA = {"adc": "ADC fora da faixa", "entrada": "leitura incerta", "serial": "p
           "psram": "pino da psram", "placa": "pino fora do DevKit", "pull": "sem pull de dentro"}
 MAX_FALHAS = 4   # conferências listadas no detalhe; todas ficam no saida/programa.json
 CONFERENCIA = 4  # o código do lab.py pra conferência que falhou (os outros estão no programa.py: USO, TRAVOU...)
+GEMEO_QUEBROU = "gêmeo quebrou"   # o rótulo do aviso 'motor': o defeito é do laboratório, o programa fica sem resposta
 
 
 def ultima_linha(texto):
@@ -1037,12 +1079,17 @@ def acenderam(prog):
     return sorted(acesos, key=programa.ordem)
 
 
-def frase_da_rodada(prog, parou=False):
-    """'rodou 3 s de placa: D1 acendeu; 13 de 13 conferências ok' (parou: 'parou em 0,504 s de placa: ...')"""
+def frase_da_rodada(prog, parou=False, do_circuito=None):
+    """'rodou 3 s de placa: D1 acendeu; 13 de 13 conferências ok' (parou: 'parou em 0,504 s de placa: ...').
+    do_circuito: os LEDs do placa.txt (None: não sei). Sem nenhum LED no programa.json, só diz 'nenhum LED no
+    circuito' quando o circuito não tem LED mesmo: a rodada que parou cedo (o gêmeo que quebrou) não traz o brilho"""
     acesos = acenderam(prog)
     apagados = [r for r in sorted(prog["leds"], key=programa.ordem) if r not in acesos]
     leds = [f"{e_lista(rs)} {nao}{'acendeu' if len(rs) == 1 else 'acenderam'}"
             for rs, nao in ((acesos, ""), (apagados, "não ")) if rs]
+    if not leds and do_circuito:
+        quais = e_lista(sorted(do_circuito, key=programa.ordem))
+        leds = [f"o gêmeo não disse o brilho de {quais}" + (" antes de parar" if parou else "")]
     c = prog["conferencias"]
     total = len(c["ok"]) + len(c["falhas"])
     conf = (f"{len(c['ok'])} de {total} conferências ok" if total else
@@ -1081,6 +1128,9 @@ def por_que_parou(prog):
         if c == "sono":
             return ("o programa pôs o ESP32 pra dormir (deepsleep): na placa ele reinicia ao acordar, e o gêmeo para "
                     "aí"), "dormiu"
+        if c == "motor":   # o lab.py pegou uma exceção do gêmeo (contrato.executar): defeito do laboratório
+            return (f"o gêmeo do laboratório quebrou ({texto.split(' quebrou: ', 1)[-1]}): é defeito do laboratório, "
+                    "não do main.py; a rodada parou aí, então o programa ficou sem teste"), GEMEO_QUEBROU
     return None
 
 
@@ -1187,8 +1237,12 @@ def roda_programa(ctx):
     if prog["codigo"] != 0 and not problemas:   # código de falha sem nada que explique: falha mesmo assim
         problemas.append((f"o laboratório saiu com o código {prog['codigo']} sem dizer o que falhou", eu, "não rodou"))
     rodou = prog["codigo"] != programa.USO
-    ctx["programa"] = {"ok": not problemas, "acesos": acenderam(prog) if rodou else None}   # os requisitos usam isto
-    resumo = [frase_da_rodada(prog, bool(parou))] if rodou else []
+    if parou and parou[0][2] == GEMEO_QUEBROU:   # o laboratório quebrou: do programa não dá pra dizer nada ('?')
+        ctx["programa"] = {"ok": None, "acesos": None}
+    else:
+        ctx["programa"] = {"ok": not problemas, "acesos": acenderam(prog) if rodou else None}   # os requisitos usam isto
+    leds = [p["ref"] for p in modelo["pecas"] if modelo_de(p) == "led"]
+    resumo = [frase_da_rodada(prog, bool(parou), leds)] if rodou else []
     if problemas:
         raise Falhou(" · ".join([t for t, _, _ in problemas] + resumo), rotulos=rotulos_de(problemas), codigo=linha)
     if avisos:

@@ -2,15 +2,20 @@
 
 uso: python3 ferramenta/app.py               (abre a janela; fecha sozinho uns minutos depois da janela)
      python3 ferramenta/app.py --sem-janela  (so o servidor, ate o Ctrl+C)
+     python3 ferramenta/app.py --porta 8800  (so nessa porta; tambem pela variavel SIANVOLT_PORTA)
+
+A porta de sempre e a 8765. Se outro programa esta nela, o app usa a proxima livre (ate a 8774); se este Sianvolt
+ja esta aberto numa delas, so abre outra janela nele. Sem terminal (o atalho do menu), o erro vira notificacao.
 """
+import http.client
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
 import threading
 import time
-import urllib.request
 import webbrowser
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -24,9 +29,9 @@ import programa
 
 RAIZ = Path(__file__).resolve().parent.parent
 PLACAS = RAIZ / "placas"
-PORTA = 8765
+PORTA = 8765          # a de sempre; com outro programa nela, o app tenta as PORTAS seguintes
+PORTAS = 10           # da 8765 a 8774
 OCIOSO = 180          # sem nenhum pedido por 3 min (janela fechada), o app fecha
-HOSTS = {f"127.0.0.1:{PORTA}", f"localhost:{PORTA}"}   # so o navegador desta maquina; outro nome no Host e golpe (DNS rebinding)
 SERVIDO = ("/bancada/", "/placas/")                     # o resto do repositorio (.git, .claude...) nao sai daqui
 CODIGO_DE_LOJA = re.compile(r"[a-z]+:[a-z0-9-]+")   # peça de loja brasileira no catálogo (robocore:esp32-wifi-bluetooth)
 rodando = {}          # placa -> processo do testar.py ou do programa.py (um por placa)
@@ -113,7 +118,16 @@ def ultimo_programa(pasta):
     return None
 
 
+def hosts(porta):
+    """os Host que o app aceita: so o navegador desta maquina, na porta em que o app esta de verdade. Outro nome no
+    Host e golpe (DNS rebinding)"""
+    return {f"127.0.0.1:{porta}", f"localhost:{porta}"}
+
+
 class Bancada(SimpleHTTPRequestHandler):
+    def host_ok(self):
+        return self.headers.get("Host") in hosts(self.server.server_address[1])
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")   # a bancada sempre ve o arquivo que acabou de mudar
         super().end_headers()
@@ -138,7 +152,7 @@ class Bancada(SimpleHTTPRequestHandler):
 
     def do_HEAD(self):
         url = urlparse(self.path)
-        if self.headers.get("Host") not in HOSTS or not self.servido(url):
+        if not self.host_ok() or not self.servido(url):
             self.send_response(404)
             self.end_headers()
             return
@@ -147,7 +161,7 @@ class Bancada(SimpleHTTPRequestHandler):
     def do_GET(self):
         ultimo[0] = time.monotonic()
         url = urlparse(self.path)
-        if self.headers.get("Host") not in HOSTS:
+        if not self.host_ok():
             return self.responder({"erro": "host"}, 403)
         q = {k: v[0] for k, v in parse_qs(url.query).items()}
         if url.path == "/api/projeto":
@@ -246,7 +260,7 @@ class Bancada(SimpleHTTPRequestHandler):
     def do_POST(self):
         ultimo[0] = time.monotonic()
         url = urlparse(self.path)
-        if self.headers.get("Host") not in HOSTS:
+        if not self.host_ok():
             return self.responder({"erro": "host"}, 403)
         # o cabecalho proprio faz o navegador barrar pedido vindo de outro site
         if url.path not in ("/api/testar", "/api/escolher", "/api/responder", "/api/programa", "/api/catalogo/checar",
@@ -324,32 +338,105 @@ def fechar_quando_ocioso(servidor):
     servidor.shutdown()
 
 
-if __name__ == "__main__":
-    janela = "--sem-janela" not in sys.argv
-    url = f"http://127.0.0.1:{PORTA}/bancada/"
-    servidor = None
-    for tentativa in range(2):
+def portas_do_app(args, ambiente):
+    """as portas que o app tenta: --porta N ou SIANVOLT_PORTA (so ela, quem pediu sabe), senao a 8765 e as seguintes"""
+    if "--porta" in args:
+        i = args.index("--porta")
+        if i + 1 >= len(args):
+            raise ValueError("o --porta precisa de um número: --porta 8800")
+        pedida = args[i + 1]
+    else:
+        pedida = ambiente.get("SIANVOLT_PORTA") or None
+    if pedida is None:
+        return list(range(PORTA, PORTA + PORTAS))
+    if not pedida.isdigit() or not 1 <= int(pedida) <= 65535:
+        raise ValueError(f"a porta '{pedida}' não é um número de 1 a 65535")
+    return [int(pedida)]
+
+
+def raiz_em(porta):
+    """a raiz do Sianvolt que responde nessa porta, ou None (porta vazia, outro programa, ou um app fechando)"""
+    try:
+        c = http.client.HTTPConnection("127.0.0.1", porta, timeout=2)
         try:
-            servidor = ThreadingHTTPServer(("127.0.0.1", PORTA), partial(Bancada, directory=str(RAIZ)))
-            break
-        except OSError:   # porta ocupada: e um app nosso? (o pedido tambem renova o relogio de ociosidade dele)
-            try:   # e este mesmo repositorio? (outra copia do Sianvolt abriria as placas erradas)
-                with urllib.request.urlopen(f"http://127.0.0.1:{PORTA}/api/placas", timeout=2) as r:
-                    vivo = json.loads(r.read()).get("raiz") == str(RAIZ)
-            except (OSError, ValueError):
-                vivo = False
-            if vivo:
-                if janela:
-                    abrir_janela(url)   # so abre outra janela no que ja esta rodando
-                sys.exit()
-            time.sleep(1)   # pode ter acabado de fechar; tenta a porta de novo
+            c.request("GET", "/api/placas")
+            r = c.getresponse()
+            dado = json.loads(r.read()) if r.status == 200 else None
+        finally:
+            c.close()
+    except (OSError, ValueError, http.client.HTTPException):
+        return None
+    return dado.get("raiz") if isinstance(dado, dict) else None
+
+
+def subir(portas):
+    """(servidor, None) na primeira porta livre; (None, porta) se este Sianvolt ja esta aberto numa delas (a janela
+    nova vai nele: dois apps no mesmo repositorio rodariam testes na mesma placa); (None, None) se nenhuma serve"""
+    for porta in portas:   # o pedido tambem renova o relogio de ociosidade do que ja esta aberto
+        if raiz_em(porta) == str(RAIZ):   # outra copia do Sianvolt (outra raiz) abriria as placas erradas
+            return None, porta
+    for porta in portas:
+        try:
+            return ThreadingHTTPServer(("127.0.0.1", porta), partial(Bancada, directory=str(RAIZ))), None
+        except OSError:   # outro programa nela (ou um app nosso acabando de fechar): a proxima
+            continue
+    return None, None
+
+
+def notificar(texto):
+    """o aviso que aparece na tela sem terminal (o atalho do menu tem Terminal=false): a notificacao do sistema"""
+    exe = shutil.which("notify-send")
+    if exe:
+        try:
+            subprocess.run([exe, "--app-name=Sianvolt", "Sianvolt", texto], capture_output=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
+
+def avisar(texto):
+    """o erro de abrir o app: no terminal, e na notificacao quando nao tem terminal pra ler"""
+    print(texto, file=sys.stderr)
+    if not (sys.stderr and sys.stderr.isatty()):
+        notificar(texto)
+
+
+def main(args=None, ambiente=None):
+    """abre o app -> o codigo de saida (0 ok ou ja aberto, 1 sem porta, 2 porta errada)"""
+    args = sys.argv[1:] if args is None else args
+    janela = "--sem-janela" not in args
+    try:
+        portas = portas_do_app(args, os.environ if ambiente is None else ambiente)
+    except ValueError as e:
+        avisar(f"o Sianvolt não abriu: {e}")
+        return 2
+    servidor, aberto = subir(portas)
+    if aberto:
+        url = f"http://127.0.0.1:{aberto}/bancada/"
+        if janela:
+            abrir_janela(url)   # so abre outra janela no que ja esta rodando
+        else:
+            print(f"o Sianvolt já está aberto em {url}", flush=True)
+        return 0
     if servidor is None:
-        sys.exit(f"a porta {PORTA} está ocupada por outro programa")
+        quais = f"a porta {portas[0]} está" if len(portas) == 1 else f"as portas {portas[0]} a {portas[-1]} estão"
+        avisar(f"o Sianvolt não abriu: {quais} com outros programas (ss -ltnp mostra quem). Escolha outra com "
+               "--porta 8800 ou SIANVOLT_PORTA=8800")
+        return 1
+    porta = servidor.server_address[1]
+    url = f"http://127.0.0.1:{porta}/bancada/"
     if janela:
         threading.Thread(target=fechar_quando_ocioso, args=(servidor,), daemon=True).start()
         abrir_janela(url)
-    print(f"bancada em {url}" + ("" if janela else " (Ctrl+C fecha)"))
+    outra = f" (a {portas[0]} está com outro programa)" if porta != portas[0] else ""
+    print(f"bancada em {url}{outra}" + ("" if janela else " (Ctrl+C fecha)"), flush=True)   # o terminal ou o log
     try:
         servidor.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        servidor.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

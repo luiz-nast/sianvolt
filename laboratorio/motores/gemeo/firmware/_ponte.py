@@ -24,6 +24,30 @@ _ERROS = {"ValueError": ValueError, "TypeError": TypeError, "RuntimeError": Runt
           "NotImplementedError": NotImplementedError}
 
 
+def inteiro(x):
+    """o número inteiro que o MicroPython do chip pede (mp_obj_get_int, py/obj.c): int e bool passam; float, texto e
+    None dão TypeError ("can't convert float to int"), como na placa; um int que não cabe nos 32 bits das ESP dá
+    OverflowError. Pra sleep_ms, sleep_us, ticks_add e o PWM aceitarem só o que a placa aceita"""
+    if x is True or x is False:   # no MicroPython o bool não é int pro isinstance, mas o chip aceita
+        return 1 if x else 0
+    if not isinstance(x, int):
+        para_int = None if isinstance(x, float) else getattr(type(x), "__int__", None)
+        if para_int is None:
+            raise TypeError("can't convert %s to int" % type(x).__name__)
+        x = para_int(x)
+    if not -0x80000000 <= x <= 0x7FFFFFFF:
+        raise OverflowError("overflow converting long int to machine word")
+    return int(x)
+
+
+def flutuante(x):
+    """o número de ponto flutuante que o MicroPython do chip pede (mp_obj_get_float): int, bool e float passam; o
+    resto dá TypeError ("can't convert str to float"). Pra time.sleep"""
+    if x is True or x is False or isinstance(x, (int, float)):
+        return x
+    raise TypeError("can't convert %s to float" % type(x).__name__)
+
+
 def _pelo_cano(nome, args):
     if _cano[0] is None:
         import os

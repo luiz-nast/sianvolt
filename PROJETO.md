@@ -79,11 +79,11 @@ placas/<nome>/        ← as placas de verdade (só na máquina)
   fabrica.json        ← o que aconteceu no site da fábrica (o Claude escreve depois de subir o zip)
 ```
 
-Instalar uma vez: `uv venv .venv && uv pip install -r requirements.txt` (só o `gerbonara`, pra etapa 6; a foto usa o Chrome headless). O `python3` do sistema não tem o `gerbonara` (nesta máquina, conferido): rode o `testar.py` com o `.venv/bin/python`.
+Instalar uma vez: `uv venv .venv && uv pip install -r requirements.txt` (só o `gerbonara`, pra etapa 6; sem o `uv`: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`; no Ubuntu, o `python3` do sistema pede o pacote `python3-venv` antes). O `.venv` precisa de Python 3.12 ou mais novo (o `gerbonara` 1.6.3 pede "Requires-Python: >=3.12"; a bateria passou com o 3.12.14, o 3.14.4 e o 3.15.0 em 2026-10-26). A foto da etapa 7 usa o Chrome ou o Chromium headless; sem nenhum dos dois, a etapa salva só o `saida/foto.svg` e passa. O gêmeo do laboratório precisa de `git`, `make` e `gcc` pra compilar. O `python3` do sistema não tem o `gerbonara` (nesta máquina, conferido): rode o `testar.py` com o `.venv/bin/python`.
 Gerar e testar: `.venv/bin/python ferramenta/testar.py placas/<nome>` (o `testar.py` chama o `gerar.py`; o `gerar.py` sozinho também funciona).
 Rodar o programa: `.venv/bin/python ferramenta/programa.py placas/<nome>` (precisa do MicroPython do PC: `python3 laboratorio/lab.py instalar gemeo`; sem ele a etapa 8 pula).
 Rodar a bancada: `python3 ferramenta/app.py` (ou o atalho do menu, depois do `instalar.py`). Abre uma janela com os projetos; o app fecha sozinho uns minutos depois que a janela fecha. Também funciona com `python -m http.server` na raiz e `localhost:8000/bancada/`, só sem os botões que rodam coisas (testes, programa, escolher peça). A página relê os arquivos a cada 1 s (polling simples).
-As pastas em `placas/` ficam só na máquina (`.gitignore`); o repositório público leva a ferramenta, o laboratório e as placas de teste de `testes/placas/`.
+As pastas em `placas/` ficam só na máquina (`.gitignore`); o repositório público leva a ferramenta, o laboratório e as placas de teste de `testes/placas/`. O app e o `testar.py` trabalham em `placas/`: pra ver uma placa de teste no app, copie ela pra lá (`mkdir -p placas && cp -r testes/placas/esp32 placas/esp32`); rodar o `testar.py` direto em `testes/placas/` escreve `saida/`, `versoes/` e `testes.json` dentro do repositório.
 
 ---
 

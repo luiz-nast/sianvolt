@@ -12,12 +12,13 @@ import gerar  # noqa: E402
 import programa  # noqa: E402
 
 PLACAS = Path(__file__).resolve().parent / "placas"
+PREFIXO = "sianvolt-teste-"   # o mkdtemp de toda cópia dos testes: o apagar só apaga pasta com esse nome
 
 
 def copia(nome="lanterna", troca=None):
     """copia a placa de teste (testes/placas/<nome>) pra uma pasta temporária, com o pid no nome (dá pra saber de que
     rodada dos testes ela sobrou); troca = {"texto velho": "texto novo"} no placa.txt"""
-    pasta = Path(tempfile.mkdtemp(prefix=f"sianvolt-teste-{os.getpid()}-")) / nome
+    pasta = Path(tempfile.mkdtemp(prefix=f"{PREFIXO}{os.getpid()}-")) / nome
     shutil.copytree(PLACAS / nome, pasta)
     if troca:
         txt = (pasta / "placa.txt").read_text()
@@ -30,9 +31,15 @@ def copia(nome="lanterna", troca=None):
 
 def apagar(pasta):
     """apaga a cópia e a vaga que o laboratório abriu pra ela (a etapa 8 roda o programa no build/ do laboratório,
-    numa pasta com o nome da cópia, que não volta)"""
+    numa pasta com o nome da cópia, que não volta). A cópia é <mkdtemp>/<nome>: quem vai embora é o mkdtemp, o pai
+    dela. Por isso o apagar recebe a cópia, nunca o mkdtemp: com o mkdtemp, o pai seria a pasta temporária do sistema
+    (o /tmp inteiro). Pai sem o PREFIXO no nome (ou o próprio gettempdir) é engano do teste: para com erro, sem apagar"""
+    pai = Path(pasta).resolve().parent
+    if not pai.name.startswith(PREFIXO) or pai == Path(tempfile.gettempdir()).resolve():
+        raise ValueError(f"apagar({pasta}): o pai ({pai}) não é um mkdtemp dos testes ({PREFIXO}...); "
+                         "passe a cópia (<mkdtemp>/<nome>), não o mkdtemp")
     programa.apagar_vaga(programa.nome_da_copia(pasta))
-    shutil.rmtree(Path(pasta).parent, ignore_errors=True)
+    shutil.rmtree(pai, ignore_errors=True)
 
 
 def modelo(texto):
