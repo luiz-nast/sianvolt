@@ -59,6 +59,16 @@ def placa(nome):
     return None
 
 
+def nome_do_projeto(pasta):
+    """o nome que o Luiz deu ao projeto (placas/<pasta>/nome.txt), ou None; a pasta é o id, o nome é só o título.
+    Editado à mão, vale a primeira linha e até 60 letras (o que o app grava já é assim)"""
+    try:
+        linhas = (pasta / "nome.txt").read_text(encoding="utf-8").strip().splitlines()
+    except (OSError, ValueError):   # sem o arquivo, ou texto que não é UTF-8
+        return None
+    return (linhas[0].strip()[:60] or None) if linhas else None
+
+
 def usos():
     """codigo -> ["lanterna: R1", ...]: que placa usa cada peca do catalogo"""
     quem = {}
@@ -211,10 +221,11 @@ class Bancada(SimpleHTTPRequestHandler):
             self.end_headers()
             return
         if url.path == "/api/placas":
-            nomes = sorted(p.name for p in PLACAS.iterdir() if placa(p.name)) if PLACAS.exists() else []
+            pastas = sorted(p.name for p in PLACAS.iterdir() if placa(p.name)) if PLACAS.exists() else []
+            nomes = {n: t for n in pastas if (t := nome_do_projeto(PLACAS / n))}   # só quem tem nome.txt
             with trava:
                 vivos = [n for n, p in rodando.items() if p.poll() is None]
-            return self.responder({"placas": nomes, "rodando": vivos, "raiz": str(RAIZ)})
+            return self.responder({"placas": pastas, "nomes": nomes, "rodando": vivos, "raiz": str(RAIZ)})
         if not self.servido(url):
             return self.responder({"erro": "não existe"}, 404)
         arquivo = re.fullmatch(r"/placas/([^/]+)/(.+)", url.path)
@@ -250,6 +261,48 @@ class Bancada(SimpleHTTPRequestHandler):
             return self.responder({"erro": str(e)}, 502)
         self.responder(resposta)
 
+    def renomear(self, pasta, corpo):
+        """o nome do projeto vai pro nome.txt (vazio apaga e volta ao título do objetivo); a pasta não muda"""
+        nome = corpo.get("nome")
+        nome = nome.strip() if isinstance(nome, str) else None
+        if nome is None or len(nome) > 60 or re.search(r"[\x00-\x1f\x7f\x85\u2028\u2029\u202a-\u202e\u2066-\u2069\ud800-\udfff]", nome):
+            return self.responder({"erro": "nome inválido: até 60 letras, numa linha só"}, 400)
+        try:
+            if nome:
+                temporario = pasta / f"nome.txt.{threading.get_ident()}.tmp"   # um por pedido: dois ao mesmo tempo não se atropelam
+                temporario.write_text(nome + "\n", encoding="utf-8")
+                os.replace(temporario, pasta / "nome.txt")
+            else:
+                (pasta / "nome.txt").unlink(missing_ok=True)
+        except OSError:
+            return self.responder({"erro": "não consegui gravar o nome: confira se a pasta da placa aceita escrita"}, 500)
+        self.responder({"ok": True, "nome": nome or None})
+
+    def remover(self, pasta, corpo, pedida):
+        """não apaga: move a pasta inteira pra placas/.lixeira/<pasta>-<data>/ (o Luiz traz de volta movendo ela de lá)"""
+        if pedida != pasta.name:   # a placa é um atalho (link) pra outra pasta: mover a de verdade sumiria com as duas
+            return self.responder({"erro": "esta placa é um atalho pra outra pasta; apague o atalho à mão, ou remova a pasta de verdade"}, 400)
+        if corpo.get("confirma") != pasta.name:
+            return self.responder({"erro": "pra remover, confirme com o nome da pasta"}, 400)
+        with trava:
+            if vivo(pasta.name) or programa.ocupada(pasta):
+                return self.responder({"erro": "os testes ou o programa desta placa estão rodando; espere acabar e tente de novo"}, 409)
+            lixeira = pasta.parent / ".lixeira"
+            base = f"{pasta.name}-{time.strftime('%Y%m%d-%H%M%S')}"
+            destino, n = lixeira / base, 1
+            while destino.exists():
+                n += 1
+                destino = lixeira / f"{base}-{n}"
+            try:
+                lixeira.mkdir(exist_ok=True)
+                pasta.rename(destino)
+            except OSError:
+                return self.responder({"erro": "não consegui mover a pasta: confira se a placas/ aceita escrita"}, 500)
+            rodando.pop(pasta.name, None)
+            o_que.pop(pasta.name, None)
+            testar_depois.discard(pasta.name)
+        self.responder({"ok": True, "lixeira": f"placas/.lixeira/{destino.name}"})
+
     def foto(self, codigo):
         """foto da peca na LCSC (fica no cache do loja.py)"""
         if not loja.CODIGO.fullmatch(codigo):   # o '$' do CODIGO aceita 'C1\n'
@@ -274,7 +327,7 @@ class Bancada(SimpleHTTPRequestHandler):
             return self.responder({"erro": "host"}, 403)
         # o cabecalho proprio faz o navegador barrar pedido vindo de outro site
         if url.path not in ("/api/testar", "/api/escolher", "/api/responder", "/api/programa", "/api/catalogo/checar",
-                            "/api/catalogo/buscar") \
+                            "/api/catalogo/buscar", "/api/placa/nome", "/api/placa/remover") \
                 or self.headers.get("X-Bancada") != "1":
             return self.responder({"erro": "não existe"}, 404)
         try:
@@ -290,6 +343,10 @@ class Bancada(SimpleHTTPRequestHandler):
         pasta = placa(nome)
         if not pasta:
             return self.responder({"erro": f"a placa '{nome}' não existe"}, 404)
+        if url.path == "/api/placa/nome":
+            return self.renomear(pasta, corpo)
+        if url.path == "/api/placa/remover":
+            return self.remover(pasta, corpo, nome)
         if url.path == "/api/programa":   # o corpo e conferido antes: aperto so em botao, luz so em olho de luz
             if not (pasta / "codigo" / "main.py").is_file():
                 return self.responder({"erro": "esta placa não tem programa (falta o codigo/main.py)"}, 400)

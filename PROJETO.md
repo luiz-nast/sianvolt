@@ -309,7 +309,7 @@ Também calcula o status de cada requisito a partir das linhas `verifica:`.
 
 HTML + JS puro, desenho em SVG (facilita clique, destaque e zoom via viewBox). Tema escuro, fonte IBM Plex Sans/Mono. Referência visual: `design/App.dc.html` e `design/Board.dc.html` (abrir no navegador não roda; é pra ler o layout e as cores).
 
-**Início:** a lista de projetos (`placas/*`), cada um com a miniatura da placa, o status dos testes, a versão e se já foi pra fábrica. Clicar abre o projeto.
+**Início:** a lista de projetos (`placas/*`), cada um com a miniatura da placa, o status dos testes, a versão e se já foi pra fábrica. Clicar abre o projeto. A busca no topo filtra enquanto se digita (pelo nome mostrado e pela pasta, sem acento nem maiúscula). **Renomear** grava o nome em `placas/<pasta>/nome.txt` (uma linha; vazio apaga e volta ao título do objetivo); a pasta não muda, porque é ela que identifica o projeto. **Remover** não apaga: move a pasta inteira pra `placas/.lixeira/<pasta>-<data>/` (pra trazer de volta, é só mover a pasta de lá) e pede pra confirmar; com os testes ou o programa da placa rodando, o app recusa.
 
 **Processo:** a história do projeto em 7 passos, o caminho de toda placa, pra mostrar pra alguém:
 - **objetivo**, com as perguntas que o Luiz responde clicando (brilho geral e por LED; cor de cada LED), cada uma dizendo quem decidiu;

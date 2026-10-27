@@ -232,9 +232,24 @@ aside.inspetor { flex: 0 0 340px; overflow: auto; padding: 20px; border-left: 1p
 .inicio { flex: 1; overflow: auto; background: var(--area); padding: 40px 24px 48px; }
 .inicio .miolo { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
 .inicio h1 { margin: 0; font-size: 22px; font-weight: 600; }
+.inicio-topo { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px 16px; }
+#inicio-busca { width: 280px; max-width: 100%; min-height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--borda2); background: var(--painel); color: var(--texto); font: inherit; font-size: 14px; }
+#inicio-busca:focus-visible { outline: 2px solid var(--destaque); outline-offset: 1px; }
+@media (max-width: 640px) { #inicio-busca { width: 100%; } }
 .cartoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
 .cartao { display: flex; flex-direction: column; gap: 12px; padding: 14px; background: var(--painel); border: 1px solid var(--borda); border-radius: 12px; color: var(--texto); text-decoration: none; }
 .cartao:hover { border-color: var(--borda2); background: #20252A; }
+.cartao-link { display: flex; flex-direction: column; gap: 12px; color: inherit; text-decoration: none; }
+.cartao-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+.cartao-acoes button { min-height: 36px; padding: 0 14px; border: 1px solid var(--borda); border-radius: 8px; font-size: 13px; color: #C8CDD2; }
+.cartao-acoes button:hover { background: var(--ativo); }
+.cartao-acoes button[data-remover]:hover { color: var(--erro); }
+.cartao-acoes button.perigo { border-color: var(--erro); color: var(--erro); }
+.inicio-edita { display: flex; flex-direction: column; gap: 4px; }
+.inicio-nome { width: 100%; min-height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--borda2); background: var(--area); color: var(--texto); font: inherit; font-size: 15px; font-weight: 600; }
+.inicio-nome:focus-visible { outline: 2px solid var(--destaque); outline-offset: 1px; }
+.cartao .erro-inicio { font-size: 13px; line-height: 1.45; color: var(--erro); }
+.cartao .inicio-remover { margin: 0; font-size: 14px; line-height: 1.5; }
 .cartao .sem-placa { aspect-ratio: 3 / 2; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: var(--area); color: var(--sec); font-size: 13px; }
 .cartao .titulo-cartao { font-size: 15px; font-weight: 600; }
 .selos { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -371,7 +386,6 @@ table.lux .de-ate { display: block; font-size: 10.5px; opacity: 0.75; white-spac
 .chips button { min-height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--borda); font-family: var(--mono); font-size: 12px; color: #C8CDD2; }
 .chips button[aria-pressed="true"] { background: var(--cobre); border-color: var(--cobre); color: #2A1A05; }
 .procurar { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.catalogo-cartao { gap: 6px; text-align: left; font: inherit; }
 .miolo.largo { max-width: 1280px; }
 .cat-corpo { display: grid; grid-template-columns: 210px 1fr; gap: 24px; align-items: start; }
 .cat-lado { position: sticky; top: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -514,6 +528,11 @@ const S = {
   recadoDesde: 0,        // quando o pedido do recado deu certo (ms): os testes que ele disparou começam depois disso
   recadoOnde: '',        // 'responder' (o recado fica no passo 1, perto da pergunta) ou o resto (no passo 3, o carrinho)
   modelo: null, testes: null, versoes: [],
+  nomes: {},             // /api/placas: o nome que o Luiz deu a cada projeto (nome.txt), na página de uma placa
+  nomesInicio: {}, placasInicio: [],   // a Home: os mesmos nomes e a última leitura de cada placa
+  filtroInicio: '',      // o que está escrito na busca da Home (sobrevive à volta da aba Peças)
+  editandoInicio: null,  // {pasta, modo: 'nome' | 'remover', valor, erro}: o cartão aberto pra renomear ou remover
+  vezInicio: 0,          // a leitura mais nova da Home joga fora a mais velha
   brutos: {},            // ultimo texto lido de cada arquivo, pra saber se mudou
   modelosVersao: {},     // v -> modelo daquela versao (versoes/vN.json)
   ver: null,             // versao escolhida no relogio; null = atual
@@ -1164,7 +1183,7 @@ function naoConferido(t) {
 
 // ---------- topo ----------
 function desenharTopo() {
-  $('#nome').textContent = S.testes?.objetivo?.titulo || PLACA;
+  $('#nome').textContent = S.nomes?.[PLACA] || S.testes?.objetivo?.titulo || PLACA;
   document.title = `${$('#nome').textContent} · Sianvolt`;
   document.querySelectorAll('header nav button').forEach(b => b.setAttribute('aria-pressed', b.dataset.aba === S.aba));
   const t = S.testes, st = $('#status');
@@ -2574,11 +2593,11 @@ async function lerDoInicio(url) {
 
 async function listarPlacas() {
   const api = await lerDe('/api/placas');
-  if (api) { S.api = true; return api.placas; }
-  try {   // sem o app.py (python -m http.server): le a listagem da pasta
+  if (api) { S.api = true; return { pastas: api.placas, nomes: api.nomes || {} }; }
+  try {   // sem o app.py (python -m http.server): le a listagem da pasta (sem os nomes nem a .lixeira)
     const html = await (await fetch('../placas/', { cache: 'no-store' })).text();
-    return [...html.matchAll(/href="([^"/?#]+)\/"/g)].map(x => decodeURIComponent(x[1]));
-  } catch { return []; }
+    return { pastas: [...html.matchAll(/href="([^"/?#]+)\/"/g)].map(x => decodeURIComponent(x[1])).filter(n => !n.startsWith('.')), nomes: {} };
+  } catch { return { pastas: [], nomes: {} }; }
 }
 
 function miniatura(m, o = {}) {
@@ -2605,36 +2624,157 @@ function selosDe(t, m, cotacao) {
   return testes + fabrica;
 }
 
+// sem acento nem maiúscula: "eletronico" acha "Dado eletrônico"; filtro vazio acha tudo
+function combinaInicio(texto, filtro) {
+  const limpa = t => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  return limpa(texto).includes(limpa(filtro));
+}
+
+// o título do cartão: o nome que o Luiz deu (nome.txt), senão o título do objetivo, senão a pasta
+const nomeDoProjeto = p => S.nomesInicio[p.nome] || p.testes?.objetivo?.titulo || p.nome;
+
+function cartaoDoInicio(p) {
+  const v = p.versoes.at(-1), nome = nomeDoProjeto(p), pasta = esc(p.nome), ed = S.editandoInicio?.pasta === p.nome ? S.editandoInicio : null;
+  const erro = ed?.erro ? `<span class="erro-inicio" role="alert">${esc(ed.erro)}</span>` : '';
+  // editando ou removendo, o cartão não é link (campo e botão não vivem dentro de <a>)
+  const titulo = ed?.modo === 'nome'
+    ? `<label class="inicio-edita"><span class="sub">Nome do projeto</span><input class="inicio-nome" maxlength="60" value="${esc(ed.valor)}" autocomplete="off" aria-label="Nome do projeto"></label>${erro || '<span class="sub">Vazio volta ao título do objetivo.</span>'}`
+    : ed?.modo === 'remover'
+      ? `<p class="inicio-remover">Remover “${esc(nome)}”? A pasta vai pra placas/.lixeira/ (dá pra trazer de volta movendo ela de lá).</p>${erro}`
+      : `<span class="titulo-cartao">${esc(nome)}</span>`;
+  const miolo = `${p.modelo ? miniatura(p.modelo) : '<div class="sem-placa">ainda não foi gerada</div>'}
+      ${titulo}
+      <span class="sub mono">placas/${pasta}${v ? ` · v${v.v} · ${esc(v.quando)}` : ''}</span>
+      <span class="selos">${selosDe(p.testes, p.modelo, p.cotacao)}</span>`;
+  const botoes = ed?.modo === 'nome'
+    ? `<button type="button" data-salvar-nome="${pasta}">Salvar</button><button type="button" data-cancelar-inicio>Cancelar</button>`
+    : ed?.modo === 'remover'
+      ? `<button type="button" class="perigo" data-confirmar-remover="${pasta}">Remover</button><button type="button" data-cancelar-inicio>Cancelar</button>`
+      : `<button type="button" data-renomear="${pasta}" aria-label="Renomear ${esc(nome)}">Renomear</button><button type="button" data-remover="${pasta}" aria-label="Remover ${esc(nome)}">Remover</button>`;
+  return `<article class="cartao" data-pasta="${pasta}" data-busca="${esc(`${nome} ${p.nome}`)}">
+    ${ed ? `<div class="cartao-link">${miolo}</div>` : `<a class="cartao-link" href="?placa=${encodeURIComponent(p.nome)}">${miolo}</a>`}
+    ${S.api ? `<div class="cartao-acoes">${botoes}</div>` : ''}
+  </article>`;
+}
+
+// a busca da Home: esconde os cartões que não combinam (sem reler nada) e conta quantos ficaram
+function aplicarFiltroInicio() {
+  const cartoes = [...document.querySelectorAll('#inicio-lista .cartao')], filtro = S.filtroInicio.trim();
+  cartoes.forEach(c => { c.hidden = !combinaInicio(c.dataset.busca, filtro); });
+  const achou = cartoes.filter(c => !c.hidden).length, total = S.placasInicio.length, placas = n => (n === 1 ? 'placa' : 'placas');
+  $('#inicio-conta').textContent = filtro ? `${achou} de ${total} ${placas(total)}` : `${total} ${placas(total)} em placas/`;
+  const nada = $('#inicio-nada');
+  if (nada) { nada.hidden = achou > 0; nada.textContent = `Nenhum projeto com “${filtro}”.`; }
+}
+
+// desenha a Home com o que já foi lido (S.placasInicio). O esqueleto (título, busca) só nasce quando não existe: a busca
+// nunca é recriada, então o Luiz digitando não perde foco nem letra; a lista só é trocada se mudou
+function pintarInicio() {
+  if (!$('#inicio-lista')) {
+    $('#main').innerHTML = `<section class="inicio" aria-label="Projetos"><div class="miolo">
+      <div class="inicio-topo"><div><h1>Projetos</h1><span class="sub" id="inicio-conta"></span></div>
+        <input id="inicio-busca" type="search" placeholder="Procurar projeto…" aria-label="Procurar projeto pelo nome" autocomplete="off"></div>
+      <p class="aviso" id="inicio-recado" role="status" hidden></p>
+      <div id="inicio-lista"></div>
+    </div></section>`;
+    $('#inicio-busca').value = S.filtroInicio;
+    S.brutos.inicio = null;
+  }
+  const placas = S.placasInicio;
+  const html = placas.length ? `<div class="cartoes">${placas.map(cartaoDoInicio).join('')}</div><p class="vazio" id="inicio-nada" hidden></p>`
+    : '<p class="vazio">Nenhuma placa em <span class="mono">placas/</span> ainda.</p>';
+  const trocou = html !== S.brutos.inicio;   // so troca se mudou (nao engole clique)
+  if (trocou) $('#inicio-lista').innerHTML = S.brutos.inicio = html;
+  aplicarFiltroInicio();
+  const ed = S.editandoInicio, cartao = ed && [...document.querySelectorAll('#inicio-lista .cartao')].find(c => c.dataset.pasta === ed.pasta);
+  if (!cartao || !trocou) return;
+  const campo = cartao.querySelector('.inicio-nome');
+  if (!campo) return cartao.querySelector('[data-cancelar-inicio]')?.focus();   // remover: o foco vai pro Cancelar, não pro que apaga
+  campo.addEventListener('keydown', e => {   // Enter salva, Esc cancela
+    if (e.isComposing) return;
+    if (e.key === 'Enter') { e.preventDefault(); salvarNomeInicio(ed.pasta); }
+    else if (e.key === 'Escape') editarNoInicio(null);
+  });
+  campo.focus();
+  if (ed.selecionar) { campo.select(); ed.selecionar = false; }
+  else campo.setSelectionRange(campo.value.length, campo.value.length);   // depois de um erro, digita no fim do nome
+}
+
 async function desenharInicio() {
   document.querySelectorAll('#abas [data-inicio]').forEach(b => b.setAttribute('aria-pressed', b.dataset.inicio === S.inicio));
   if (S.inicio === 'pecas') { if ($('#main').dataset.aba !== 'pecas') { $('#main').innerHTML = ''; $('#main').dataset.aba = 'pecas'; S.brutos.inicio = null; } return desenharCatalogo(); }
   $('#main').dataset.aba = 'projetos';
-  const nomes = await listarPlacas();
-  if (S.inicio !== 'projetos') return;
-  const placas = await Promise.all(nomes.map(async nome => {
+  const vez = ++S.vezInicio;
+  const { pastas, nomes } = await listarPlacas();
+  if (S.inicio !== 'projetos' || vez !== S.vezInicio) return;
+  const placas = await Promise.all(pastas.map(async nome => {
     const base = `../placas/${encodeURIComponent(nome)}/`;
     const [modelo, testes, versoes, cotacao] = await Promise.all(
       ['saida/modelo.json', 'testes.json', 'versoes/versoes.json', 'fabrica.json'].map(c => lerDoInicio(base + c)));
     return { nome, modelo, testes, versoes: versoes || [], cotacao };
   }));
+  if (S.inicio !== 'projetos' || vez !== S.vezInicio) return;   // trocou de aba, ou já veio uma leitura mais nova
   placas.sort((a, b) => (b.versoes.at(-1)?.quando || '').localeCompare(a.versoes.at(-1)?.quando || ''));
-  const cartoes = placas.map(p => {
-    const v = p.versoes.at(-1);
-    return `<a class="cartao" href="?placa=${encodeURIComponent(p.nome)}">
-      ${p.modelo ? miniatura(p.modelo) : '<div class="sem-placa">ainda não foi gerada</div>'}
-      <span class="titulo-cartao">${esc(p.testes?.objetivo?.titulo || p.nome)}</span>
-      <span class="sub mono">placas/${esc(p.nome)}${v ? ` · v${v.v} · ${esc(v.quando)}` : ''}</span>
-      <span class="selos">${selosDe(p.testes, p.modelo, p.cotacao)}</span>
-    </a>`;
-  }).join('');
-  const cat = C.dado ? Object.values(C.dado.pecas) : null;
-  const html = `<section class="inicio" aria-label="Projetos"><div class="miolo">
-    <div><h1>Projetos</h1><span class="sub">${placas.length} ${placas.length === 1 ? 'placa' : 'placas'} em placas/</span></div>
-    ${placas.length ? `<div class="cartoes">${cartoes}</div>` : '<p class="vazio">Nenhuma placa em <span class="mono">placas/</span> ainda.</p>'}
-    ${cat ? `<button type="button" class="cartao catalogo-cartao" data-inicio="pecas"><span class="titulo-cartao">Peças →</span>
-      <span class="sub">${cat.length} peças em ${Object.keys(C.dado.categorias).length} categorias · ${cat.filter(conferidaDe).length} prontas pra placa</span></button>` : ''}
-  </div></section>`;
-  if (html !== S.brutos.inicio) $('#main').innerHTML = S.brutos.inicio = html;   // so troca se mudou (nao engole clique)
+  S.placasInicio = placas; S.nomesInicio = nomes;
+  if (S.editandoInicio && !placas.some(p => p.nome === S.editandoInicio.pasta)) S.editandoInicio = null;   // o cartão sumiu
+  if (!S.editandoInicio) pintarInicio();   // editando, a lista fica como está (senão apaga o que o Luiz está digitando)
+}
+
+// Renomear ou Remover abre o cartão (modo 'nome' ou 'remover'); sem pasta, fecha
+function editarNoInicio(pasta, modo) {
+  const p = pasta && S.placasInicio.find(q => q.nome === pasta), antes = S.editandoInicio;
+  S.editandoInicio = p ? { pasta, modo, valor: nomeDoProjeto(p), selecionar: true } : null;
+  pintarInicio();
+  if (!p && antes) focoDoInicio(antes);
+}
+
+// fechou a edição: o foco volta pro botão que abriu (ou, se o cartão sumiu, pro primeiro cartão ou pra busca), não cai no <body>
+function focoDoInicio(ed) {
+  const chave = ed.modo === 'nome' ? 'renomear' : 'remover';
+  const botao = [...document.querySelectorAll(`#inicio-lista [data-${chave}]`)].find(b => b.dataset[chave] === ed.pasta);
+  (botao || $('#inicio-lista .cartao-link') || $('#inicio-busca'))?.focus();
+}
+
+async function salvarNomeInicio(pasta) {
+  const ed = S.editandoInicio, campo = $('#inicio-lista .inicio-nome');
+  if (!ed || ed.modo !== 'nome' || ed.pasta !== pasta || ed.salvando) return;
+  if (campo) ed.valor = campo.value;
+  const p = S.placasInicio.find(q => q.nome === pasta);
+  if (p && ed.valor.trim() === nomeDoProjeto(p)) return editarNoInicio(null);   // nada mudou: não grava (senão o título do objetivo congela no nome.txt)
+  ed.salvando = true;
+  const d = await postar(`/api/placa/nome?placa=${encodeURIComponent(pasta)}`, { nome: ed.valor });
+  if (S.editandoInicio !== ed) return;   // cancelou no meio
+  if (d.erro) { ed.erro = d.erro; ed.salvando = false; return pintarInicio(); }
+  if (d.nome) S.nomesInicio[pasta] = d.nome; else delete S.nomesInicio[pasta];
+  S.editandoInicio = null;
+  pintarInicio();
+  focoDoInicio(ed);
+  desenharInicio();
+}
+
+async function removerDoInicio(pasta) {
+  const ed = S.editandoInicio, p = S.placasInicio.find(q => q.nome === pasta);
+  if (!ed || ed.modo !== 'remover' || ed.pasta !== pasta || ed.salvando || !p) return;
+  const nome = nomeDoProjeto(p);
+  ed.salvando = true;
+  const d = await postar(`/api/placa/remover?placa=${encodeURIComponent(pasta)}`, { confirma: pasta });
+  if (S.editandoInicio !== ed) return;
+  if (d.erro) { ed.erro = d.erro; ed.salvando = false; return pintarInicio(); }
+  S.editandoInicio = null;
+  S.placasInicio = S.placasInicio.filter(q => q.nome !== pasta);
+  pintarInicio();
+  focoDoInicio(ed);
+  recadoDoInicio(`“${nome}” foi pra ${d.lixeira}`);
+  desenharInicio();
+}
+
+let recadoTimer;
+function recadoDoInicio(txt) {   // o recado no topo da Home some sozinho em 8 s
+  const el = $('#inicio-recado');
+  if (!el) return;
+  el.textContent = txt; el.hidden = false;
+  clearTimeout(recadoTimer);
+  recadoTimer = setTimeout(() => { const r = $('#inicio-recado'); if (r) r.hidden = true; }, 8000);
 }
 
 // ---------- pecas: a lista de compras de sempre (ferramenta/catalogo/, um arquivo por categoria) ----------
@@ -3568,7 +3708,12 @@ document.addEventListener('click', async e => {
     delete S.opcoes[ref];
     return abrirOpcoes(ref);
   }
-  if (b.dataset.inicio) { S.inicio = b.dataset.inicio; history.replaceState(null, '', S.inicio === 'pecas' ? '?pecas' : './'); return desenharInicio(); }
+  if (b.dataset.inicio) { S.inicio = b.dataset.inicio; S.editandoInicio = null; history.replaceState(null, '', S.inicio === 'pecas' ? '?pecas' : './'); return desenharInicio(); }
+  if (b.dataset.renomear) return editarNoInicio(b.dataset.renomear, 'nome');
+  if (b.dataset.remover) return editarNoInicio(b.dataset.remover, 'remover');
+  if ('cancelarInicio' in b.dataset) return editarNoInicio(null);
+  if (b.dataset.salvarNome) return salvarNomeInicio(b.dataset.salvarNome);
+  if (b.dataset.confirmarRemover) return removerDoInicio(b.dataset.confirmarRemover);
   if (b.dataset.cat) { Object.assign(C, { cat: b.dataset.cat, chip: null, todas: false }); return desenharCatalogo(); }
   if (b.dataset.catChip !== undefined) { C.chip = b.dataset.catChip || null; C.todas = false; return desenharCatalogo(); }
   if (b.dataset.catToggle) { C[b.dataset.catToggle] = b.checked; return desenharCatalogo(); }
@@ -3624,6 +3769,7 @@ document.addEventListener('change', e => {   // a caixa de escolher a categoria 
 
 document.addEventListener('input', e => {
   const el = e.target;
+  if (el.id === 'inicio-busca') { S.filtroInicio = el.value; return aplicarFiltroInicio(); }
   if (el.id === 'cat-texto') { C.texto = el.value; C.todas = false; return desenharCatalogo(); }
   if ('regua' in el.dataset) { pararDeTocar(); return irParaInstante(+el.value); }   // arrastando a régua do ▶ Programa
   if (el.dataset.pilha) S.ajustes.pilha[el.dataset.pilha] = +el.value;
@@ -3698,6 +3844,7 @@ document.addEventListener('wheel', e => {
 
 document.addEventListener('keydown', e => {
   if (teclaDoPrograma(e)) return;
+  if (!PLACA && e.key === 'Escape' && S.editandoInicio?.modo === 'remover') return editarNoInicio(null);   // (no renomear, o Esc é do campo)
   if (!PLACA || e.target.closest('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'Escape') { S.sel = null; $('#versoes').hidden = true; return desenhar(); }
   if (S.aba !== 'projeto') return;
@@ -3713,7 +3860,7 @@ document.addEventListener('keydown', e => {
 window.addEventListener('resize', () => { const area = $('.area'); if (area) arrumarFerramentas(area, modeloVisto()); aplicarZoom(); });
 
 if (PLACA) {
-  lerDe('/api/placas').then(api => { S.api = !!api; S.apiSabido = true; if (S.api) atualizar(); desenhar(); });
+  lerDe('/api/placas').then(api => { S.api = !!api; S.apiSabido = true; S.nomes = api?.nomes || {}; if (S.api) atualizar(); desenhar(); });
   atualizar();
   setInterval(atualizar, 1000);
   setInterval(() => { if (S.prog.aberto && S.aba === 'projeto') lerPrograma(); }, 1000);   // a régua aberta: o programa novo, ou 'rodando'
@@ -3723,7 +3870,7 @@ if (PLACA) {
   S.inicio = PECAS ? 'pecas' : 'projetos';
   document.title = 'Sianvolt';
   desenharInicio();
-  carregarCatalogo().then(desenharInicio);
+  carregarCatalogo().then(() => { if (S.inicio === 'pecas') desenharInicio(); });   // a aba Peças espera o catálogo
   setInterval(() => { if (S.inicio === 'projetos') desenharInicio(); }, 5000);
 }
 </script>

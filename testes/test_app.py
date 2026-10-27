@@ -322,6 +322,178 @@ class Programa(Servidor):
         self.assertTrue((self.PASTA / "esp32" / "codigo" / "pinos.py").is_file())
 
 
+class ProjetosNaHome(Servidor):
+    """renomear (nome.txt) e remover (vai pra placas/.lixeira/) um projeto, numa cópia das placas de teste: o
+    testes/placas/ não é escrito"""
+    X = {"X-Bancada": "1"}
+
+    def setUp(self):
+        self.raiz = Path(tempfile.mkdtemp(prefix="sianvolt-teste-"))
+        self.addCleanup(shutil.rmtree, self.raiz, ignore_errors=True)
+        for nome in ("lanterna", "esp32"):
+            shutil.copytree(PLACAS / nome, self.raiz / nome)
+        self.addCleanup(setattr, app, "PLACAS", app.PLACAS)
+        app.PLACAS = self.raiz
+        self.addCleanup(self.soltar)
+        testar = mock.patch.object(app, "rodar_testes")   # renomear e remover não rodam os testes
+        self.testes = testar.start()
+        self.addCleanup(testar.stop)
+
+    def tearDown(self):
+        self.testes.assert_not_called()
+
+    def soltar(self):
+        for nome in ("lanterna", "esp32"):
+            if nome in app.rodando:
+                app.rodando[nome].kill()
+                app.rodando.pop(nome).wait()
+            app.o_que.pop(nome, None)
+            app.testar_depois.discard(nome)
+
+    def nome(self, pasta, corpo, cabecalhos=X):
+        return self.json("POST", f"/api/placa/nome?placa={pasta}", corpo, cabecalhos)
+
+    def remover(self, pasta, corpo=None, cabecalhos=X):
+        return self.json("POST", f"/api/placa/remover?placa={pasta}", {"confirma": pasta} if corpo is None else corpo, cabecalhos)
+
+    def lista(self):
+        return self.json("GET", "/api/placas")[1]
+
+    def na_lixeira(self):
+        return sorted(p.name for p in (self.raiz / ".lixeira").iterdir()) if (self.raiz / ".lixeira").exists() else []
+
+    def processo_de_mentira(self, nome, o_que="testes"):
+        app.rodando[nome] = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(5)"])
+        app.o_que[nome] = o_que
+
+    def test_renomear_grava_o_nome_txt(self):
+        self.assertEqual(self.lista()["nomes"], {})
+        self.assertEqual(self.nome("lanterna", {"nome": "  Lanterna do João ✨  "}), (200, {"ok": True, "nome": "Lanterna do João ✨"}))
+        self.assertEqual((self.raiz / "lanterna" / "nome.txt").read_bytes(), "Lanterna do João ✨\n".encode())
+        self.assertEqual(self.lista()["nomes"], {"lanterna": "Lanterna do João ✨"})
+        self.assertEqual(self.lista()["placas"], ["esp32", "lanterna"], "a pasta não muda")
+        self.assertFalse((self.raiz / "lanterna" / "nome.txt.tmp").exists())
+        self.assertEqual(self.nome("lanterna", {"nome": "x" * 60})[0], 200)
+        self.assertEqual(self.nome("lanterna", {"nome": "Segunda"})[1]["nome"], "Segunda", "renomear de novo troca")
+        self.assertEqual(self.lista()["nomes"], {"lanterna": "Segunda"})
+        self.assertFalse((self.raiz / "lanterna" / "testes.json").exists(), "renomear não roda os testes")
+        self.assertNotIn("lanterna", app.rodando)
+
+    def test_nome_vazio_apaga(self):
+        self.nome("lanterna", {"nome": "Segunda"})
+        self.assertEqual(self.nome("lanterna", {"nome": "   "}), (200, {"ok": True, "nome": None}))
+        self.assertFalse((self.raiz / "lanterna" / "nome.txt").exists())
+        self.assertEqual(self.lista()["nomes"], {})
+        self.assertEqual(self.nome("lanterna", {"nome": ""}), (200, {"ok": True, "nome": None}), "sem nome.txt também dá certo")
+
+    def test_nome_ruim(self):
+        ruim = {"erro": "nome inválido: até 60 letras, numa linha só"}
+        for nome in ("x" * 61, "a\nb", "a\x00b", "a\tb", "a\x7fb", "a\ud800b", "a\x85b", "a\u2028b", "a\u2029b", "a\u202eb",
+                     "a\u2066b", 5, None, ["a"], {"a": 1}):
+            with self.subTest(nome=nome):
+                self.assertEqual(self.nome("lanterna", {"nome": nome}), (400, ruim))
+        self.assertEqual(self.nome("lanterna", {}), (400, ruim), "sem o campo")
+        self.assertEqual(self.json("POST", "/api/placa/nome?placa=lanterna", [1], self.X)[0], 400)
+        self.assertEqual(self.pedir("POST", "/api/placa/nome?placa=lanterna", "{" + " " * 20000 + "}", self.X)[0], 400)
+        self.assertFalse((self.raiz / "lanterna" / "nome.txt").exists(), "nada foi gravado")
+
+    def test_nomes_do_get_so_os_que_valem(self):
+        (self.raiz / "lanterna" / "nome.txt").write_text("  Do disco  \n", encoding="utf-8")
+        (self.raiz / "esp32" / "nome.txt").write_text(" \n")
+        self.assertEqual(self.lista()["nomes"], {"lanterna": "Do disco"}, "nome.txt em branco não conta")
+        (self.raiz / "esp32" / "nome.txt").write_bytes(b"\xff\xfe")
+        self.assertEqual(self.lista()["nomes"], {"lanterna": "Do disco"}, "texto que não é UTF-8 é ignorado")
+        (self.raiz / "esp32" / "nome.txt").write_text("Primeira linha\nsegunda\n" + "x" * 80, encoding="utf-8")
+        self.assertEqual(self.lista()["nomes"], {"lanterna": "Do disco", "esp32": "Primeira linha"}, "editado à mão: só a primeira linha")
+        (self.raiz / "esp32" / "nome.txt").write_text("y" * 80, encoding="utf-8")
+        self.assertEqual(self.lista()["nomes"]["esp32"], "y" * 60, "e até 60 letras")
+
+    def test_so_pelo_app_e_so_de_placa_que_existe(self):
+        for chamar in (self.nome, self.remover):
+            with self.subTest(chamar=chamar.__name__):
+                corpo = {"nome": "x"} if chamar == self.nome else None
+                self.assertEqual(chamar("lanterna", corpo, {})[0], 404, "sem o X-Bancada")
+                self.assertEqual(chamar("nao_existe", corpo)[0], 404)
+                self.assertEqual(chamar("..", corpo)[0], 404)
+                self.assertEqual(chamar("%2e%2e", corpo)[0], 404)
+                self.assertEqual(chamar("lanterna", corpo, {"X-Bancada": "1", "Host": "evil.com"})[0], 403)
+        self.assertFalse((self.raiz / "lanterna" / "nome.txt").exists())
+        self.assertEqual(self.lista()["placas"], ["esp32", "lanterna"])
+        self.assertEqual(self.pedir("POST", "/api/placa/remover?placa=lanterna", "isto não é json", self.X)[0], 400)
+        self.assertEqual(self.na_lixeira(), [])
+
+    def test_remover_exige_a_pasta_como_confirmacao(self):
+        pedir = {"erro": "pra remover, confirme com o nome da pasta"}
+        for corpo in ({}, {"confirma": ""}, {"confirma": "esp32"}, {"confirma": "Lanterna"}, {"confirma": "lanterna "},
+                      {"confirma": True}, {"confirma": ["lanterna"]}, {"confirma": None}):
+            with self.subTest(corpo=corpo):
+                self.assertEqual(self.remover("lanterna", corpo), (400, pedir))
+        self.assertEqual(self.lista()["placas"], ["esp32", "lanterna"])
+        self.assertTrue((self.raiz / "lanterna" / "placa.txt").is_file())
+        self.assertEqual(self.na_lixeira(), [])
+
+    def test_remover_move_pra_lixeira(self):
+        self.nome("lanterna", {"nome": "Minha lanterna"})
+        status, r = self.remover("lanterna")
+        self.assertEqual(status, 200)
+        self.assertTrue(r["ok"])
+        self.assertRegex(r["lixeira"], r"^placas/\.lixeira/lanterna-\d{8}-\d{6}$")
+        self.assertEqual(self.lista()["placas"], ["esp32"])
+        self.assertEqual(self.lista()["nomes"], {}, "o nome foi junto com a pasta")
+        self.assertFalse((self.raiz / "lanterna").exists())
+        (destino,) = self.na_lixeira()
+        self.assertEqual(r["lixeira"], f"placas/.lixeira/{destino}")
+        self.assertTrue((self.raiz / ".lixeira" / destino / "placa.txt").is_file(), "não apagou: a pasta inteira está lá")
+        self.assertEqual((self.raiz / ".lixeira" / destino / "nome.txt").read_text(), "Minha lanterna\n")
+        self.assertNotIn(".lixeira", self.lista()["placas"])
+        self.assertEqual(self.json("GET", "/api/projeto?placa=lanterna")[0], 404)
+        self.assertEqual(self.remover("lanterna")[0], 404, "remover de novo")
+        self.assertEqual(self.remover(".lixeira", {"confirma": ".lixeira"})[0], 404, "a lixeira não é placa")
+        self.assertEqual(len(self.na_lixeira()), 1)
+        self.assertTrue((self.raiz / "esp32" / "placa.txt").is_file(), "a outra placa não foi mexida")
+
+    def test_remover_atalho_nao_move_a_pasta_de_verdade(self):
+        """placas/apelido -> lanterna: o app mostra as duas; remover pelo atalho recusa com a explicação, nada muda"""
+        (self.raiz / "apelido").symlink_to("lanterna")
+        self.assertEqual(self.lista()["placas"], ["apelido", "esp32", "lanterna"])
+        status, r = self.remover("apelido")
+        self.assertEqual(status, 400)
+        self.assertIn("atalho", r["erro"])
+        self.assertTrue((self.raiz / "lanterna" / "placa.txt").is_file())
+        self.assertEqual(self.na_lixeira(), [])
+        self.assertEqual(self.remover("lanterna")[0], 200, "pela pasta de verdade remove")
+
+    def test_lixeira_com_nome_repetido(self):
+        """duas pastas com o mesmo nome no mesmo segundo: a segunda ganha -2, a terceira -3"""
+        with mock.patch.object(app.time, "strftime", return_value="20260101-120000"):
+            for esperado in ("lanterna-20260101-120000", "lanterna-20260101-120000-2", "lanterna-20260101-120000-3"):
+                self.assertEqual(self.remover("lanterna")[1]["lixeira"], f"placas/.lixeira/{esperado}")
+                shutil.copytree(PLACAS / "lanterna", self.raiz / "lanterna")   # o Luiz fez outra com o mesmo nome
+        self.assertEqual(self.na_lixeira(), ["lanterna-20260101-120000", "lanterna-20260101-120000-2", "lanterna-20260101-120000-3"])
+
+    def test_remover_com_rodada_em_andamento_da_409(self):
+        ocupado = {"erro": "os testes ou o programa desta placa estão rodando; espere acabar e tente de novo"}
+        for o_que in ("testes", "programa"):
+            with self.subTest(o_que=o_que):
+                self.processo_de_mentira("lanterna", o_que)
+                self.assertEqual(self.remover("lanterna"), (409, ocupado))
+                self.assertTrue((self.raiz / "lanterna" / "placa.txt").is_file(), "a pasta continua")
+                self.assertEqual(self.na_lixeira(), [])
+                self.soltar()
+        with mock.patch.object(app.programa, "ocupada", return_value=True):   # o programa de um terminal, fora do app
+            self.assertEqual(self.remover("lanterna"), (409, ocupado))
+        self.assertEqual(self.lista()["placas"], ["esp32", "lanterna"])
+        # acabou a rodada: agora remove, e a placa sai do que o app guarda das rodadas
+        self.processo_de_mentira("lanterna")
+        app.testar_depois.add("lanterna")
+        app.rodando["lanterna"].kill()
+        app.rodando["lanterna"].wait()
+        self.assertEqual(self.remover("lanterna")[0], 200)
+        self.assertNotIn("lanterna", app.rodando)
+        self.assertNotIn("lanterna", app.o_que)
+        self.assertNotIn("lanterna", app.testar_depois)
+
+
 class OutroPrograma(BaseHTTPRequestHandler):
     """um programa qualquer na porta (como o radar-vagas na 8765): responde 404 pra tudo"""
 

@@ -314,5 +314,58 @@ console.log(JSON.stringify(entrada.luxes.map(lux => { S.ajustes.lux = { LDR1: lu
                 self.assertTrue(painel["com3v3"], (r, lux))
 
 
+@unittest.skipUnless(NODE, "precisa do node (brew install node)")
+class FiltroDaHome(unittest.TestCase):
+    """a busca da Home (combinaInicio) e o data-busca do cartão: o nome mostrado e a pasta entram, sem acento nem maiúscula"""
+
+    def combina(self, casos):
+        return no_node(funcao_do_app("combinaInicio") + "\nconsole.log(JSON.stringify(entrada.map(([t, f]) => combinaInicio(t, f))));", casos)
+
+    def test_sem_acento_sem_maiuscula_e_filtro_vazio_acha_tudo(self):
+        casos = [("Dado eletrônico", "eletronico"), ("Dado eletrônico", "DADO"), ("Dado eletrônico", "dado"), ("Dado eletrônico", "ELETRÔNICO"),
+                 ("Luz noturna", "luz"), ("Luz noturna", "  noturna  "), ("Lanterna com açaí", "acai"), ("Lanterna com açaí", "AÇAI"),
+                 ("Luz noturna", "xyz"), ("Dado eletrônico", "dados"), ("Luz noturna", ""), ("Luz noturna", "   "), ("", "")]
+        self.assertEqual(self.combina(casos), [True, True, True, True, True, True, True, True, False, False, True, True, True])
+
+    def test_cartao_com_a_pasta_no_data_busca(self):
+        """o cartão de verdade (com o resto do index.html trocado por mentiras): link, botões e o data-busca"""
+        prelude = "\n".join([funcao_do_app("esc"), funcao_do_app("nomeDoProjeto"), funcao_do_app("cartaoDoInicio"),
+                             funcao_do_app("combinaInicio"),
+                             "const miniatura = () => '<svg></svg>', selosDe = () => '<i></i>';",
+                             "const S = { api: true, editandoInicio: null, nomesInicio: { dado: 'Jogo de sorte' } };",
+                             "const p = { nome: 'dado', modelo: null, testes: { objetivo: { titulo: 'Dado eletrônico' } }, versoes: [], cotacao: null };",
+                             "const busca = h => /data-busca=\"([^\"]*)\"/.exec(h)[1];",
+                             "const normal = cartaoDoInicio(p);",
+                             "S.editandoInicio = { pasta: 'dado', modo: 'nome', valor: 'Jogo de sorte' };",
+                             "const editando = cartaoDoInicio(p);",
+                             "S.editandoInicio = { pasta: 'dado', modo: 'remover', erro: 'não deu' };",
+                             "const removendo = cartaoDoInicio(p);",
+                             "S.editandoInicio = null; S.api = false;",
+                             "const sem_app = cartaoDoInicio(p);",
+                             "S.api = true; S.nomesInicio = {};",
+                             "const sem_nome = cartaoDoInicio({ ...p, nome: '<b>\"x\"' });",
+                             "console.log(JSON.stringify({ normal, editando, removendo, sem_app, sem_nome, achaPasta: combinaInicio(busca(normal), 'DADO'),"
+                             " achaNome: combinaInicio(busca(normal), 'sorte'), achaTitulo: combinaInicio(busca(normal), 'eletronico') }));"])
+        r = no_node(prelude, None)
+        self.assertIn('data-busca="Jogo de sorte dado"', r["normal"], "o nome mostrado (o do nome.txt) e a pasta")
+        self.assertTrue(r["achaPasta"] and r["achaNome"])
+        self.assertFalse(r["achaTitulo"], "o título do objetivo não aparece quando o nome.txt manda")
+        self.assertIn('<a class="cartao-link" href="?placa=dado">', r["normal"])
+        self.assertIn("Jogo de sorte</span>", r["normal"])
+        self.assertIn('data-renomear="dado"', r["normal"])
+        self.assertIn('data-remover="dado"', r["normal"])
+        self.assertNotIn("<a ", r["editando"], "editando, o campo não fica dentro de link")
+        self.assertIn('class="inicio-nome" maxlength="60" value="Jogo de sorte"', r["editando"])
+        self.assertIn('data-salvar-nome="dado"', r["editando"])
+        self.assertNotIn("<a ", r["removendo"])
+        self.assertIn("data-confirmar-remover=\"dado\"", r["removendo"])
+        self.assertIn("A pasta vai pra placas/.lixeira/", r["removendo"])
+        self.assertIn("não deu", r["removendo"])
+        self.assertNotIn("cartao-acoes", r["sem_app"], "sem o app.py os botões não aparecem")
+        self.assertIn('<a class="cartao-link"', r["sem_app"])
+        self.assertIn('href="?placa=%3Cb%3E%22x%22"', r["sem_nome"])
+        self.assertNotIn("<b>", r["sem_nome"], "o nome da pasta é escapado")
+
+
 if __name__ == "__main__":
     unittest.main()
